@@ -1,0 +1,6 @@
+﻿username,email,password,created_at,is_active
+장호현,admin@a.com,1234,2025-10-01 10:00:00+09,TRUE
+박효진,admin1@a.com,1234,2025-10-05 15:30:00+09,TRUE
+김다윗,admin2@a.com,1234,2025-10-10 09:00:00+09,TRUE
+김민지,admin3@a.com,1234,2025-10-15 20:10:00+09,FALSE
+김민지,admin4@a.com,1234,2025-10-20 11:45:00+09,TRUE

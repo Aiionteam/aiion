@@ -1,0 +1,45 @@
+services:
+  chatbot-service:
+    build:
+      context: .
+      dockerfile: rag/chatbot_service/Dockerfile
+    container_name: aihoyun-chatbot-service
+    ports:
+      - "9001:9001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - API_GATEWAY_URL=${API_GATEWAY_URL:-http://host.docker.internal:8080}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  diary-service:
+    build:
+      context: .
+      dockerfile: business/diary_service/Dockerfile
+    container_name: aihoyun-diary-service
+    ports:
+      - "9002:9002"
+    restart: unless-stopped
+
+  crawler-service:
+    build:
+      context: .
+      dockerfile: feed/crawler_service/Dockerfile
+    container_name: aihoyun-crawler-service
+    ports:
+      - "9003:9003"
+    restart: unless-stopped
+
+  weather-service:
+    build:
+      context: .
+      dockerfile: feed/weather_service/Dockerfile
+    container_name: aihoyun-weather-service
+    ports:
+      - "9004:9004"
+    environment:
+      - KMA_API_KEY=${KMA_API_KEY:-}
+      - KMA_SHORT_KEY=${KMA_SHORT_KEY:-}
+    restart: unless-stopped
+

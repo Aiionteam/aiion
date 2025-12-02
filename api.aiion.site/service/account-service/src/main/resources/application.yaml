@@ -1,0 +1,14 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: account-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+

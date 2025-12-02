@@ -1,0 +1,36 @@
+tasks {
+	bootJar {
+		enabled = true
+	}
+	jar {
+		enabled = true
+	}
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:2025.0.0"
+	}
+}
+
+dependencies {
+	// Spring Cloud
+	implementation 'org.springframework.cloud:spring-cloud-starter-config'
+	
+	// Spring Boot 스타터
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	
+	// Redis (Cache, Session, Pub/Sub)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	
+	// Database (PostgreSQL)
+	runtimeOnly 'org.postgresql:postgresql:42.7.3'
+	
+	// Swagger
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.2'
+	
+	// Spring Boot DevTools
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+}
