@@ -92,6 +92,10 @@ spring:
           uri: http://aihoyun-crawler-service:9003
           predicates:
             - Path=/crawler/**
+        - id: inventory-service
+          uri: http://inventory-service:9002
+          predicates:
+            - Path=/inventory/**
       server:
         webflux:
           globalcors:

@@ -15,6 +15,13 @@ export const createLoginHandlers = () => {
             setIsLoading(true);
             setError('');
 
+            // 임시: 로그인 버튼 클릭 시 바로 통과
+            // 더미 토큰 저장
+            localStorage.setItem('access_token', 'temp_token_' + Date.now());
+            onSuccess();
+
+            // 실제 API 호출은 주석 처리
+            /*
             const response = await fetch(`${gatewayUrl}/api/auth/login`, {
                 method: 'POST',
                 headers: {
@@ -35,6 +42,7 @@ export const createLoginHandlers = () => {
                 const data = await response.json();
                 setError(data.message || '로그인에 실패했습니다.');
             }
+            */
         } catch (err) {
             setError('서버 연결에 실패했습니다.');
         } finally {
@@ -64,8 +72,8 @@ export const createLoginHandlers = () => {
                     console.warn('로그아웃 API 호출 실패:', err);
                 }
             }
-            localStorage.removeItem('access_token');
-            onSuccess();
+                localStorage.removeItem('access_token');
+                onSuccess();
         } catch (err) {
             console.warn('로그아웃 처리 중 오류:', err);
             localStorage.removeItem('access_token');
@@ -73,8 +81,8 @@ export const createLoginHandlers = () => {
         }
     }
 
-    return {
-        handleEmailPasswordLogin,
+        return {
+            handleEmailPasswordLogin,
         handleLogout,
+        };
     };
-};
