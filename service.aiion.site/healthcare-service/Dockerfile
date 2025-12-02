@@ -6,23 +6,23 @@ WORKDIR /build
 COPY build.gradle settings.gradle ./
 COPY gradle.properties* ./
 COPY gradle/ ./gradle/
-COPY healthcare-service/build.gradle ./healthcare-service/
+COPY service/healthcare-service/build.gradle ./service/healthcare-service/
 
 # 의존성 다운로드 (Gradle 캐시 활용 + 최적화 옵션)
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
-    gradle :healthcare-service:dependencies --no-daemon --parallel || true
+    gradle :service:healthcare-service:dependencies --no-daemon --parallel || true
 
 # 나머지 소스 코드 복사
-COPY healthcare-service/ ./healthcare-service/
+COPY service/ ./service/
 
 # 빌드 실행 (병렬 빌드 + 빌드 캐시 활용)
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
-    gradle :healthcare-service:build -x test --no-daemon --parallel --build-cache
+    gradle :service:healthcare-service:build -x test --no-daemon --parallel --build-cache
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=builder /build/healthcare-service/build/libs/*.jar app.jar
+COPY --from=builder /build/service/healthcare-service/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
