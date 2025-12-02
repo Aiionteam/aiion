@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../atoms';
 import { PathfinderView as PathfinderViewType } from '../types';
+import { useStore } from '../../store';
+import { fetchRecommendations, ComprehensiveRecommendation, LearningRecommendation } from '../../app/hooks/usePathfinderApi';
 
 interface PathfinderViewProps {
   pathfinderView: PathfinderViewType;
@@ -27,6 +29,37 @@ export const PathfinderView: React.FC<PathfinderViewProps> = ({
   darkMode = false,
 }) => {
   const styles = getCommonStyles(darkMode);
+  const user = useStore((state) => state.user?.user);
+  const [recommendations, setRecommendations] = useState<ComprehensiveRecommendation | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 학습 추천 데이터 로드
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      if (user?.id && pathfinderView === 'learning') {
+        try {
+          setIsLoading(true);
+          console.log('[PathfinderView] 사용자 ID:', user.id);
+          console.log('[PathfinderView] API 호출 시작...');
+          const data = await fetchRecommendations(user.id);
+          console.log('[PathfinderView] API 응답 데이터:', data);
+          setRecommendations(data);
+        } catch (error) {
+          console.error('[PathfinderView] 추천 데이터 로드 실패:', error);
+          setRecommendations(null);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        console.log('[PathfinderView] 사용자 ID 없음 또는 learning 뷰가 아님:', {
+          userId: user?.id,
+          pathfinderView
+        });
+      }
+    };
+
+    loadRecommendations();
+  }, [user?.id, pathfinderView]);
 
   // Home 뷰
   if (pathfinderView === 'home') {
@@ -112,9 +145,80 @@ export const PathfinderView: React.FC<PathfinderViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-4">
-            <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
-              <p className={`text-center py-8 ${styles.textMuted}`}>학습 목록이 없습니다.</p>
-            </div>
+            {isLoading ? (
+              <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
+                <p className={`text-center py-8 ${styles.textMuted}`}>로딩 중...</p>
+              </div>
+            ) : recommendations && recommendations.recommendations && recommendations.recommendations.length > 0 ? (
+              <>
+                {/* 통계 정보 */}
+                {recommendations.stats && (
+                  <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                    <h3 className={`text-xl font-bold mb-4 ${styles.title}`}>📊 학습 통계</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <p className={`text-2xl font-bold ${styles.title}`}>{recommendations.stats.discovered}</p>
+                        <p className={`text-sm ${styles.textMuted}`}>발견한 학습</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-2xl font-bold ${styles.title}`}>{recommendations.stats.inProgress}</p>
+                        <p className={`text-sm ${styles.textMuted}`}>진행 중</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-2xl font-bold ${styles.title}`}>{recommendations.stats.completed}</p>
+                        <p className={`text-sm ${styles.textMuted}`}>완료</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 학습 추천 목록 */}
+                <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                  <h3 className={`text-xl font-bold mb-4 ${styles.title}`}>📚 추천 학습 주제</h3>
+                  <div className="space-y-4">
+                    {recommendations.recommendations.map((rec: LearningRecommendation) => (
+                      <div key={rec.id} className={`p-4 rounded-lg border ${styles.border}`}>
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">{rec.emoji}</span>
+                          <div className="flex-1">
+                            <h4 className={`text-lg font-bold ${styles.title}`}>{rec.title}</h4>
+                            <p className={`text-sm ${styles.textMuted} mt-1`}>{rec.category}</p>
+                            {rec.reason && (
+                              <p className={`text-sm ${styles.textSecondary} mt-2`}>{rec.reason}</p>
+                            )}
+                            {rec.quickLearn && (
+                              <p className={`text-xs ${styles.textMuted} mt-2`}>💡 {rec.quickLearn}</p>
+                            )}
+                          </div>
+                          <span className={`text-sm ${styles.textMuted}`}>{rec.frequency}회</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 인기 주제 */}
+                {recommendations.popularTopics && recommendations.popularTopics.length > 0 && (
+                  <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                    <h3 className={`text-xl font-bold mb-4 ${styles.title}`}>🔥 인기 학습 주제</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {recommendations.popularTopics.map((topic, index) => (
+                        <span
+                          key={index}
+                          className={`px-3 py-1 rounded-full text-sm ${styles.button} ${styles.textSecondary}`}
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
+                <p className={`text-center py-8 ${styles.textMuted}`}>학습 목록이 없습니다.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
