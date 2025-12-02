@@ -356,41 +356,46 @@ services:
   # ===================
   # AI Services (from ai.aiion.site)
   # ===================
-  # AI 서비스는 ai.aiion.site에서 별도로 실행
-  # aihoyun-chatbot-service:
-  #   image: aiaiionsite-chatbot-service:latest
-  #   container_name: aihoyun-chatbot-service
-  #   ports:
-  #     - "9001:9001"
-  #   networks:
-  #     - spring-network
-  #   environment:
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-  #     - API_GATEWAY_URL=http://api-gateway:8080
-  #   restart: unless-stopped
-  #   extra_hosts:
-  #     - "host.docker.internal:host-gateway"
+  aihoyun-chatbot-service:
+    build:
+      context: ../ai.aiion.site
+      dockerfile: rag/chatbot_service/Dockerfile
+    container_name: aihoyun-chatbot-service
+    ports:
+      - "9001:9001"
+    networks:
+      - spring-network
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - API_GATEWAY_URL=http://api-gateway:8080
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # aihoyun-weather-service:
-  #   image: aiaiionsite-weather-service:latest
-  #   container_name: aihoyun-weather-service
-  #   ports:
-  #     - "9004:9004"
-  #   networks:
-  #     - spring-network
-  #   environment:
-  #     - KMA_API_KEY=${KMA_API_KEY:-}
-  #     - KMA_SHORT_KEY=${KMA_SHORT_KEY:-}
-  #   restart: unless-stopped
+  aihoyun-weather-service:
+    build:
+      context: ../ai.aiion.site
+      dockerfile: feed/weather_service/Dockerfile
+    container_name: aihoyun-weather-service
+    ports:
+      - "9004:9004"
+    networks:
+      - spring-network
+    environment:
+      - KMA_API_KEY=${KMA_API_KEY:-}
+      - KMA_SHORT_KEY=${KMA_SHORT_KEY:-}
+    restart: unless-stopped
 
-  # aihoyun-crawler-service:
-  #   image: aiaiionsite-crawler-service:latest
-  #   container_name: aihoyun-crawler-service
-  #   ports:
-  #     - "9003:9003"
-  #   networks:
-  #     - spring-network
-  #   restart: unless-stopped
+  aihoyun-crawler-service:
+    build:
+      context: ../ai.aiion.site
+      dockerfile: feed/crawler_service/Dockerfile
+    container_name: aihoyun-crawler-service
+    ports:
+      - "9003:9003"
+    networks:
+      - spring-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
