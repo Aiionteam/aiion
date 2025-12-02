@@ -15,11 +15,7 @@ allprojects {
 
 subprojects {
 	apply plugin: 'java'
-	
-	// 부모 모듈(server)은 Spring Boot 플러그인 제외
-	if (!project.path.equals(':server')) {
-		apply plugin: 'org.springframework.boot'
-	}
+	apply plugin: 'org.springframework.boot'
 	apply plugin: 'io.spring.dependency-management'
 	
 	// Spring Boot 및 Spring Cloud 의존성 관리
@@ -42,10 +38,6 @@ subprojects {
 		options.compilerArgs += ['-parameters']
 		// 증분 컴파일 활성화 (빌드 속도 향상)
 		options.incremental = true
-		// 워닝을 에러로 처리하지 않도록 설정 (필요시 주석 해제)
-		// options.compilerArgs += ['-Werror']
-		// 특정 워닝만 무시하려면 아래 옵션 사용
-		// options.compilerArgs += ['-Xlint:-deprecation', '-Xlint:-unchecked']
 	}
 	
 	configurations {
@@ -53,7 +45,6 @@ subprojects {
 			extendsFrom annotationProcessor
 		}
 	}
-	
 	
 	dependencies {
 		compileOnly 'org.projectlombok:lombok'

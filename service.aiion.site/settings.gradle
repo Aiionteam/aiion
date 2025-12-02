@@ -1,0 +1,12 @@
+rootProject.name = 'spring-services'
+
+// Service modules
+include 'common-service'
+include 'account-service'
+include 'auth-service'
+include 'calendar-service'
+include 'diary-service'
+include 'user-service'
+include 'culture-service'
+include 'healthcare-service'
+
