@@ -398,6 +398,17 @@ services:
       - spring-network
     restart: unless-stopped
 
+  inventory-service:
+    build:
+      context: ../ai.aiion.site
+      dockerfile: customer_servive/Dockerfile
+    container_name: inventory-service
+    ports:
+      - "9002:9002"
+    networks:
+      - spring-network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
