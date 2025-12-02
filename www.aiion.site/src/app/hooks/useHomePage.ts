@@ -401,12 +401,12 @@ export const useHomePage = () => {
 
     let aiResponse = ''; // 기본값은 빈 문자열로 설정
 
-    // 일기 검색 키워드가 있으면 9000 포트 백엔드 API로 일기 조회
+    // 일기 검색 키워드가 있으면 API Gateway(8080)를 통해 일기 조회
     if (hasDiarySearchKeyword) {
       console.log('[useHomePage] 📔 일기 검색 키워드 감지:', submitText);
       
       try {
-        // 9000 포트 AI 게이트웨이를 통해 일기 목록 조회
+        // API Gateway(8080)를 통해 일기 목록 조회
         const diariesResponse = await aiGatewayClient.getDiaries();
         
         if (diariesResponse.error) {
@@ -671,7 +671,7 @@ export const useHomePage = () => {
 
         console.log('[useHomePage] 📝 일기 저장 시작:', newDiary);
 
-        // 9000 포트 AI 게이트웨이를 통해 일기 저장
+        // API Gateway(8080)를 통해 일기 저장
         const diaryResponse = await aiGatewayClient.createDiary({
           diaryDate: newDiary.date,
           title: newDiary.title,
@@ -715,7 +715,7 @@ export const useHomePage = () => {
           }
           
           aiResponse = `✅ 일기가 저장되었습니다!\n\n제목: ${newDiary.title}\n날짜: ${newDiary.date}`;
-          console.log('[useHomePage] ✅ 일기 저장 성공 (9000 포트)');
+          console.log('[useHomePage] ✅ 일기 저장 성공 (API Gateway)');
         }
       } catch (error) {
         console.error('[useHomePage] ❌ 일기 저장 중 오류:', error);
@@ -797,7 +797,7 @@ export const useHomePage = () => {
             if (weatherResponse.error.includes('Failed to fetch') || 
                 weatherResponse.error.includes('CONNECTION_REFUSED') ||
                 weatherResponse.error.includes('ERR_CONNECTION_REFUSED')) {
-              aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. AI 서버(9000 포트)가 실행 중인지 확인해주세요\n2. http://localhost:9000/health 에 접속 가능한지 확인해주세요\n\n에러: ${weatherResponse.error}`;
+              aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. API Gateway(8080 포트)가 실행 중인지 확인해주세요\n2. http://localhost:8080/health 에 접속 가능한지 확인해주세요\n\n에러: ${weatherResponse.error}`;
             } else {
               aiResponse = `단기예보 정보를 가져오는데 실패했습니다: ${weatherResponse.error}`;
             }
@@ -948,7 +948,7 @@ export const useHomePage = () => {
             if (weatherResponse.error.includes('Failed to fetch') || 
                 weatherResponse.error.includes('CONNECTION_REFUSED') ||
                 weatherResponse.error.includes('ERR_CONNECTION_REFUSED')) {
-              aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. AI 서버(9000 포트)가 실행 중인지 확인해주세요\n2. http://localhost:9000/health 에 접속 가능한지 확인해주세요\n\n에러: ${weatherResponse.error}`;
+              aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. API Gateway(8080 포트)가 실행 중인지 확인해주세요\n2. http://localhost:8080/health 에 접속 가능한지 확인해주세요\n\n에러: ${weatherResponse.error}`;
             } else {
               aiResponse = `중기예보 정보를 가져오는데 실패했습니다: ${weatherResponse.error}`;
             }
@@ -1006,7 +1006,7 @@ export const useHomePage = () => {
             errorMessage.includes('CONNECTION_REFUSED') ||
             errorMessage.includes('ERR_CONNECTION_REFUSED') ||
             errorMessage.includes('NetworkError')) {
-          aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. AI 서버(9000 포트)가 실행 중인지 확인해주세요\n2. http://localhost:9000/health 에 접속 가능한지 확인해주세요\n3. Docker를 사용한다면: docker-compose up -d\n\n에러: ${errorMessage}`;
+          aiResponse = `❌ 날씨 서버에 연결할 수 없습니다.\n\n확인 사항:\n1. API Gateway(8080 포트)가 실행 중인지 확인해주세요\n2. http://localhost:8080/health 에 접속 가능한지 확인해주세요\n3. Docker를 사용한다면: docker-compose up -d\n\n에러: ${errorMessage}`;
         } else {
           aiResponse = `날씨 정보를 조회하는 중 오류가 발생했습니다: ${errorMessage}`;
         }

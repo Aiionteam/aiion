@@ -337,7 +337,9 @@ services:
   # AI Services (from ai.aiion.site)
   # ===================
   aihoyun-chatbot-service:
-    image: aiaiionsite-chatbot-service:latest
+    build:
+      context: ../ai.aiion.site
+      dockerfile: rag/chatbot_service/Dockerfile
     container_name: aihoyun-chatbot-service
     ports:
       - "9001:9001"
@@ -351,7 +353,9 @@ services:
       - "host.docker.internal:host-gateway"
 
   aihoyun-weather-service:
-    image: aiaiionsite-weather-service:latest
+    build:
+      context: ../ai.aiion.site
+      dockerfile: feed/weather_service/Dockerfile
     container_name: aihoyun-weather-service
     ports:
       - "9004:9004"
@@ -363,7 +367,9 @@ services:
     restart: unless-stopped
 
   aihoyun-crawler-service:
-    image: aiaiionsite-crawler-service:latest
+    build:
+      context: ../ai.aiion.site
+      dockerfile: feed/crawler_service/Dockerfile
     container_name: aihoyun-crawler-service
     ports:
       - "9003:9003"
