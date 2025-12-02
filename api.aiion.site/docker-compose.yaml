@@ -254,8 +254,8 @@ services:
 
   pathfinder-service:
     build:
-      context: .
-      dockerfile: ./service/pathfinder-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./pathfinder-service/Dockerfile
     container_name: pathfinder-service
     ports:
       - "8090:8090"

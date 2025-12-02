@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useMemo } from 'react';
-import { createSocialLoginHandlers } from '@/service/mainservice';
+import { useState } from 'react';
+import { createLoginHandlers } from '@/service/mainservice';
 
 export default function DashboardLayout({
   children,
@@ -25,38 +25,16 @@ export default function DashboardLayout({
     { name: '설정', href: '/dashboard/settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
   ];
 
-  // 로그아웃 핸들러 (mainservice에서 관리)
-  const { handleLogout: handleLogoutRequest } = useMemo(
-    () => createSocialLoginHandlers(
-      () => {}, // setIsGoogleLoading (사용 안 함)
-      () => {}, // setIsKakaoLoading (사용 안 함)
-      () => {}, // setIsNaverLoading (사용 안 함)
-      () => {}, // setIsLoading (사용 안 함)
-      () => {}  // setError (사용 안 함)
-    ),
-    []
-  );
+  const { handleLogout } = createLoginHandlers();
 
-  const handleLogout = async () => {
-    if (isLoggingOut) return; // 이미 로그아웃 중이면 중복 실행 방지
+  const handleLogoutClick = async () => {
+    if (isLoggingOut) return;
     
     setIsLoggingOut(true);
-    handleLogoutRequest(
-      () => {
-        // 로그아웃 성공 시 로그인 페이지로 이동
-        setIsLoggingOut(false);
-        router.push('/login');
-      },
-      (error) => {
-        // 에러 발생 시에도 로그인 페이지로 이동 (토큰은 이미 제거됨)
-        // console.warn을 사용하여 에러 경계를 트리거하지 않도록 함
-        if (error && typeof error === 'string') {
-          console.warn('로그아웃 경고:', error);
-        }
-        setIsLoggingOut(false);
-        router.push('/login');
-      }
-    );
+    handleLogout(() => {
+      setIsLoggingOut(false);
+      router.push('/login');
+    });
   };
 
   return (
@@ -121,7 +99,7 @@ export default function DashboardLayout({
         {/* 사용자 정보 */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <button
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             disabled={isLoggingOut}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
@@ -152,4 +130,3 @@ export default function DashboardLayout({
     </div>
   );
 }
-

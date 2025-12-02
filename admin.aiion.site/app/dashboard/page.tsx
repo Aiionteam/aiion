@@ -16,34 +16,7 @@ function DashboardContent() {
     useEffect(() => {
         const initialize = async () => {
             try {
-                // 1. URL에서 토큰 확인 (소셜 로그인 후 리다이렉트된 경우)
-                const tokenFromUrl = searchParams.get('token');
-                const error = searchParams.get('error');
-
-                if (error) {
-                    console.error('❌ 로그인 실패:', error);
-                    setError('로그인에 실패했습니다.');
-                    setIsLoading(false);
-                    router.push('/login');
-                    return;
-                }
-
-                if (tokenFromUrl) {
-                    // 토큰을 localStorage에 저장
-                    localStorage.setItem('access_token', tokenFromUrl);
-                    console.log('✅ 토큰 저장 성공:', tokenFromUrl.substring(0, 20) + '...');
-                    console.log('✅ 소셜 로그인 성공! 토큰이 정상적으로 받아졌습니다.');
-
-                    // 로그인 성공 상태 설정
-                    setLoginSuccess(true);
-                    setError(null);
-
-                    // URL에서 토큰 파라미터 제거 (보안을 위해)
-                    router.replace('/dashboard', { scroll: false });
-                    return;
-                }
-
-                // 2. localStorage에서 토큰 가져오기
+                // localStorage에서 토큰 가져오기
                 const token = localStorage.getItem('access_token');
 
                 if (!token) {
@@ -65,8 +38,8 @@ function DashboardContent() {
 
                 console.log('🔍 사용자 정보 조회 시작, 토큰:', token.substring(0, 20) + '...');
 
-                // 카카오 사용자 정보 조회 시도
-                let response = await fetch(`${gatewayUrl}/auth/kakao/user`, {
+                // 일반 로그인 사용자 정보 조회
+                const response = await fetch(`${gatewayUrl}/api/auth/user`, {
                     method: 'GET',
                     credentials: 'include',
                     headers: {
@@ -75,41 +48,15 @@ function DashboardContent() {
                     },
                 });
 
-                // 카카오 조회 실패 시 네이버 사용자 정보 조회 시도
-                if (!response.ok && response.status !== 401) {
-                    console.log('⚠️ 카카오 사용자 정보 조회 실패, 네이버 조회 시도...');
-                    response = await fetch(`${gatewayUrl}/auth/naver/user`, {
-                        method: 'GET',
-                        credentials: 'include',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                        },
-                    });
-                }
-
-                // 네이버 조회도 실패 시 구글 사용자 정보 조회 시도
-                if (!response.ok && response.status !== 401) {
-                    console.log('⚠️ 네이버 사용자 정보 조회 실패, 구글 조회 시도...');
-                    response = await fetch(`${gatewayUrl}/auth/google/user`, {
-                        method: 'GET',
-                        credentials: 'include',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                        },
-                    });
-                }
-
                 console.log('📡 응답 상태:', response.status, response.statusText);
 
                 if (response.ok) {
                     const data = await response.json();
                     console.log('📦 응답 데이터:', JSON.stringify(data, null, 2));
 
-                    if (data.success) {
+                    if (data.success || data.user || data.email) {
                         const userData = data.data || data.user || data;
-                        if (userData && (userData.userId || userData.kakaoId || userData.naverId || userData.googleId || userData.nickname || userData.name || userData.email)) {
+                        if (userData && (userData.userId || userData.email || userData.name)) {
                             setUserInfo(userData);
                             setError(null);
                             setLoginSuccess(true);
