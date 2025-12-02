@@ -72,6 +72,12 @@ spring:
             - Path=/account/**
           filters:
             - StripPrefix=1
+        - id: pathfinder-service
+          uri: http://pathfinder-service:8090
+          predicates:
+            - Path=/pathfinder/**
+          filters:
+            - StripPrefix=1
         # AI 서비스 라우팅 (Python FastAPI)
         - id: chatbot-service
           uri: http://aihoyun-chatbot-service:9001

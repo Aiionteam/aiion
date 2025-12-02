@@ -16,7 +16,6 @@ services:
     networks:
       - spring-network
 
-
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -252,6 +251,28 @@ services:
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
 
+  pathfinder-service:
+    build:
+      context: .
+      dockerfile: ./service/pathfinder-service/Dockerfile
+    container_name: pathfinder-service
+    ports:
+      - "8090:8090"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - spring-network
+    volumes:
+      - ./nanjung.csv:/app/nanjung.csv:ro
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aidb
+      - SPRING_DATASOURCE_USERNAME=aiion
+      - SPRING_DATASOURCE_PASSWORD=aiion4man
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+
   account-service:
     build:
       context: .
@@ -271,7 +292,6 @@ services:
       - SPRING_DATASOURCE_PASSWORD=aiion4man
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
-
   # ===================
   # Client Layer
   # ===================
@@ -380,10 +400,9 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  # prometheus_data:
-  # grafana_data:
+    # prometheus_data:
+    # grafana_data:
 
 networks:
   spring-network:
     driver: bridge
-
