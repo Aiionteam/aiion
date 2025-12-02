@@ -16,10 +16,11 @@ spring:
       enabled: false
     gateway:
       routes:
-        - id: soccer-service
-          uri: http://soccer-service:8085
-          predicates:
-            - Path=/soccer/**
+        # soccer-service는 현재 구현되지 않음
+        # - id: soccer-service
+        #   uri: http://soccer-service:8085
+        #   predicates:
+        #     - Path=/soccer/**
         - id: common-service
           uri: http://common-service:8081
           predicates:

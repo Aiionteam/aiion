@@ -81,8 +81,8 @@ services:
   # ===================
   common-service:
     build:
-      context: .
-      dockerfile: ./service/common-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./common-service/Dockerfile
     container_name: common-service
     ports:
       - "8081:8081"
@@ -101,8 +101,8 @@ services:
 
   auth-service:
     build:
-      context: .
-      dockerfile: ./service/auth-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./auth-service/Dockerfile
     container_name: auth-service
     ports:
       - "8087:8087"
@@ -132,8 +132,8 @@ services:
 
   user-service:
     build:
-      context: .
-      dockerfile: ./service/user-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./user-service/Dockerfile
     container_name: user-service
     ports:
       - "8082:8082"
@@ -152,8 +152,8 @@ services:
 
   diary-service:
     build:
-      context: .
-      dockerfile: ./service/diary-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./diary-service/Dockerfile
     container_name: diary-service
     ports:
       - "8083:8083"
@@ -173,8 +173,8 @@ services:
 
   calendar-service:
     build:
-      context: .
-      dockerfile: ./service/calendar-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./calendar-service/Dockerfile
     container_name: calendar-service
     ports:
       - "8084:8084"
@@ -192,30 +192,31 @@ services:
       - SPRING_REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET}
 
-  soccer-service:
-    build:
-      context: .
-      dockerfile: ./service/soccer-service/Dockerfile
-    container_name: soccer-service
-    ports:
-      - "8085:8085"
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - spring-network
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aidb
-      - SPRING_DATASOURCE_USERNAME=aiion
-      - SPRING_DATASOURCE_PASSWORD=aiion4man
-      - SPRING_REDIS_HOST=redis
-      - SPRING_REDIS_PORT=6379
+  # soccer-service는 현재 구현되지 않음
+  # soccer-service:
+  #   build:
+  #     context: ../service.aiion.site
+  #     dockerfile: ./soccer-service/Dockerfile
+  #   container_name: soccer-service
+  #   ports:
+  #     - "8085:8085"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - spring-network
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=docker
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aidb
+  #     - SPRING_DATASOURCE_USERNAME=aiion
+  #     - SPRING_DATASOURCE_PASSWORD=aiion4man
+  #     - SPRING_REDIS_HOST=redis
+  #     - SPRING_REDIS_PORT=6379
 
   culture-service:
     build:
-      context: .
-      dockerfile: ./service/culture-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./culture-service/Dockerfile
     container_name: culture-service
     ports:
       - "8086:8086"
@@ -234,8 +235,8 @@ services:
 
   healthcare-service:
     build:
-      context: .
-      dockerfile: ./service/healthcare-service/dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./healthcare-service/Dockerfile
     container_name: healthcare-service
     ports:
       - "8088:8088"
@@ -254,8 +255,8 @@ services:
 
   account-service:
     build:
-      context: .
-      dockerfile: ./service/account-service/Dockerfile
+      context: ../service.aiion.site
+      dockerfile: ./account-service/Dockerfile
     container_name: account-service
     ports:
       - "8089:8089"
