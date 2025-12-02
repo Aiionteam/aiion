@@ -9,4 +9,5 @@ include 'diary-service'
 include 'user-service'
 include 'culture-service'
 include 'healthcare-service'
+include 'pathfinder-service'
 
