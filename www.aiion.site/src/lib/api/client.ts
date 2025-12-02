@@ -365,7 +365,7 @@ export async function fetchJSONFromAIGateway<T = any>(
         errorMessage.includes('NetworkError')) {
       return {
         data: null as any,
-        error: `서버에 연결할 수 없습니다. AI 서버(9000 포트)가 실행 중인지 확인해주세요. (${errorMessage})`,
+        error: `서버에 연결할 수 없습니다. API Gateway(8080 포트)가 실행 중인지 확인해주세요. (${errorMessage})`,
         status: 0,
       };
     }
