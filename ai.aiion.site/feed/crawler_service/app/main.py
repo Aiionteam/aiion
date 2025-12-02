@@ -1,7 +1,22 @@
 from fastapi import FastAPI, APIRouter  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 import uvicorn  # type: ignore
 
 app = FastAPI(title="Crawler Service API")
+
+# CORS 설정 - 게이트웨이만 허용 (프론트엔드는 게이트웨이를 통해 접근)
+# Spring Cloud Gateway가 이미 CORS를 처리하므로, 여기서는 게이트웨이만 허용
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",  # 통합 API Gateway (로컬)
+        "http://api-gateway:8080",  # Docker 내부 네트워크
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # 동적 import로 오류 방지
 try:
