@@ -14,8 +14,7 @@ export interface UserModel {
 }
 
 export interface Messenger {
-  Code?: number;
-  code?: number;
+  code: number;
   message: string;
   data?: any;
 }
@@ -49,7 +48,7 @@ export async function fetchUserById(userId: number): Promise<UserModel | null> {
     }
 
     const messenger = result.data as Messenger;
-    const responseCode = messenger.Code ?? messenger.code;
+    const responseCode = messenger.code;
     
     if (responseCode === 200 && messenger.data) {
       const userData = messenger.data as UserModel;
@@ -128,7 +127,7 @@ export async function updateUserNickname(userId: number, nickname: string): Prom
     }
 
     const messenger = result.data as Messenger;
-    const responseCode = messenger.Code ?? messenger.code;
+    const responseCode = messenger.code;
     
     if (responseCode === 200 && messenger.data) {
       const userData = messenger.data as UserModel;

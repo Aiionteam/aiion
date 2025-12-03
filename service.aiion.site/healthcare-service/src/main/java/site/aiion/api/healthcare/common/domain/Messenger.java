@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class Messenger {
     @JsonProperty("code") // JSON 직렬화 시 "code" (소문자)로 명시
     @Schema(description = "응답 코드", example = "200")
-    private int Code;
+    private int code;
     
     @Schema(description = "응답 메시지", example = "어서옵쇼")
     private String message;

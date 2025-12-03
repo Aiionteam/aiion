@@ -16,23 +16,15 @@ import site.aiion.api.healthcare.common.domain.Messenger;
 public class HealthcareServiceImpl implements HealthcareService {
 
         private final HealthcareRepository healthcareRepository;
+        private final HealthcareAnalysisRepository healthcareAnalysisRepository;
 
         private HealthcareModel entityToModel(Healthcare entity) {
                 return HealthcareModel.builder()
                                 .id(entity.getId())
+                                .userId(entity.getUserId())
+                                .type(entity.getType())
                                 .recordDate(entity.getRecordDate())
-                                .weatherDate(entity.getWeatherDate())
-                                .weather(entity.getWeather())
-                                .weatherDescription(entity.getWeatherDescription())
-                                .weatherIcon(entity.getWeatherIcon())
-                                .weatherTemperature(entity.getWeatherTemperature())
-                                .weatherHumidity(entity.getWeatherHumidity())
-                                .weatherPressure(entity.getWeatherPressure())
-                                .weatherWindSpeed(entity.getWeatherWindSpeed())
-                                .weatherWindDirection(entity.getWeatherWindDirection())
-                                .weatherCloudCover(entity.getWeatherCloudCover())
-                                .weatherPrecipitation(entity.getWeatherPrecipitation())
-                                .weatherPrecipitationProbability(entity.getWeatherPrecipitationProbability())
+                                .sleepHours(entity.getSleepHours())
                                 .nutrition(entity.getNutrition())
                                 .steps(entity.getSteps())
                                 .weight(entity.getWeight())
@@ -46,19 +38,10 @@ public class HealthcareServiceImpl implements HealthcareService {
         private Healthcare modelToEntity(HealthcareModel model) {
                 return Healthcare.builder()
                                 .id(model.getId())
+                                .userId(model.getUserId())
+                                .type(model.getType())
                                 .recordDate(model.getRecordDate())
-                                .weatherDate(model.getWeatherDate())
-                                .weather(model.getWeather())
-                                .weatherDescription(model.getWeatherDescription())
-                                .weatherIcon(model.getWeatherIcon())
-                                .weatherTemperature(model.getWeatherTemperature())
-                                .weatherHumidity(model.getWeatherHumidity())
-                                .weatherPressure(model.getWeatherPressure())
-                                .weatherWindSpeed(model.getWeatherWindSpeed())
-                                .weatherWindDirection(model.getWeatherWindDirection())
-                                .weatherCloudCover(model.getWeatherCloudCover())
-                                .weatherPrecipitation(model.getWeatherPrecipitation())
-                                .weatherPrecipitationProbability(model.getWeatherPrecipitationProbability())
+                                .sleepHours(model.getSleepHours())
                                 .nutrition(model.getNutrition())
                                 .steps(model.getSteps())
                                 .weight(model.getWeight())
@@ -73,7 +56,7 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger findById(HealthcareModel healthcareModel) {
                 if (healthcareModel.getId() == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("ID가 필요합니다.")
                                         .build();
                 }
@@ -82,13 +65,13 @@ public class HealthcareServiceImpl implements HealthcareService {
                         Healthcare healthcare = entity.get();
                         HealthcareModel model = entityToModel(healthcare);
                         return Messenger.builder()
-                                        .Code(200)
+                                        .code(200)
                                         .message("조회 성공")
                                         .data(model)
                                         .build();
                 } else {
                         return Messenger.builder()
-                                        .Code(404)
+                                        .code(404)
                                         .message("건강 기록을 찾을 수 없습니다.")
                                         .build();
                 }
@@ -101,7 +84,7 @@ public class HealthcareServiceImpl implements HealthcareService {
                                 .map(this::entityToModel)
                                 .collect(Collectors.toList());
                 return Messenger.builder()
-                                .Code(200)
+                                .code(200)
                                 .message("전체 조회 성공: " + modelList.size() + "개")
                                 .data(modelList)
                                 .build();
@@ -111,7 +94,7 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger findByUserId(Long userId) {
                 if (userId == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("사용자 ID가 필요합니다.")
                                         .build();
                 }
@@ -120,7 +103,7 @@ public class HealthcareServiceImpl implements HealthcareService {
                                 .map(this::entityToModel)
                                 .collect(Collectors.toList());
                 return Messenger.builder()
-                                .Code(200)
+                                .code(200)
                                 .message("사용자별 조회 성공: " + modelList.size() + "개")
                                 .data(modelList)
                                 .build();
@@ -130,13 +113,13 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger findByUserIdAndType(Long userId, String type) {
                 if (userId == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("사용자 ID가 필요합니다.")
                                         .build();
                 }
                 if (type == null || type.trim().isEmpty()) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("기록 유형이 필요합니다.")
                                         .build();
                 }
@@ -145,7 +128,7 @@ public class HealthcareServiceImpl implements HealthcareService {
                                 .map(this::entityToModel)
                                 .collect(Collectors.toList());
                 return Messenger.builder()
-                                .Code(200)
+                                .code(200)
                                 .message("사용자별 유형별 조회 성공: " + modelList.size() + "개")
                                 .data(modelList)
                                 .build();
@@ -156,7 +139,7 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger save(HealthcareModel healthcareModel) {
                 if (healthcareModel.getRecordDate() == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("기록 일자 정보는 필수 값입니다.")
                                         .build();
                 }
@@ -164,19 +147,10 @@ public class HealthcareServiceImpl implements HealthcareService {
                 // 새 기록 저장 시 ID를 null로 설정 (데이터베이스에서 자동 생성)
                 Healthcare entity = Healthcare.builder()
                                 .id(null) // 새 엔티티는 ID를 null로 설정
+                                .userId(healthcareModel.getUserId())
+                                .type(healthcareModel.getType())
                                 .recordDate(healthcareModel.getRecordDate())
-                                .weatherDate(healthcareModel.getWeatherDate())
-                                .weather(healthcareModel.getWeather())
-                                .weatherDescription(healthcareModel.getWeatherDescription())
-                                .weatherIcon(healthcareModel.getWeatherIcon())
-                                .weatherTemperature(healthcareModel.getWeatherTemperature())
-                                .weatherHumidity(healthcareModel.getWeatherHumidity())
-                                .weatherPressure(healthcareModel.getWeatherPressure())
-                                .weatherWindSpeed(healthcareModel.getWeatherWindSpeed())
-                                .weatherWindDirection(healthcareModel.getWeatherWindDirection())
-                                .weatherCloudCover(healthcareModel.getWeatherCloudCover())
-                                .weatherPrecipitation(healthcareModel.getWeatherPrecipitation())
-                                .weatherPrecipitationProbability(healthcareModel.getWeatherPrecipitationProbability())
+                                .sleepHours(healthcareModel.getSleepHours())
                                 .nutrition(healthcareModel.getNutrition())
                                 .steps(healthcareModel.getSteps())
                                 .weight(healthcareModel.getWeight())
@@ -189,7 +163,7 @@ public class HealthcareServiceImpl implements HealthcareService {
                 Healthcare saved = healthcareRepository.save(entity);
                 HealthcareModel model = entityToModel(saved);
                 return Messenger.builder()
-                                .Code(200)
+                                .code(200)
                                 .message("저장 성공: " + saved.getId())
                                 .data(model)
                                 .build();
@@ -202,20 +176,10 @@ public class HealthcareServiceImpl implements HealthcareService {
                 List<Healthcare> entities = healthcareModelList.stream()
                                 .map(model -> Healthcare.builder()
                                                 .id(null) // 새 엔티티는 ID를 null로 설정
+                                                .userId(model.getUserId())
+                                                .type(model.getType())
                                                 .recordDate(model.getRecordDate())
-                                                .weatherDate(model.getWeatherDate())
-                                                .weather(model.getWeather())
-                                                .weatherDescription(model.getWeatherDescription())
-                                                .weatherIcon(model.getWeatherIcon())
-                                                .weatherTemperature(model.getWeatherTemperature())
-                                                .weatherHumidity(model.getWeatherHumidity())
-                                                .weatherPressure(model.getWeatherPressure())
-                                                .weatherWindSpeed(model.getWeatherWindSpeed())
-                                                .weatherWindDirection(model.getWeatherWindDirection())
-                                                .weatherCloudCover(model.getWeatherCloudCover())
-                                                .weatherPrecipitation(model.getWeatherPrecipitation())
-                                                .weatherPrecipitationProbability(
-                                                                model.getWeatherPrecipitationProbability())
+                                                .sleepHours(model.getSleepHours())
                                                 .nutrition(model.getNutrition())
                                                 .steps(model.getSteps())
                                                 .weight(model.getWeight())
@@ -228,7 +192,7 @@ public class HealthcareServiceImpl implements HealthcareService {
 
                 List<Healthcare> saved = healthcareRepository.saveAll(entities);
                 return Messenger.builder()
-                                .Code(200)
+                                .code(200)
                                 .message("일괄 저장 성공: " + saved.size() + "개")
                                 .build();
         }
@@ -238,7 +202,7 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger update(HealthcareModel healthcareModel) {
                 if (healthcareModel.getId() == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("ID가 필요합니다.")
                                         .build();
                 }
@@ -248,46 +212,18 @@ public class HealthcareServiceImpl implements HealthcareService {
 
                         Healthcare updated = Healthcare.builder()
                                         .id(existing.getId())
+                                        .userId(healthcareModel.getUserId() != null
+                                                        ? healthcareModel.getUserId()
+                                                        : existing.getUserId())
+                                        .type(healthcareModel.getType() != null
+                                                        ? healthcareModel.getType()
+                                                        : existing.getType())
                                         .recordDate(healthcareModel.getRecordDate() != null
                                                         ? healthcareModel.getRecordDate()
                                                         : existing.getRecordDate())
-                                        .weatherDate(healthcareModel.getWeatherDate() != null
-                                                        ? healthcareModel.getWeatherDate()
-                                                        : existing.getWeatherDate())
-                                        .weather(healthcareModel.getWeather() != null ? healthcareModel.getWeather()
-                                                        : existing.getWeather())
-                                        .weatherDescription(healthcareModel.getWeatherDescription() != null
-                                                        ? healthcareModel.getWeatherDescription()
-                                                        : existing.getWeatherDescription())
-                                        .weatherIcon(healthcareModel.getWeatherIcon() != null
-                                                        ? healthcareModel.getWeatherIcon()
-                                                        : existing.getWeatherIcon())
-                                        .weatherTemperature(healthcareModel.getWeatherTemperature() != null
-                                                        ? healthcareModel.getWeatherTemperature()
-                                                        : existing.getWeatherTemperature())
-                                        .weatherHumidity(healthcareModel.getWeatherHumidity() != null
-                                                        ? healthcareModel.getWeatherHumidity()
-                                                        : existing.getWeatherHumidity())
-                                        .weatherPressure(healthcareModel.getWeatherPressure() != null
-                                                        ? healthcareModel.getWeatherPressure()
-                                                        : existing.getWeatherPressure())
-                                        .weatherWindSpeed(healthcareModel.getWeatherWindSpeed() != null
-                                                        ? healthcareModel.getWeatherWindSpeed()
-                                                        : existing.getWeatherWindSpeed())
-                                        .weatherWindDirection(healthcareModel.getWeatherWindDirection() != null
-                                                        ? healthcareModel.getWeatherWindDirection()
-                                                        : existing.getWeatherWindDirection())
-                                        .weatherCloudCover(healthcareModel.getWeatherCloudCover() != null
-                                                        ? healthcareModel.getWeatherCloudCover()
-                                                        : existing.getWeatherCloudCover())
-                                        .weatherPrecipitation(healthcareModel.getWeatherPrecipitation() != null
-                                                        ? healthcareModel.getWeatherPrecipitation()
-                                                        : existing.getWeatherPrecipitation())
-                                        .weatherPrecipitationProbability(
-                                                        healthcareModel.getWeatherPrecipitationProbability() != null
-                                                                        ? healthcareModel
-                                                                                        .getWeatherPrecipitationProbability()
-                                                                        : existing.getWeatherPrecipitationProbability())
+                                        .sleepHours(healthcareModel.getSleepHours() != null
+                                                        ? healthcareModel.getSleepHours()
+                                                        : existing.getSleepHours())
                                         .nutrition(healthcareModel.getNutrition() != null
                                                         ? healthcareModel.getNutrition()
                                                         : existing.getNutrition())
@@ -312,13 +248,13 @@ public class HealthcareServiceImpl implements HealthcareService {
                         Healthcare saved = healthcareRepository.save(updated);
                         HealthcareModel model = entityToModel(saved);
                         return Messenger.builder()
-                                        .Code(200)
+                                        .code(200)
                                         .message("수정 성공: " + healthcareModel.getId())
                                         .data(model)
                                         .build();
                 } else {
                         return Messenger.builder()
-                                        .Code(404)
+                                        .code(404)
                                         .message("수정할 건강 기록을 찾을 수 없습니다.")
                                         .build();
                 }
@@ -329,7 +265,7 @@ public class HealthcareServiceImpl implements HealthcareService {
         public Messenger delete(HealthcareModel healthcareModel) {
                 if (healthcareModel.getId() == null) {
                         return Messenger.builder()
-                                        .Code(400)
+                                        .code(400)
                                         .message("ID가 필요합니다.")
                                         .build();
                 }
@@ -337,13 +273,37 @@ public class HealthcareServiceImpl implements HealthcareService {
                 if (optionalEntity.isPresent()) {
                         healthcareRepository.deleteById(healthcareModel.getId());
                         return Messenger.builder()
-                                        .Code(200)
+                                        .code(200)
                                         .message("삭제 성공: " + healthcareModel.getId())
                                         .build();
                 } else {
                         return Messenger.builder()
-                                        .Code(404)
+                                        .code(404)
                                         .message("삭제할 건강 기록을 찾을 수 없습니다.")
+                                        .build();
+                }
+        }
+
+        @Override
+        public Messenger getComprehensiveAnalysis(Long userId) {
+                if (userId == null) {
+                        return Messenger.builder()
+                                        .code(400)
+                                        .message("사용자 ID가 필요합니다.")
+                                        .build();
+                }
+                Optional<HealthcareAnalysis> analysisOptional = healthcareAnalysisRepository.findByUserId(userId);
+                if (analysisOptional.isPresent()) {
+                        HealthcareAnalysis analysis = analysisOptional.get();
+                        return Messenger.builder()
+                                        .code(200)
+                                        .message("종합건강분석 조회 성공")
+                                        .data(analysis.getAnalysisData())
+                                        .build();
+                } else {
+                        return Messenger.builder()
+                                        .code(404)
+                                        .message("종합건강분석 데이터를 찾을 수 없습니다.")
                                         .build();
                 }
         }

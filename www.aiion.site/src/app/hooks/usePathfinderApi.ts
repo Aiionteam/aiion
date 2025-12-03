@@ -8,8 +8,7 @@ import { Diary } from '../../components/types';
 
 // 백엔드 응답 형식
 interface Messenger {
-  Code?: number;
-  code?: number;
+  code: number;
   message: string;
   data?: any;
 }
@@ -87,7 +86,7 @@ export async function fetchRecommendations(userId: number): Promise<Comprehensiv
     }
 
     const messenger = response.data as Messenger;
-    const responseCode = messenger?.Code || messenger?.code;
+    const responseCode = messenger?.code;
     
     // 응답 코드가 200이 아니면 null 반환
     if (responseCode !== 200) {
@@ -135,7 +134,7 @@ export async function fetchSimpleRecommendations(userId: number): Promise<Learni
     }
 
     const messenger = response.data as Messenger;
-    const responseCode = messenger?.Code || messenger?.code;
+    const responseCode = messenger?.code;
     
     if (responseCode !== 200) {
       console.warn('[fetchSimpleRecommendations] 응답 코드가 200이 아님:', responseCode);

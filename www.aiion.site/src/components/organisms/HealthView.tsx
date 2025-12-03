@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '../atoms';
 import { HealthView as HealthViewType } from '../types';
 import { useDiaries } from '../../app/hooks/useDiary';
+import { useHealthcareRecords, useHealthcareAnalysis } from '../../app/hooks/useHealthcare';
 import { aiGatewayClient } from '../../lib/api/aiGateway';
 import { getAccessToken } from '../../lib/api/client';
 
@@ -53,6 +54,8 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // Hook은 항상 최상위에서 호출해야 함 (early return 전에 모두 호출)
   const { data: diaries = [], isLoading: diariesLoading } = useDiaries();
+  const { data: healthcareRecords = [], isLoading: healthcareLoading } = useHealthcareRecords();
+  const { data: healthcareAnalysis, isLoading: analysisLoading } = useHealthcareAnalysis();
   const [recommendation, setRecommendation] = useState<ExerciseRecommendation | null>(null);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
@@ -393,9 +396,64 @@ export const HealthView: React.FC<HealthViewProps> = ({
                 📊 종합 건강 분석
               </h2>
               <div className={`leading-relaxed text-sm ${styles.title}`}>
-                <p className={`text-center py-4 ${styles.textMuted}`}>
-                  아직 기록된 건강 데이터가 없습니다. 첫 건강 기록을 작성해보세요!
-                </p>
+                {analysisLoading ? (
+                  <p className={`text-center py-4 ${styles.textMuted}`}>로딩 중...</p>
+                ) : healthcareAnalysis ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className={`p-4 rounded-lg ${styles.cardBg}`}>
+                        <p className={`text-xs ${styles.textMuted} mb-1`}>총 기록 수</p>
+                        <p className={`text-2xl font-bold ${styles.title}`}>{healthcareAnalysis.summary.total_records}개</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${styles.cardBg}`}>
+                        <p className={`text-xs ${styles.textMuted} mb-1`}>기록 기간</p>
+                        <p className={`text-2xl font-bold ${styles.title}`}>{healthcareAnalysis.summary.total_months}개월</p>
+                      </div>
+                      {healthcareAnalysis.summary.avg_steps && (
+                        <div className={`p-4 rounded-lg ${styles.cardBg}`}>
+                          <p className={`text-xs ${styles.textMuted} mb-1`}>평균 걸음수</p>
+                          <p className={`text-2xl font-bold ${styles.title}`}>{Math.round(healthcareAnalysis.summary.avg_steps).toLocaleString()}걸음</p>
+                        </div>
+                      )}
+                    </div>
+                    {healthcareAnalysis.type_distribution.length > 0 && (
+                      <div className={`mt-4 pt-4 border-t ${styles.border}`}>
+                        <p className={`text-sm font-semibold mb-2 ${styles.title}`}>타입별 분포</p>
+                        <div className="space-y-2">
+                          {healthcareAnalysis.type_distribution.map((type, index) => (
+                            <div key={index} className="flex items-center justify-between">
+                              <span className={`text-sm ${styles.textMuted}`}>{type.type}</span>
+                              <span className={`text-sm font-semibold ${styles.title}`}>{type.count}개</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {healthcareAnalysis.recent_activity.recent_records > 0 && (
+                      <div className={`mt-4 pt-4 border-t ${styles.border}`}>
+                        <p className={`text-sm font-semibold mb-2 ${styles.title}`}>최근 30일 활동</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm ${styles.textMuted}`}>기록 수</span>
+                            <span className={`text-sm font-semibold ${styles.title}`}>{healthcareAnalysis.recent_activity.recent_records}개</span>
+                          </div>
+                          {healthcareAnalysis.recent_activity.recent_avg_steps && (
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm ${styles.textMuted}`}>평균 걸음수</span>
+                              <span className={`text-sm font-semibold ${styles.title}`}>
+                                {Math.round(healthcareAnalysis.recent_activity.recent_avg_steps).toLocaleString()}걸음
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className={`text-center py-4 ${styles.textMuted}`}>
+                    아직 기록된 건강 데이터가 없습니다. 첫 건강 기록을 작성해보세요!
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1037,6 +1095,28 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // Records 뷰
   if (healthView === 'records') {
+    // 날짜 포맷팅 함수
+    const formatDate = (dateString: string) => {
+      try {
+        const date = new Date(dateString);
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dayOfWeek = days[date.getDay()];
+        return `${year}-${month}-${day} ${dayOfWeek}`;
+      } catch (e) {
+        return dateString;
+      }
+    };
+
+    // 날짜순으로 정렬 (최신순)
+    const sortedRecords = [...healthcareRecords].sort((a, b) => {
+      const dateA = new Date(a.recordDate).getTime();
+      const dateB = new Date(b.recordDate).getTime();
+      return dateB - dateA;
+    });
+
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
         <div className={`border-b shadow-sm p-4 ${styles.header}`}>
@@ -1054,9 +1134,93 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-4">
-            <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
-              <p className={`text-center py-8 ${styles.textMuted}`}>기록이 없습니다.</p>
-            </div>
+            {healthcareLoading ? (
+              <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
+                <p className={`text-center py-8 ${styles.textMuted}`}>로딩 중...</p>
+              </div>
+            ) : sortedRecords.length === 0 ? (
+              <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
+                <p className={`text-center py-8 ${styles.textMuted}`}>기록이 없습니다.</p>
+              </div>
+            ) : (
+              sortedRecords.map((record) => (
+                <div key={record.id} className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                  {/* 날짜 */}
+                  <div className={`mb-3 ${styles.title}`}>
+                    <p className="text-lg font-semibold">{formatDate(record.recordDate)}</p>
+                  </div>
+
+                  {/* 주간 요약 (weeklySummary) */}
+                  {record.weeklySummary && (
+                    <div className={`mb-4 ${styles.textMuted}`}>
+                      <p className="whitespace-pre-wrap leading-relaxed">{record.weeklySummary}</p>
+                    </div>
+                  )}
+
+                  {/* 건강 데이터 링크 */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${styles.textMuted}`}>
+                        ㄴ&gt; 일기 속 Aiion님 건강 데이터예요!
+                      </span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* 건강 데이터 정보 */}
+                  <div className={`space-y-2 ${styles.cardBg} p-4 rounded-lg`}>
+                    {record.type && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>유형:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.type}</span>
+                      </div>
+                    )}
+                    {record.steps !== null && record.steps !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>걸음수:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.steps.toLocaleString()}걸음</span>
+                      </div>
+                    )}
+                    {record.weight !== null && record.weight !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>체중:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.weight}kg</span>
+                      </div>
+                    )}
+                    {record.bloodPressure && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>혈압:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.bloodPressure}</span>
+                      </div>
+                    )}
+                    {record.condition && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>컨디션:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.condition}</span>
+                      </div>
+                    )}
+                    {record.sleepHours !== null && record.sleepHours !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${styles.textMuted}`}>수면 시간:</span>
+                        <span className={`text-sm ${styles.title}`}>{record.sleepHours}시간</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 추천 루틴 (recommendedRoutine) */}
+                  {record.recommendedRoutine && (
+                    <div className={`mt-4 pt-4 border-t ${styles.border}`}>
+                      <p className={`text-sm font-medium mb-2 ${styles.title}`}>추천 루틴:</p>
+                      <p className={`text-sm whitespace-pre-wrap leading-relaxed ${styles.textMuted}`}>
+                        {record.recommendedRoutine}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

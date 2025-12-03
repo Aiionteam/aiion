@@ -19,4 +19,6 @@ public interface HealthcareService {
     public Messenger update(HealthcareModel healthcareModel);
 
     public Messenger delete(HealthcareModel healthcareModel);
+
+    public Messenger getComprehensiveAnalysis(Long userId);
 }

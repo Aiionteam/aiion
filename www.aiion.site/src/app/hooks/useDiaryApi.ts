@@ -220,8 +220,8 @@ export async function fetchDiaries(): Promise<Diary[]> {
       return [];
     }
 
-    // 응답 구조 확인 (code 또는 Code 모두 처리)
-    // 백엔드 Messenger 형식: { Code: 200, message: "...", data: [...] } 또는 { code: 200, message: "...", data: [...] }
+    // 응답 구조 확인 (code로 통일)
+    // 백엔드 Messenger 형식: { code: 200, message: "...", data: [...] }
     console.log('[fetchDiaries] 원본 응답 데이터:', response.data);
     console.log('[fetchDiaries] 응답 데이터 타입:', typeof response.data);
     console.log('[fetchDiaries] 응답 데이터 키:', response.data ? Object.keys(response.data) : 'null');
@@ -267,7 +267,7 @@ export async function fetchDiaries(): Promise<Diary[]> {
     }
 
     // Messenger 형식인 경우 (messenger.data가 배열)
-    // 백엔드 응답 형식: { Code: 200, message: "...", data: [...] }
+    // 백엔드 응답 형식: { code: 200, message: "...", data: [...] }
     if (messenger && messenger.data) {
       if (Array.isArray(messenger.data)) {
         console.log('[fetchDiaries] Messenger 배열 데이터:', messenger.data.length, '개');
@@ -421,8 +421,8 @@ export async function updateDiary(diary: Diary, userId: number): Promise<Diary> 
 
   const messenger = response.data as Messenger;
   
-  // Code 필드 확인 (대문자 또는 소문자)
-  const responseCode = messenger.code; // code는 소문자로 고정
+  // code 필드 확인 (소문자로 통일)
+  const responseCode = messenger.code;
   
   if (responseCode !== 200) {
     throw new Error(messenger.message || '일기를 수정하는데 실패했습니다.');
@@ -455,8 +455,8 @@ export async function deleteDiary(diary: Diary, userId: number): Promise<void> {
 
   const messenger = response.data as Messenger;
   
-  // Code 필드 확인 (대문자 또는 소문자)
-  const responseCode = messenger.code; // code는 소문자로 고정
+  // code 필드 확인 (소문자로 통일)
+  const responseCode = messenger.code;
   
   if (responseCode !== 200) {
     throw new Error(messenger.message || '일기를 삭제하는데 실패했습니다.');
