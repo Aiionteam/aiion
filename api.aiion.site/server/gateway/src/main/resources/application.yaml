@@ -92,6 +92,10 @@ spring:
           uri: http://aihoyun-crawler-service:9003
           predicates:
             - Path=/crawler/**
+        - id: inventory-service
+          uri: http://inventory-service:9002
+          predicates:
+            - Path=/inventory/**
       server:
         webflux:
           globalcors:
@@ -99,8 +103,10 @@ spring:
               '[/**]':
                 allowedOrigins:
                   - "http://localhost:3000"
+                  - "http://localhost:4000"  # admin.aiion.site
                   - "http://frontend:3000"
                   - "http://127.0.0.1:3000"
+                  - "http://127.0.0.1:4000"  # admin.aiion.site
                 allowedMethods:
                   - GET
                   - POST
