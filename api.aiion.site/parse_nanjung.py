@@ -9,13 +9,14 @@ import psycopg2
 from datetime import datetime
 import sys
 
-# 데이터베이스 연결 정보
+# 데이터베이스 연결 정보 (Neon)
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': 'ep-crimson-darkness-a1o2y4xd-pooler.ap-southeast-1.aws.neon.tech',
     'port': 5432,
-    'database': 'aidb',
-    'user': 'aiion',
-    'password': 'aiion4man'
+    'database': 'neondb',
+    'user': 'neondb_owner',
+    'password': 'npg_yKz6I1piqEBt',
+    'sslmode': 'require'
 }
 
 def parse_csv_file(file_path):
