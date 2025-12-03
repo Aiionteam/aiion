@@ -14,6 +14,12 @@ import lombok.NoArgsConstructor;
 public class HealthcareModel {
     private Long id;
 
+    // 사용자 ID
+    private Long userId;
+
+    // 기록 유형 (건강, 운동, 운동/건강 등)
+    private String type;
+
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate recordDate;
 
@@ -30,6 +36,9 @@ public class HealthcareModel {
     private String weatherCloudCover;
     private String weatherPrecipitation;
     private String weatherPrecipitationProbability;
+
+    // 수면 시간 (시간)
+    private Double sleepHours;
 
     // 식사/영양 정보
     private String nutrition;
