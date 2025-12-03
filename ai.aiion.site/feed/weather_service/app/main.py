@@ -35,6 +35,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8080",  # 통합 API Gateway (로컬)
         "http://api-gateway:8080",  # Docker 내부 네트워크
+        "http://aihoyun-chatbot-service:9001",  # 챗봇 서비스 (Docker 내부 네트워크)
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
