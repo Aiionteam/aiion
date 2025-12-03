@@ -1,0 +1,129 @@
+# 환경 변수
+.env
+.env.local
+.env.*.local
+.env.*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 가상 환경
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# IDE - PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE - 기타
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# 로그 파일
+*.log
+logs/
+*.log.*
+
+# 테스트 및 커버리지
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Docker
+docker-compose.override.yml
+.dockerignore.local
+
+# 임시 파일
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# 크롤러 관련 임시 파일
+*.html
+*.json.bak
+selenium_cache/
+chromedriver*
+
+# 기타
+*.pid
+*.seed
+*.pid.lock
