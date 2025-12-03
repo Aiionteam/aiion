@@ -532,8 +532,8 @@ export const useHomePage = () => {
           
           console.log('[useHomePage] ✅ API 응답 데이터:', result);
 
-          // Code 또는 code 모두 체크 (대소문자 구분 없이)
-          const responseCode = result.Code || result.code || 200;
+          // code로 통일
+          const responseCode = result.code || 200;
           console.log('[useHomePage] 📊 응답 코드:', responseCode);
 
           if (responseCode === 200 && result.data) {
@@ -603,7 +603,7 @@ export const useHomePage = () => {
             aiResponse = detailedResponse;
           } else {
             console.warn('[useHomePage] ⚠️ API 응답 코드가 200이 아니거나 데이터가 없음:', result);
-            const responseCode = result.Code || result.code || '알 수 없음';
+            const responseCode = result.code || '알 수 없음';
             aiResponse = result.message || `축구 정보를 가져오는데 실패했습니다. (코드: ${responseCode})`;
             
             // 데이터가 없어도 메시지는 표시
