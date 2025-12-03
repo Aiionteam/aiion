@@ -427,4 +427,3 @@ services:
 networks:
   spring-network:
     driver: bridge
-

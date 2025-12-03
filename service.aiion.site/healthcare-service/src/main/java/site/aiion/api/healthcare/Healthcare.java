@@ -18,19 +18,22 @@ public class Healthcare {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 사용자 ID
+    @Column(name = "user_id")
+    private Long userId;
+
+    // 기록 유형 (건강, 운동, 운동/건강 등)
+    @Column(name = "type", length = 50)
+    private String type;
+
+    // 기록 날짜
+    @Column(name = "record_date")
     private LocalDate recordDate;
-    private LocalDate weatherDate;
-    private String weather;
-    private String weatherDescription;
-    private String weatherIcon;
-    private String weatherTemperature;
-    private String weatherHumidity;
-    private String weatherPressure;
-    private String weatherWindSpeed;
-    private String weatherWindDirection;
-    private String weatherCloudCover;
-    private String weatherPrecipitation;
-    private String weatherPrecipitationProbability;
+
+    // 수면 시간 (시간)
+    @Column(name = "sleep_hours")
+    private Double sleepHours;
+
     // 식사/영양 정보
     @Column(name = "nutrition", columnDefinition = "TEXT")
     private String nutrition;

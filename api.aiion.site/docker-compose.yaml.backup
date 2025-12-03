@@ -251,6 +251,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=aiion4man
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
 
   pathfinder-service:
     build:
