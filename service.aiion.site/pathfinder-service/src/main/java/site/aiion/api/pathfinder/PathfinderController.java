@@ -22,7 +22,6 @@ import site.aiion.api.pathfinder.common.domain.Messenger;
 public class PathfinderController {
 
     private final PathfinderService pathfinderService;
-    private final PathfinderCsvService pathfinderCsvService;
     private final PathfinderAnalysisService pathfinderAnalysisService;
 
     @PostMapping("/findById")
@@ -79,13 +78,6 @@ public class PathfinderController {
         return pathfinderService.delete(pathfinderModel);
     }
 
-    @PostMapping("/import-csv")
-    @Operation(summary = "CSV 파일 임포트", description = "CSV 파일을 읽어서 경로 탐색 정보를 일괄 저장합니다. filePath 파라미터로 파일 경로를 지정하거나, /app/nanjung.csv를 기본값으로 사용합니다.")
-    public Messenger importCsv(@org.springframework.web.bind.annotation.RequestParam(required = false) String filePath) {
-        // filePath가 없으면 기본값으로 /app/nanjung.csv 사용 (컨테이너 내부 경로)
-        String csvPath = filePath != null ? filePath : "/app/nanjung.csv";
-        return pathfinderCsvService.importCsvToDatabase(csvPath);
-    }
 
     @GetMapping("/recommendations/{userId}")
     @Operation(summary = "학습 추천 조회", description = "사용자의 일기 데이터를 분석하여 학습 주제를 추천합니다.")
