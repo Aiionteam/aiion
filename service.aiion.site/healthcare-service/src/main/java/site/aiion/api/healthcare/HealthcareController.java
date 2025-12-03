@@ -67,7 +67,8 @@ public class HealthcareController {
     public Messenger findByUserIdFromToken(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         System.out.println("[HealthcareController] /user 엔드포인트 호출됨");
-        System.out.println("[HealthcareController] Authorization 헤더: " + (authHeader != null ? authHeader.substring(0, Math.min(30, authHeader.length())) + "..." : "null"));
+        System.out.println("[HealthcareController] Authorization 헤더: "
+                + (authHeader != null ? authHeader.substring(0, Math.min(30, authHeader.length())) + "..." : "null"));
 
         // Authorization 헤더 검증
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -80,7 +81,8 @@ public class HealthcareController {
 
         // 토큰 추출
         String token = jwtTokenUtil.extractTokenFromHeader(authHeader);
-        System.out.println("[HealthcareController] 추출된 토큰: " + (token != null ? token.substring(0, Math.min(30, token.length())) + "..." : "null"));
+        System.out.println("[HealthcareController] 추출된 토큰: "
+                + (token != null ? token.substring(0, Math.min(30, token.length())) + "..." : "null"));
         if (token == null) {
             System.out.println("[HealthcareController] 토큰 추출 실패");
             return Messenger.builder()
@@ -252,7 +254,8 @@ public class HealthcareController {
         System.out.println("[HealthcareController] JWT 토큰에서 추출한 userId: " + userId);
         System.out.println("[HealthcareController] 종합건강분석 조회 시작");
         Messenger result = healthcareService.getComprehensiveAnalysis(userId);
-        System.out.println("[HealthcareController] 종합건강분석 조회 결과: code=" + result.getCode() + ", message=" + result.getMessage());
+        System.out.println(
+                "[HealthcareController] 종합건강분석 조회 결과: code=" + result.getCode() + ", message=" + result.getMessage());
         return result;
     }
 
