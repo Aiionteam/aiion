@@ -89,10 +89,23 @@ export function InventoryContainer() {
     return '재고 있음';
   };
 
+  // 전체 재고: 실제 수량의 합계
   const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-  const inStockCount = items.filter(item => calculateStatus(item.quantity || 0) === '재고 있음').length;
-  const lowStockCount = items.filter(item => calculateStatus(item.quantity || 0) === '재고 부족').length;
-  const outOfStockCount = items.filter(item => calculateStatus(item.quantity || 0) === '품절').length;
+  // 재고 있음: 수량이 20 이상인 항목 개수
+  const inStockCount = items.filter(item => {
+    const qty = item.quantity || 0;
+    return qty >= 20;
+  }).length;
+  // 재고 부족: 수량이 1 이상 20 미만인 항목 개수
+  const lowStockCount = items.filter(item => {
+    const qty = item.quantity || 0;
+    return qty > 0 && qty < 20;
+  }).length;
+  // 품절: 수량이 0인 항목 개수
+  const outOfStockCount = items.filter(item => {
+    const qty = item.quantity || 0;
+    return qty === 0;
+  }).length;
 
   // 핸들러 래핑
   const handleDelete = async (itemId: string | number) => {
@@ -103,11 +116,11 @@ export function InventoryContainer() {
   };
 
   const handleCreate = async (item: Omit<InventoryItem, 'id'>) => {
-    createMutation.mutate(item);
+    await createMutation.mutateAsync(item);
   };
 
   const handleUpdate = async (itemId: string | number, item: Partial<InventoryItem>) => {
-    updateMutation.mutate({ itemId, item });
+    await updateMutation.mutateAsync({ itemId, item });
   };
 
   return (

@@ -14,15 +14,15 @@ import { createInventorySlice } from './slices/inventorySlice';
 export const useAppStore = create<AppStore>()(
   devtools(
     persist(
-      (...a) => ({
+      (set, get, api) => ({
         // 공통 UI 상태 슬라이스
-        ui: createUiSlice(...a),
+        ui: createUiSlice(set, get, api),
         
         // 사용자 정보 슬라이스
-        user: createUserSlice(...a),
+        user: createUserSlice(set, get, api),
         
         // 재고 관리 슬라이스
-        inventory: createInventorySlice(...a),
+        inventory: createInventorySlice(set, get, api),
         
         // === Common Actions ===
         /**
@@ -30,13 +30,75 @@ export const useAppStore = create<AppStore>()(
          * 모든 상태를 기본값으로 리셋합니다.
          */
         resetStore: () => {
-          const set = a[0];
-          const get = a[1];
-          
-          // 각 슬라이스의 reset 함수 호출
+          // 각 슬라이스의 reset 함수 호출 (함수가 없으면 직접 초기화)
           const state = get();
-          state.inventory.resetInventory();
-          state.user.clearUser();
+          
+          // inventory 초기화
+          if (state.inventory && typeof state.inventory.resetInventory === 'function') {
+            try {
+              state.inventory.resetInventory();
+            } catch (err) {
+              // 함수 호출 실패 시 직접 초기화
+              set((currentState) => ({
+                inventory: {
+                  ...currentState.inventory,
+                  items: [],
+                  selectedItem: null,
+                  isLoading: false,
+                  error: null,
+                },
+              }), false, 'resetStore-inventory');
+            }
+          } else {
+            // 함수가 없으면 직접 초기화
+            set((currentState) => ({
+              inventory: {
+                ...currentState.inventory,
+                items: [],
+                selectedItem: null,
+                isLoading: false,
+                error: null,
+              },
+            }), false, 'resetStore-inventory');
+          }
+          
+          // user 초기화
+          if (state.user && typeof state.user.clearUser === 'function') {
+            try {
+              state.user.clearUser();
+            } catch (err) {
+              // 함수 호출 실패 시 직접 초기화
+              set((currentState) => ({
+                user: {
+                  ...currentState.user,
+                  user: null,
+                  isLoggedIn: false,
+                },
+              }), false, 'resetStore-user');
+            }
+          } else if (state.user && typeof state.user.logout === 'function') {
+            try {
+              state.user.logout();
+            } catch (err) {
+              // 함수 호출 실패 시 직접 초기화
+              set((currentState) => ({
+                user: {
+                  ...currentState.user,
+                  user: null,
+                  isLoggedIn: false,
+                },
+              }), false, 'resetStore-user');
+            }
+          } else {
+            // 함수가 없으면 직접 초기화
+            set((currentState) => ({
+              user: {
+                ...currentState.user,
+                user: null,
+                isLoggedIn: false,
+              },
+            }), false, 'resetStore-user');
+          }
           
           // UI 상태 초기화
           set(
@@ -49,10 +111,10 @@ export const useAppStore = create<AppStore>()(
               },
             }),
             false,
-            'resetStore'
+            'resetStore-ui'
           );
         },
-      })),
+      }),
       {
         name: 'admin-storage', // localStorage key
         partialize: (state) => ({

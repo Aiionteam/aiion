@@ -1,18 +1,75 @@
 // 재고 관리 서비스 API 호출 함수
 
 export interface InventoryItem {
-  id?: string;
+  id?: number | string;
   name: string;
   category: string;
   quantity: number;
   unitPrice: number;
   status?: string;
   location?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InventoryResponse {
   items: InventoryItem[];
+  total?: number;
   message?: string;
+}
+
+// 백엔드 응답 형식 (snake_case)
+interface BackendInventoryItem {
+  id: number;
+  name: string;
+  category: string;
+  quantity: number;
+  unit_price: number | string;
+  status?: string;
+  location?: string | null;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface BackendInventoryResponse {
+  items: BackendInventoryItem[];
+  total: number;
+  message?: string;
+}
+
+// 백엔드 형식을 프론트엔드 형식으로 변환
+function transformBackendToFrontend(backendItem: BackendInventoryItem): InventoryItem {
+  return {
+    id: backendItem.id,
+    name: backendItem.name,
+    category: backendItem.category,
+    quantity: backendItem.quantity,
+    unitPrice: typeof backendItem.unit_price === 'string' 
+      ? parseFloat(backendItem.unit_price) 
+      : backendItem.unit_price,
+    status: backendItem.status || 'available',
+    location: backendItem.location || undefined,
+    description: backendItem.description || undefined,
+    createdAt: backendItem.created_at,
+    updatedAt: backendItem.updated_at,
+  };
+}
+
+// 프론트엔드 형식을 백엔드 형식으로 변환
+function transformFrontendToBackend(item: Partial<InventoryItem>): any {
+  const backendItem: any = {};
+  
+  if (item.name !== undefined) backendItem.name = item.name;
+  if (item.category !== undefined) backendItem.category = item.category;
+  if (item.quantity !== undefined) backendItem.quantity = item.quantity;
+  if (item.unitPrice !== undefined) backendItem.unit_price = item.unitPrice;
+  if (item.status !== undefined) backendItem.status = item.status;
+  if (item.location !== undefined) backendItem.location = item.location || null;
+  if (item.description !== undefined) backendItem.description = item.description || null;
+  
+  return backendItem;
 }
 
 // API Gateway URL 가져오기
@@ -58,8 +115,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       throw new Error(`재고 목록 조회 실패: ${response.statusText}`);
     }
 
-    const data: InventoryResponse = await response.json();
-    return data.items || [];
+    const data: BackendInventoryResponse = await response.json();
+    return (data.items || []).map(transformBackendToFrontend);
   } catch (error) {
     console.error('재고 목록 조회 오류:', error);
     throw error;
@@ -82,8 +139,8 @@ export async function getInventoryItem(itemId: string | number): Promise<Invento
       throw new Error(`재고 조회 실패: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data;
+    const data: BackendInventoryItem = await response.json();
+    return transformBackendToFrontend(data);
   } catch (error) {
     console.error('재고 조회 오류:', error);
     throw error;
@@ -93,22 +150,25 @@ export async function getInventoryItem(itemId: string | number): Promise<Invento
 /**
  * 재고 추가
  */
-export async function createInventoryItem(item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> {
+export async function createInventoryItem(item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<InventoryItem> {
   try {
     const gatewayUrl = getGatewayUrl();
+    const backendItem = transformFrontendToBackend(item);
+    
     const response = await fetch(`${gatewayUrl}/inventory/items`, {
       method: 'POST',
       headers: getHeaders(),
       credentials: 'include',
-      body: JSON.stringify(item),
+      body: JSON.stringify(backendItem),
     });
 
     if (!response.ok) {
-      throw new Error(`재고 추가 실패: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`재고 추가 실패: ${response.statusText} - ${errorText}`);
     }
 
-    const data = await response.json();
-    return data;
+    const data: BackendInventoryItem = await response.json();
+    return transformBackendToFrontend(data);
   } catch (error) {
     console.error('재고 추가 오류:', error);
     throw error;
@@ -124,19 +184,22 @@ export async function updateInventoryItem(
 ): Promise<InventoryItem> {
   try {
     const gatewayUrl = getGatewayUrl();
+    const backendItem = transformFrontendToBackend(item);
+    
     const response = await fetch(`${gatewayUrl}/inventory/items/${itemId}`, {
       method: 'PUT',
       headers: getHeaders(),
       credentials: 'include',
-      body: JSON.stringify(item),
+      body: JSON.stringify(backendItem),
     });
 
     if (!response.ok) {
-      throw new Error(`재고 수정 실패: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`재고 수정 실패: ${response.statusText} - ${errorText}`);
     }
 
-    const data = await response.json();
-    return data;
+    const data: BackendInventoryItem = await response.json();
+    return transformBackendToFrontend(data);
   } catch (error) {
     console.error('재고 수정 오류:', error);
     throw error;

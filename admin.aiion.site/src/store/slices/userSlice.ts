@@ -67,10 +67,7 @@ export const createUserSlice: StateCreator<
       user: { ...state.user, user: null, isLoggedIn: false } 
     }));
     
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('auth_provider');
-    }
+    // 이 함수는 mainservice.ts의 handleLogout에서 모든 스토리지를 정리하므로
+    // 여기서는 스토어 상태만 초기화
   },
 });

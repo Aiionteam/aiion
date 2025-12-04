@@ -51,7 +51,7 @@ develop/                                    # 루트 디렉토리
 │   └── feed/crawler_service/               # 웹 크롤링
 │
 ├── erp.aiion.site/                         # ERP 서비스 (Python/FastAPI)
-│   └── customer_servive/                   # 재고 관리
+│   └── customer_service/                   # 재고 관리
 │
 ├── www.aiion.site/                         # 사용자 프론트엔드 (Next.js)
 │   └── src/

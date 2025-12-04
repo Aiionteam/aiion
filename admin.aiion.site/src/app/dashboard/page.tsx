@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { getCurrentUser } from '@/service/authService';
+import { useAppStore } from '@/store';
 
 function DashboardContent() {
     const router = useRouter();
@@ -20,10 +22,10 @@ function DashboardContent() {
                 const token = localStorage.getItem('access_token');
 
                 if (!token) {
-                    // 토큰이 없으면 로그인 페이지로 이동
+                    // 토큰이 없으면 메인 페이지로 이동
                     setError('인증이 필요합니다.');
                     setLoginSuccess(false);
-                    router.push('/login');
+                    router.push('/');
                     return;
                 }
 
@@ -33,71 +35,58 @@ function DashboardContent() {
                     setError(null);
                 }
 
-                // 3. 백엔드 API로 현재 사용자 정보 조회
-                const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8080';
-
-                console.log('🔍 사용자 정보 조회 시작, 토큰:', token.substring(0, 20) + '...');
-
-                // 일반 로그인 사용자 정보 조회
-                const response = await fetch(`${gatewayUrl}/api/auth/user`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                });
-
-                console.log('📡 응답 상태:', response.status, response.statusText);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('📦 응답 데이터:', JSON.stringify(data, null, 2));
-
-                    if (data.success || data.user || data.email) {
-                        const userData = data.data || data.user || data;
-                        if (userData && (userData.userId || userData.email || userData.name)) {
-                            setUserInfo(userData);
-                            setError(null);
-                            setLoginSuccess(true);
-                            console.log('✅ 사용자 정보 조회 성공:', userData);
-                        } else {
-                            console.error('❌ 사용자 데이터 형식 오류:', userData);
-                            if (token) {
-                                setLoginSuccess(true);
-                                setError(null);
-                            } else {
-                                setError('사용자 정보 형식이 올바르지 않습니다.');
-                            }
+                // auth-service를 통한 사용자 정보 조회
+                try {
+                    const userData = await getCurrentUser();
+                    
+                    // 사용자 정보 저장
+                    setUserInfo({
+                        id: userData.id,
+                        name: userData.full_name || userData.username,
+                        email: userData.email,
+                        username: userData.username,
+                    });
+                    
+                    // Zustand 스토어에 사용자 정보 저장
+                    const store = useAppStore.getState();
+                    // login 함수 사용 (userSlice에 정의됨)
+                    try {
+                        if (store.user?.login) {
+                            store.user.login({
+                                id: userData.id,
+                                name: userData.full_name || userData.username,
+                                email: userData.email,
+                            });
+                        } else if (store.user?.setUser) {
+                            // login이 없으면 setUser 사용
+                            store.user.setUser({
+                                id: userData.id,
+                                name: userData.full_name || userData.username,
+                                email: userData.email,
+                            });
                         }
-                    } else {
-                        console.error('❌ 응답 success가 false:', data);
-                        if (token) {
-                            setLoginSuccess(true);
-                            setError(null);
-                        } else {
-                            setError(data.message || '사용자 정보를 가져올 수 없습니다.');
-                        }
+                    } catch (err) {
+                        console.warn('스토어에 사용자 정보 저장 실패:', err);
+                        // 에러가 발생해도 계속 진행
                     }
-                } else if (response.status === 401) {
-                    console.error('❌ 인증 실패 (401)');
-                    localStorage.removeItem('access_token');
-                    setError('인증이 필요합니다.');
-                    router.push('/login');
-                } else {
-                    console.warn('⚠️ 사용자 정보 조회 실패:', response.status, response.statusText);
-                    if (token) {
-                        setLoginSuccess(true);
-                        setError(null);
-                        console.log('✅ 토큰이 정상적으로 저장되어 로그인 성공으로 처리합니다.');
+                    
+                    setError(null);
+                    setLoginSuccess(true);
+                    console.log('✅ 사용자 정보 조회 성공:', userData);
+                } catch (err: any) {
+                    console.error('❌ 사용자 정보 조회 실패:', err);
+                    
+                    // 401 Unauthorized인 경우 토큰이 유효하지 않음
+                    if (err?.message?.includes('401') || err?.message?.includes('Unauthorized') || err?.message?.includes('expired')) {
+                        localStorage.removeItem('access_token');
+                        localStorage.removeItem('refresh_token');
+                        setError('인증이 만료되었습니다. 다시 로그인해주세요.');
+                        setLoginSuccess(false);
+                        router.push('/');
                     } else {
-                        try {
-                            const errorData = await response.json();
-                            console.error('❌ 에러 응답 데이터:', JSON.stringify(errorData, null, 2));
-                        } catch (e) {
-                            console.error('❌ 에러 응답 파싱 실패:', e);
-                        }
-                        setError('인증이 필요합니다.');
+                        // 다른 에러는 로그만 출력
+                        setError('사용자 정보를 가져올 수 없습니다.');
+                        setLoginSuccess(false);
                     }
                 }
             } catch (err) {
@@ -138,7 +127,7 @@ function DashboardContent() {
                         <p className="text-gray-600 dark:text-gray-400">{error}</p>
                     </div>
                     <button
-                        onClick={() => router.push('/login')}
+                        onClick={() => router.push('/')}
                         className="w-full rounded-lg bg-slate-900 dark:bg-slate-100 px-4 py-3 font-semibold text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-colors"
                     >
                         로그인 페이지로 이동
