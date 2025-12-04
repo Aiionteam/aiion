@@ -301,6 +301,7 @@ services:
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
   # ===================
   # Client Layer
   # ===================
