@@ -47,7 +47,7 @@ public class TaskController {
                 Long tokenUserId = jwtTokenUtil.getUserIdFromToken(token);
                 if (tokenUserId != null && !tokenUserId.equals(userId)) {
                     return Messenger.builder()
-                            .Code(403)
+                                .code(403)
                             .message("권한이 없습니다. 토큰의 사용자 ID와 요청한 사용자 ID가 일치하지 않습니다.")
                             .build();
                 }
@@ -63,7 +63,7 @@ public class TaskController {
         // Authorization 헤더 검증
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("인증 토큰이 필요합니다.")
                     .build();
         }
@@ -72,7 +72,7 @@ public class TaskController {
         String token = jwtTokenUtil.extractTokenFromHeader(authHeader);
         if (token == null || !jwtTokenUtil.validateToken(token)) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("유효하지 않은 토큰입니다.")
                     .build();
         }
@@ -81,7 +81,7 @@ public class TaskController {
         Long userId = jwtTokenUtil.getUserIdFromToken(token);
         if (userId == null) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("토큰에서 사용자 ID를 추출할 수 없습니다.")
                     .build();
         }
@@ -172,7 +172,7 @@ public class TaskController {
                 Long tokenUserId = jwtTokenUtil.getUserIdFromToken(token);
                 if (tokenUserId != null && !tokenUserId.equals(userId)) {
                     return Messenger.builder()
-                            .Code(403)
+                                .code(403)
                             .message("권한이 없습니다. 토큰의 사용자 ID와 요청한 사용자 ID가 일치하지 않습니다.")
                             .build();
                 }
@@ -189,7 +189,7 @@ public class TaskController {
         // Authorization 헤더 검증
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("인증 토큰이 필요합니다.")
                     .build();
         }
@@ -198,7 +198,7 @@ public class TaskController {
         String token = jwtTokenUtil.extractTokenFromHeader(authHeader);
         if (token == null || !jwtTokenUtil.validateToken(token)) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("유효하지 않은 토큰입니다.")
                     .build();
         }
@@ -207,7 +207,7 @@ public class TaskController {
         Long userId = jwtTokenUtil.getUserIdFromToken(token);
         if (userId == null) {
             return Messenger.builder()
-                    .Code(401)
+                    .code(401)
                     .message("토큰에서 사용자 ID를 추출할 수 없습니다.")
                     .build();
         }

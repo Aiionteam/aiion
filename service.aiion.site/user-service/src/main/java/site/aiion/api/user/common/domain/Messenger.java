@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "응답 메시지")
 public class Messenger {
     @Schema(description = "응답 코드", example = "200")
-    private int Code;
+    private int code;
     
     @Schema(description = "응답 메시지", example = "어서옵쇼")
     private String message;

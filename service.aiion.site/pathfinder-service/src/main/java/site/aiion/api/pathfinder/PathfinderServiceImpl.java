@@ -41,7 +41,7 @@ public class PathfinderServiceImpl implements PathfinderService {
     public Messenger findById(PathfinderModel pathfinderModel) {
         if (pathfinderModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -49,13 +49,13 @@ public class PathfinderServiceImpl implements PathfinderService {
         if (entity.isPresent()) {
             PathfinderModel model = entityToModel(entity.get());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("조회 성공")
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("경로 탐색 정보를 찾을 수 없습니다.")
                     .build();
         }
@@ -68,7 +68,7 @@ public class PathfinderServiceImpl implements PathfinderService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("전체 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -78,7 +78,7 @@ public class PathfinderServiceImpl implements PathfinderService {
     public Messenger findByUserId(Long userId) {
         if (userId == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -87,7 +87,7 @@ public class PathfinderServiceImpl implements PathfinderService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("사용자별 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -103,7 +103,7 @@ public class PathfinderServiceImpl implements PathfinderService {
         // userId가 필수값
         if (pathfinderModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID는 필수 값입니다.")
                     .build();
         }
@@ -120,7 +120,7 @@ public class PathfinderServiceImpl implements PathfinderService {
         Pathfinder saved = pathfinderRepository.save(entity);
         PathfinderModel model = entityToModel(saved);
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("저장 성공: " + saved.getId())
                 .data(model)
                 .build();
@@ -135,7 +135,7 @@ public class PathfinderServiceImpl implements PathfinderService {
         
         if (hasNullUserId) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID는 필수 값입니다. 모든 경로 탐색 정보에 사용자 ID를 설정해주세요.")
                     .build();
         }
@@ -158,7 +158,7 @@ public class PathfinderServiceImpl implements PathfinderService {
         
         List<Pathfinder> saved = pathfinderRepository.saveAll(entities);
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일괄 저장 성공: " + saved.size() + "개")
                 .build();
     }
@@ -168,7 +168,7 @@ public class PathfinderServiceImpl implements PathfinderService {
     public Messenger update(PathfinderModel pathfinderModel) {
         if (pathfinderModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -187,13 +187,13 @@ public class PathfinderServiceImpl implements PathfinderService {
             Pathfinder saved = pathfinderRepository.save(updated);
             PathfinderModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("수정 성공: " + pathfinderModel.getId())
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("수정할 경로 탐색 정보를 찾을 수 없습니다.")
                     .build();
         }
@@ -204,7 +204,7 @@ public class PathfinderServiceImpl implements PathfinderService {
     public Messenger delete(PathfinderModel pathfinderModel) {
         if (pathfinderModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -212,12 +212,12 @@ public class PathfinderServiceImpl implements PathfinderService {
         if (optionalEntity.isPresent()) {
             pathfinderRepository.deleteById(pathfinderModel.getId());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("삭제 성공: " + pathfinderModel.getId())
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("삭제할 경로 탐색 정보를 찾을 수 없습니다.")
                     .build();
         }
