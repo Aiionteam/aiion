@@ -59,13 +59,13 @@ public class EventServiceImpl implements EventService {
     public Messenger findById(EventModel eventModel) {
         if (eventModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (eventModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -75,19 +75,19 @@ public class EventServiceImpl implements EventService {
             // userId 검증: 다른 사용자의 일정은 조회 불가
             if (!event.getUserId().equals(eventModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 일정은 조회할 수 없습니다.")
                         .build();
             }
             EventModel model = entityToModel(event);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("조회 성공")
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("일정을 찾을 수 없습니다.")
                     .build();
         }
@@ -97,7 +97,7 @@ public class EventServiceImpl implements EventService {
     public Messenger findByUserId(Long userId) {
         if (userId == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -106,7 +106,7 @@ public class EventServiceImpl implements EventService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일정 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -116,7 +116,7 @@ public class EventServiceImpl implements EventService {
     public Messenger findByUserIdAndDate(Long userId, LocalDate date) {
         if (userId == null || date == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID와 날짜가 필요합니다.")
                     .build();
         }
@@ -125,7 +125,7 @@ public class EventServiceImpl implements EventService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일정 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -135,13 +135,13 @@ public class EventServiceImpl implements EventService {
     public Messenger findByUserIdAndDateRange(Long userId, LocalDate startDate, LocalDate endDate) {
         if (userId == null || startDate == null || endDate == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID, 시작 날짜, 종료 날짜가 필요합니다.")
                     .build();
         }
         if (startDate.isAfter(endDate)) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("시작 날짜가 종료 날짜보다 늦을 수 없습니다.")
                     .build();
         }
@@ -150,7 +150,7 @@ public class EventServiceImpl implements EventService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일정 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -162,19 +162,19 @@ public class EventServiceImpl implements EventService {
         try {
             if (eventModel.getUserId() == null) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("사용자 ID는 필수 값입니다.")
                         .build();
             }
             if (eventModel.getDate() == null) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("날짜는 필수 값입니다.")
                         .build();
             }
             if (eventModel.getText() == null || eventModel.getText().trim().isEmpty()) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("내용은 필수 값입니다.")
                         .build();
             }
@@ -189,14 +189,14 @@ public class EventServiceImpl implements EventService {
             Event saved = eventRepository.save(entity);
             EventModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("일정 저장 성공: " + saved.getId())
                     .data(model)
                     .build();
         } catch (Exception e) {
             e.printStackTrace();
             return Messenger.builder()
-                    .Code(500)
+                    .code(500)
                     .message("일정 저장 중 오류가 발생했습니다: " + e.getMessage())
                     .build();
         }
@@ -214,7 +214,7 @@ public class EventServiceImpl implements EventService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일정 일괄 저장 성공: " + saved.size() + "개")
                 .data(modelList)
                 .build();
@@ -225,13 +225,13 @@ public class EventServiceImpl implements EventService {
     public Messenger update(EventModel eventModel) {
         if (eventModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (eventModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -242,7 +242,7 @@ public class EventServiceImpl implements EventService {
             // userId 검증: 다른 사용자의 일정은 수정 불가
             if (!existing.getUserId().equals(eventModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 일정은 수정할 수 없습니다.")
                         .build();
             }
@@ -264,13 +264,13 @@ public class EventServiceImpl implements EventService {
             Event saved = eventRepository.save(updated);
             EventModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("일정 수정 성공: " + eventModel.getId())
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("수정할 일정을 찾을 수 없습니다.")
                     .build();
         }
@@ -281,13 +281,13 @@ public class EventServiceImpl implements EventService {
     public Messenger delete(EventModel eventModel) {
         if (eventModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (eventModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -298,19 +298,19 @@ public class EventServiceImpl implements EventService {
             // userId 검증: 다른 사용자의 일정은 삭제 불가
             if (!existing.getUserId().equals(eventModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 일정은 삭제할 수 없습니다.")
                         .build();
             }
             
             eventRepository.deleteById(eventModel.getId());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("일정 삭제 성공: " + eventModel.getId())
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("삭제할 일정을 찾을 수 없습니다.")
                     .build();
         }

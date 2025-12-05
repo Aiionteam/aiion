@@ -38,5 +38,15 @@ public class AccountModel {
     private String incomeSource;
     
     private Long userId;
+
+    private String memo; // 메모
+
+    private Boolean alarmEnabled; // 알람 활성화 여부
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate alarmDate; // 알람 날짜
+
+    @JsonFormat(pattern = "HH:mm:ss")
+    private LocalTime alarmTime; // 알람 시간
 }
 

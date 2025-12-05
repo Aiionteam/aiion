@@ -265,15 +265,22 @@ export async function fetchFromGateway(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
+  // options의 headers와 병합 (JWT 토큰은 항상 보존)
+  const mergedHeaders: HeadersInit = {
+    ...headers,
+    ...options.headers,
+  };
+  
+  // JWT 토큰이 있으면 항상 Authorization 헤더에 추가 (덮어쓰기 방지)
+  if (accessToken) {
+    mergedHeaders['Authorization'] = `Bearer ${accessToken}`;
+  }
+
   return fetchWithRetry(url, {
     method: 'GET',
     cache: 'no-store', // Next.js에서 fetch 캐싱 비활성화
     ...options,
-    // options에 이미 headers가 있으면 병합 (JWT 토큰 우선)
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
+    headers: mergedHeaders,
   });
 }
 

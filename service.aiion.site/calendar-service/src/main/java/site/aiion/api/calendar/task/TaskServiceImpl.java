@@ -49,13 +49,13 @@ public class TaskServiceImpl implements TaskService {
     public Messenger findById(TaskModel taskModel) {
         if (taskModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (taskModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -65,19 +65,19 @@ public class TaskServiceImpl implements TaskService {
             // userId 검증: 다른 사용자의 할 일은 조회 불가
             if (!task.getUserId().equals(taskModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 할 일은 조회할 수 없습니다.")
                         .build();
             }
             TaskModel model = entityToModel(task);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("조회 성공")
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("할 일을 찾을 수 없습니다.")
                     .build();
         }
@@ -87,7 +87,7 @@ public class TaskServiceImpl implements TaskService {
     public Messenger findByUserId(Long userId) {
         if (userId == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -96,7 +96,7 @@ public class TaskServiceImpl implements TaskService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("할 일 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -106,7 +106,7 @@ public class TaskServiceImpl implements TaskService {
     public Messenger findByUserIdAndDate(Long userId, LocalDate date) {
         if (userId == null || date == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID와 날짜가 필요합니다.")
                     .build();
         }
@@ -115,7 +115,7 @@ public class TaskServiceImpl implements TaskService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("할 일 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -125,7 +125,7 @@ public class TaskServiceImpl implements TaskService {
     public Messenger findByUserIdAndCompleted(Long userId, Boolean completed) {
         if (userId == null || completed == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID와 완료 상태가 필요합니다.")
                     .build();
         }
@@ -134,7 +134,7 @@ public class TaskServiceImpl implements TaskService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("할 일 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -146,19 +146,19 @@ public class TaskServiceImpl implements TaskService {
         try {
             if (taskModel.getUserId() == null) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("사용자 ID는 필수 값입니다.")
                         .build();
             }
             if (taskModel.getDate() == null) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("날짜는 필수 값입니다.")
                         .build();
             }
             if (taskModel.getText() == null || taskModel.getText().trim().isEmpty()) {
                 return Messenger.builder()
-                        .Code(400)
+                        .code(400)
                         .message("내용은 필수 값입니다.")
                         .build();
             }
@@ -173,14 +173,14 @@ public class TaskServiceImpl implements TaskService {
             Task saved = taskRepository.save(entity);
             TaskModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("할 일 저장 성공: " + saved.getId())
                     .data(model)
                     .build();
         } catch (Exception e) {
             e.printStackTrace();
             return Messenger.builder()
-                    .Code(500)
+                    .code(500)
                     .message("할 일 저장 중 오류가 발생했습니다: " + e.getMessage())
                     .build();
         }
@@ -198,7 +198,7 @@ public class TaskServiceImpl implements TaskService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("할 일 일괄 저장 성공: " + saved.size() + "개")
                 .data(modelList)
                 .build();
@@ -209,13 +209,13 @@ public class TaskServiceImpl implements TaskService {
     public Messenger update(TaskModel taskModel) {
         if (taskModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (taskModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -226,7 +226,7 @@ public class TaskServiceImpl implements TaskService {
             // userId 검증: 다른 사용자의 할 일은 수정 불가
             if (!existing.getUserId().equals(taskModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 할 일은 수정할 수 없습니다.")
                         .build();
             }
@@ -244,13 +244,13 @@ public class TaskServiceImpl implements TaskService {
             Task saved = taskRepository.save(updated);
             TaskModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("할 일 수정 성공: " + taskModel.getId())
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("수정할 할 일을 찾을 수 없습니다.")
                     .build();
         }
@@ -261,13 +261,13 @@ public class TaskServiceImpl implements TaskService {
     public Messenger toggleCompleted(Long taskId, Long userId) {
         if (taskId == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (userId == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -278,7 +278,7 @@ public class TaskServiceImpl implements TaskService {
             // userId 검증: 다른 사용자의 할 일은 변경 불가
             if (!existing.getUserId().equals(userId)) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 할 일은 변경할 수 없습니다.")
                         .build();
             }
@@ -298,13 +298,13 @@ public class TaskServiceImpl implements TaskService {
             Task saved = taskRepository.save(updated);
             TaskModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("할 일 완료 상태 변경 성공: " + taskId + " -> " + newCompleted)
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("변경할 할 일을 찾을 수 없습니다.")
                     .build();
         }
@@ -315,13 +315,13 @@ public class TaskServiceImpl implements TaskService {
     public Messenger delete(TaskModel taskModel) {
         if (taskModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
         if (taskModel.getUserId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("사용자 ID가 필요합니다.")
                     .build();
         }
@@ -332,19 +332,19 @@ public class TaskServiceImpl implements TaskService {
             // userId 검증: 다른 사용자의 할 일은 삭제 불가
             if (!existing.getUserId().equals(taskModel.getUserId())) {
                 return Messenger.builder()
-                        .Code(403)
+                        .code(403)
                         .message("다른 사용자의 할 일은 삭제할 수 없습니다.")
                         .build();
             }
             
             taskRepository.deleteById(taskModel.getId());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("할 일 삭제 성공: " + taskModel.getId())
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("삭제할 할 일을 찾을 수 없습니다.")
                     .build();
         }
