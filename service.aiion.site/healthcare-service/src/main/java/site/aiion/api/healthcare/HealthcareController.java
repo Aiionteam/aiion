@@ -17,9 +17,18 @@ import lombok.RequiredArgsConstructor;
 import site.aiion.api.healthcare.common.domain.Messenger;
 import site.aiion.api.healthcare.util.JwtTokenUtil;
 
+/**
+ * @deprecated 이 컨트롤러는 더 이상 사용되지 않습니다.
+ * 대신 다음 컨트롤러들을 사용하세요:
+ * - UserExerciseLogController: 운동 기록
+ * - UserHealthLogController: 건강 기록
+ * - UserScanDocumentController: 스캔 문서
+ * - ExerciseVideoRecommendationController: 운동 영상 추천
+ */
+@Deprecated
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "02. Healthcare", description = "건강 기록 관리 기능")
+@Tag(name = "02. Healthcare (Deprecated)", description = "건강 기록 관리 기능 (더 이상 사용되지 않음)")
 public class HealthcareController {
 
     private final HealthcareService healthcareService;
