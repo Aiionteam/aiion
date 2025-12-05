@@ -89,6 +89,7 @@ export const createInventorySlice: StateCreator<
   
   resetInventory: () => set((state) => ({ 
     inventory: { 
+      ...state.inventory,
       items: [],
       selectedItem: null,
       isLoading: false,

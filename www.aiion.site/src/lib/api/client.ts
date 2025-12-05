@@ -358,8 +358,26 @@ export async function fetchJSONFromAIGateway<T = any>(
   options: FetchOptions = {}
 ): Promise<JSONResponse<T>> {
   try {
+    console.log('[fetchJSONFromAIGateway] 요청 시작:', endpoint);
     const response = await fetchFromAIGateway(endpoint, params, options);
-    return parseJSONResponse<T>(response);
+    
+    console.log('[fetchJSONFromAIGateway] 응답 받음:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('Content-Type'),
+      ok: response.ok
+    });
+    
+    const result = await parseJSONResponse<T>(response);
+    
+    console.log('[fetchJSONFromAIGateway] 파싱 완료:', {
+      hasError: !!result.error,
+      hasData: !!result.data,
+      dataType: typeof result.data,
+      status: result.status
+    });
+    
+    return result;
   } catch (error) {
     // 네트워크 에러 (연결 실패 등) 처리
     console.error('[fetchJSONFromAIGateway] 요청 실패:', error);
