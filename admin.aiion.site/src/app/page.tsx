@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LoginForm } from '@/components/LoginForm';
 
 export default function Home() {
   const router = useRouter();
@@ -61,35 +62,7 @@ export default function Home() {
           </div>
 
           {/* 로그인/회원가입 섹션 */}
-          <div className="max-w-lg mx-auto mb-16">
-            <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-300 dark:border-gray-600 p-10 shadow-xl">
-              <div className="text-center mb-8">
-                <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
-                  시작하기
-                </h3>
-                <p className="text-base text-gray-600 dark:text-gray-400">
-                  계정이 있으신가요? 로그인하세요
-                </p>
-              </div>
-
-              <div>
-                <button
-                  onClick={() => {
-                    // 로그인 처리: 토큰 저장 후 대시보드로 이동
-                    localStorage.setItem('access_token', 'temp_token_' + Date.now());
-                    router.push('/dashboard');
-                  }}
-                  className="block w-full flex items-center justify-center gap-3 px-6 py-4 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-lg font-semibold text-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-all transform hover:scale-105 shadow-md"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  로그인
-                </button>
-              </div>
-
-            </div>
-          </div>
+          <LoginForm />
 
           {/* 기능 카드 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">

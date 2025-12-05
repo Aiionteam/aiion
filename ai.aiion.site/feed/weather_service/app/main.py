@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query  # type: ignore
-from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+# CORS는 게이트웨이에서 처리하므로 제거
 from pydantic import BaseModel  # type: ignore
 import uvicorn  # type: ignore
 import os
@@ -28,19 +28,9 @@ app = FastAPI(
     description="기상청 API 서비스"
 )
 
-# CORS 설정 - 게이트웨이만 허용 (프론트엔드는 게이트웨이를 통해 접근)
-# Spring Cloud Gateway가 이미 CORS를 처리하므로, 여기서는 게이트웨이만 허용
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",  # 통합 API Gateway (로컬)
-        "http://api-gateway:8080",  # Docker 내부 네트워크
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# CORS 설정 제거 - 게이트웨이가 모든 CORS를 처리하므로 백엔드 서비스에서는 제거
+# 프록시/파사드 패턴: 프론트엔드 -> 게이트웨이 -> 백엔드 서비스
+# 게이트웨이만 CORS를 처리하고, 백엔드 서비스는 게이트웨이를 통해서만 접근
 
 # 서브 라우터 생성
 weather_router = APIRouter(prefix="/weather", tags=["weather"])

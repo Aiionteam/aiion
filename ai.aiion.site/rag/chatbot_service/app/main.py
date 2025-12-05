@@ -19,7 +19,7 @@
 """
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request  # type: ignore
-from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+# CORS는 게이트웨이에서 처리하므로 제거
 from pydantic import BaseModel  # type: ignore
 import uvicorn  # type: ignore
 import os
@@ -55,19 +55,14 @@ app = FastAPI(
     description="챗봇 서비스 API"
 )
 
-# CORS 설정 - 게이트웨이만 허용 (프론트엔드는 게이트웨이를 통해 접근)
-# Spring Cloud Gateway가 이미 CORS를 처리하므로, 여기서는 게이트웨이만 허용
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",  # 통합 API Gateway (로컬)
-        "http://api-gateway:8080",  # Docker 내부 네트워크
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# UTF-8 인코딩 강제 설정
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
+# CORS 설정 제거 - 게이트웨이가 모든 CORS를 처리하므로 백엔드 서비스에서는 제거
+# 프록시/파사드 패턴: 프론트엔드 -> 게이트웨이 -> 백엔드 서비스
+# 게이트웨이만 CORS를 처리하고, 백엔드 서비스는 게이트웨이를 통해서만 접근
 
 # 서브 라우터 생성
 chatbot_router = APIRouter(prefix="/chatbot", tags=["chatbot"])
@@ -94,33 +89,156 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     model: str
+    status: str = "success"  # 응답 상태 (success, error)
     classification: Optional[Dict[str, Any]] = None  # 분류 정보 (선택사항)
 
-# 날씨 관련 키워드 감지 함수
-def is_weather_related(message: str) -> bool:
-    """사용자 메시지가 날씨 관련인지 확인
+# ========== NLP 기반 의도 분류 및 엔티티 추출 ==========
+
+def classify_intent(message: str) -> dict:
+    """GPT를 사용하여 사용자 메시지의 의도를 분류하고 엔티티를 추출합니다.
     
-    허용된 날씨 키워드:
-    - "단기날씨", "중기날씨"
-    - "오늘 날씨", "내일 날씨"
+    Returns:
+        {
+            "intent": "weather" | "diary" | "health" | "finance" | "culture" | "pathfinder" | "general",
+            "confidence": 0.0 ~ 1.0,
+            "entities": {
+                "location": "지역명" or None,
+                "date": "날짜 표현" or None,
+                "other": {...}
+            },
+            "original_message": "원본 메시지"
+        }
     """
+    if client is None:
+        # OpenAI 클라이언트가 없으면 기존 키워드 방식 폴백
+        return {
+            "intent": "general",
+            "confidence": 0.0,
+            "entities": {},
+            "original_message": message
+        }
+    
+    try:
+        prompt = f"""
+사용자 메시지를 분석하여 의도(intent)와 엔티티(entity)를 추출해주세요.
+
+메시지: "{message}"
+
+**의도 분류 기준:**
+- weather: 날씨, 기온, 온도, 비, 눈, 맑음, 흐림, 예보 등 날씨 관련 질문
+  예: "오늘 날씨 어때?", "비 오냐?", "몇도야?", "서울 날씨", "내일 부산 날씨"
+- diary: 일상 기록, 일기, 오늘의 일, 하루 일과 등
+- health: 운동, 식단, 건강, 다이어트, 체중 등
+- finance: 돈, 지출, 수입, 가계부, 구매 등
+- culture: 영화, 책, 음악, 공연 등 문화 활동
+- pathfinder: 목표, 계획, 학습, 프로젝트 등
+- general: 위 카테고리에 해당하지 않는 일반적인 대화
+
+**엔티티 추출 기준:**
+- location: 지역명 (예: 서울, 부산, 제주)
+- date: 날짜 표현 (예: 오늘, 내일, 모레, 12월 5일, 다음주)
+- time: 시간 표현 (예: 아침, 저녁, 3시)
+- other: 기타 중요한 정보
+
+**중요:**
+- 날씨 질문이 명확하면 confidence를 0.8 이상으로 설정
+- 애매한 경우 confidence를 0.5 이하로 설정
+- 일기 관련 키워드(공무, 업무, 동헌)가 있으면 diary로 분류
+
+다음 JSON 형식으로만 응답해주세요:
+{{
+    "intent": "weather" | "diary" | "health" | "finance" | "culture" | "pathfinder" | "general",
+    "confidence": 0.0 ~ 1.0,
+    "entities": {{
+        "location": "지역명" or null,
+        "date": "날짜 표현" or null,
+        "time": "시간 표현" or null,
+        "other": {{}}
+    }},
+    "reason": "분류 이유 (한 줄)"
+}}
+"""
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # 빠르고 저렴한 모델 사용
+            messages=[
+                {"role": "system", "content": "You are an intent classification and entity extraction expert. Respond only with valid JSON. Always use Korean for text fields."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,  # 일관성을 위해 낮게 설정
+            max_tokens=300
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        result["original_message"] = message
+        
+        print(f"[의도 분류] 메시지: {message}")
+        print(f"[의도 분류] 결과: intent={result.get('intent')}, confidence={result.get('confidence'):.2f}, entities={result.get('entities')}")
+        print(f"[의도 분류] 이유: {result.get('reason')}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"[의도 분류] 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        # 오류 발생 시 기존 키워드 방식 폴백
+        return {
+            "intent": "general",
+            "confidence": 0.0,
+            "entities": {},
+            "original_message": message
+        }
+
+# 날씨 관련 키워드 감지 함수 (NLP 기반 + 키워드 폴백)
+def is_weather_related(message: str, intent_result: dict = None) -> bool:
+    """사용자 메시지가 날씨 관련인지 확인 (키워드 우선 + NLP 폴백)
+    
+    Args:
+        message: 사용자 메시지
+        intent_result: 이미 분류된 의도 결과 (선택사항, 있으면 재사용)
+    
+    키워드 기반으로 먼저 빠르게 체크하고, 불명확한 경우에만 GPT를 사용합니다.
+    """
+    # 이미 분류된 의도 결과가 있으면 재사용
+    if intent_result and intent_result.get("intent") == "weather" and intent_result.get("confidence", 0) >= 0.5:
+        print(f"[날씨 감지] NLP 기반 (재사용): {message} → weather (confidence: {intent_result.get('confidence'):.2f})")
+        return True
+    
+    # 신뢰도가 낮거나 GPT 결과가 없으면 키워드 방식 폴백
     message_lower = message.lower()
     
-    # 허용된 날씨 키워드
-    weather_keywords = [
-        '단기날씨', 
-        '중기날씨',
-        '오늘 날씨',
-        '내일 날씨'
+    # 기본 날씨 키워드 (가장 일반적인 키워드)
+    basic_weather_keywords = [
+        '날씨', '예보', '기온', '온도', '몇도', '몇 도', '몇도야', '몇도인데', '몇도냐', '몇도지',
+        '비', '눈', '맑음', '흐림', '기상', '강수', '습도', '바람', '미세먼지', '황사', '대기질'
     ]
     
-    # 허용된 키워드가 있으면 날씨 요청으로 인식
-    if any(keyword in message_lower for keyword in weather_keywords):
+    # 명시적인 날씨 키워드
+    explicit_weather_keywords = [
+        '단기날씨', '중기날씨', '단기예보', '중기예보',
+        '오늘 날씨', '내일 날씨', '모레 날씨', '주간 날씨',
+        '날씨 알려줘', '날씨 어때', '날씨는', '날씨정보',
+        '날씨 정보', '오늘의 날씨', '오늘의날씨', '날씨알려줘'
+    ]
+    
+    # 기본 키워드가 있으면 날씨 요청으로 인식
+    if any(keyword in message_lower for keyword in basic_weather_keywords):
+        # 일기 관련 키워드와 구별 (일기 우선)
+        diary_keywords = ['공무', '업무', '일상', '하루', '동헌', '점검', '순찰', '공문', '원수', '문서']
+        if not any(keyword in message_lower for keyword in diary_keywords):
+            print(f"[날씨 감지] 키워드 기반: {message} → weather")
+            return True
+    
+    # 명시적인 날씨 키워드가 있으면 날씨 요청으로 인식
+    if any(keyword in message_lower for keyword in explicit_weather_keywords):
+        print(f"[날씨 감지] 키워드 기반: {message} → weather")
         return True
     
     return False
 
-# 지역 코드 매핑
+# 지역 코드 매핑 (확장된 버전 - 더 많은 지역 지원)
 REGION_CODES = {
     '서울': {'stnId': '108', 'nx': 60, 'ny': 127},
     '인천': {'stnId': '109', 'nx': 55, 'ny': 124},
@@ -131,22 +249,73 @@ REGION_CODES = {
     '부산': {'stnId': '159', 'nx': 98, 'ny': 76},
     '울산': {'stnId': '159', 'nx': 102, 'ny': 84},
     '제주': {'stnId': '184', 'nx': 52, 'ny': 38},
+    # 추가 지역 (단기예보용 좌표)
+    '수원': {'stnId': '119', 'nx': 60, 'ny': 121},
+    '성남': {'stnId': '119', 'nx': 62, 'ny': 123},
+    '고양': {'stnId': '108', 'nx': 57, 'ny': 128},
+    '용인': {'stnId': '119', 'nx': 64, 'ny': 119},
+    '부천': {'stnId': '109', 'nx': 56, 'ny': 125},
+    '안산': {'stnId': '119', 'nx': 58, 'ny': 121},
+    '안양': {'stnId': '108', 'nx': 59, 'ny': 123},
+    '평택': {'stnId': '232', 'nx': 62, 'ny': 114},
+    '의정부': {'stnId': '108', 'nx': 60, 'ny': 130},
+    '구리': {'stnId': '108', 'nx': 62, 'ny': 127},
+    '남양주': {'stnId': '108', 'nx': 64, 'ny': 128},
+    '오산': {'stnId': '119', 'nx': 62, 'ny': 118},
+    '시흥': {'stnId': '119', 'nx': 57, 'ny': 123},
+    '군포': {'stnId': '119', 'nx': 59, 'ny': 122},
+    '의왕': {'stnId': '119', 'nx': 60, 'ny': 122},
+    '하남': {'stnId': '108', 'nx': 64, 'ny': 126},
+    '이천': {'stnId': '119', 'nx': 68, 'ny': 121},
+    '안성': {'stnId': '232', 'nx': 65, 'ny': 115},
+    '김포': {'stnId': '109', 'nx': 55, 'ny': 128},
+    '화성': {'stnId': '119', 'nx': 57, 'ny': 119},
+    '광명': {'stnId': '108', 'nx': 58, 'ny': 125},
+    '양주': {'stnId': '108', 'nx': 61, 'ny': 131},
+    '포천': {'stnId': '108', 'nx': 64, 'ny': 134},
+    '여주': {'stnId': '119', 'nx': 71, 'ny': 121},
+    '양평': {'stnId': '108', 'nx': 69, 'ny': 125},
+    '과천': {'stnId': '108', 'nx': 60, 'ny': 124},
+    '가평': {'stnId': '108', 'nx': 69, 'ny': 133},
+    '연천': {'stnId': '108', 'nx': 61, 'ny': 138},
 }
 
 def extract_region(message: str) -> dict:
-    """메시지에서 지역 정보 추출"""
+    """메시지에서 지역 정보 추출 (개선된 버전)
+    
+    지역명이 명시되지 않으면 기본값으로 서울을 반환합니다.
+    """
+    message_lower = message.lower()
+    
+    # 지역명 추출 (우선순위: 정확한 매칭 > 부분 매칭)
+    matched_regions = []
+    
     for region, codes in REGION_CODES.items():
-        if region in message:
-            # 지역명도 포함하여 반환
-            result = codes.copy()
-            result['name'] = region
-            return result
+        region_lower = region.lower()
+        # 정확한 매칭 (단어 경계 고려)
+        if region in message or region_lower in message_lower:
+            # 단어 경계 확인 (예: "서울"이 "서울시"에 포함되는 경우도 허용)
+            matched_regions.append((region, codes, region in message))
+    
+    # 정확한 매칭 우선 선택
+    if matched_regions:
+        # 정확한 매칭이 있으면 그것을 선택, 없으면 첫 번째 부분 매칭 선택
+        exact_match = next((r for r in matched_regions if r[2]), None)
+        if exact_match:
+            region, codes, _ = exact_match
+        else:
+            region, codes, _ = matched_regions[0]
+        
+        result = codes.copy()
+        result['name'] = region
+        return result
+    
     # 기본값: 서울
     result = REGION_CODES['서울'].copy()
     result['name'] = '서울'
     return result
 
-def extract_date_range(message: str) -> dict:
+def extract_date_range(message: str, nlp_date: str = None) -> dict:
     """메시지에서 날짜/기간 정보 추출
     
     단기예보: 오늘부터 3일 후까지 (기상청 단기예보 범위)
@@ -307,7 +476,7 @@ def get_weather_info(region_info: dict, date_range: dict = None) -> str:
         if date_range.get('use_short', True):
             try:
                 print(f"[챗봇] 단기예보 조회 시작: {region_info.get('name', 'Unknown')}")
-                short_url = "http://weather-service:9004/weather/short-forecast"
+                short_url = "http://aihoyun-weather-service:9004/weather/short-forecast"
                 short_params = {
                     "nx": region_info['nx'],
                     "ny": region_info['ny'],
@@ -344,7 +513,7 @@ def get_weather_info(region_info: dict, date_range: dict = None) -> str:
         if date_range.get('use_mid', True):
             try:
                 print(f"[챗봇] 중기예보 조회 시작: {region_info.get('name', 'Unknown')}")
-                mid_url = "http://weather-service:9004/weather/mid-forecast"
+                mid_url = "http://aihoyun-weather-service:9004/weather/mid-forecast"
                 mid_params = {
                     "regionName": region_info.get('name', '서울'),
                     "dataType": "JSON"
@@ -569,6 +738,80 @@ def format_weather_response(weather_data: dict, base_date: str, base_time: str) 
         return f"날씨 정보 처리 중 오류: {str(e)}"
 
 # 일기 검색 관련 키워드 감지 함수
+def is_diary_detail_request(message: str) -> bool:
+    """사용자 메시지가 일기 상세 조회 요청인지 확인
+    
+    일기 상세 조회 요청 예시:
+    - "1번 일기 자세히"
+    - "첫 번째 일기 전체"
+    - "2번 일기 자세하게 보여줘"
+    - "여기서 1번 일기를 자세하게 보여줘"
+    - "첫번째 일기 전체 내용"
+    """
+    message_lower = message.lower()
+    
+    # 일기 상세 조회 키워드
+    detail_keywords = [
+        '자세히', '자세하게', '전체', '상세', '전체 내용', '전체 본문',
+        '자세히 보여', '자세하게 보여', '전체 보여', '상세 보여',
+        'detail', 'show detail', 'full content', 'complete'
+    ]
+    
+    # 일기 번호 패턴 (1번, 첫 번째, 첫번째, 2번 등)
+    number_patterns = [
+        r'\d+번',
+        r'첫\s*번째',
+        r'두\s*번째',
+        r'세\s*번째',
+        r'네\s*번째',
+        r'다섯\s*번째',
+        r'여섯\s*번째',
+        r'일곱\s*번째',
+        r'여덟\s*번째',
+        r'아홉\s*번째',
+        r'열\s*번째'
+    ]
+    
+    # 일기 상세 조회 키워드가 있고, 일기 번호 패턴이 있으면 상세 조회 요청
+    has_detail_keyword = any(keyword in message_lower for keyword in detail_keywords)
+    has_number_pattern = any(re.search(pattern, message_lower) for pattern in number_patterns)
+    
+    # "일기" 키워드가 있거나, 번호 패턴이 있으면 상세 조회 요청으로 간주
+    if has_detail_keyword and ('일기' in message_lower or has_number_pattern):
+        return True
+    
+    # 번호 패턴이 있고 "일기" 키워드가 있으면 상세 조회 요청
+    if has_number_pattern and '일기' in message_lower:
+        return True
+    
+    return False
+
+def extract_diary_number(message: str) -> int:
+    """메시지에서 일기 번호 추출 (1부터 시작)
+    
+    Returns:
+        일기 번호 (1, 2, 3, ...), 추출 실패 시 1 반환
+    """
+    message_lower = message.lower()
+    
+    # 숫자 + 번 패턴 (1번, 2번, 3번 등)
+    number_match = re.search(r'(\d+)번', message_lower)
+    if number_match:
+        return int(number_match.group(1))
+    
+    # 한글 숫자 패턴 (첫 번째, 두 번째 등)
+    korean_numbers = {
+        '첫': 1, '두': 2, '세': 3, '네': 4, '다섯': 5,
+        '여섯': 6, '일곱': 7, '여덟': 8, '아홉': 9, '열': 10
+    }
+    
+    for korean, number in korean_numbers.items():
+        if korean in message_lower and ('번째' in message_lower or '번' in message_lower):
+            return number
+    
+    # 기본값: 1번
+    return 1
+
 def is_diary_search_request(message: str) -> bool:
     """사용자 메시지가 일기 검색 요청인지 확인 (개선된 버전)
     
@@ -580,7 +823,13 @@ def is_diary_search_request(message: str) -> bool:
     - "일기 찾아줘"
     - "일기에 ~가 있나?"
     - "일기에서 ~ 언급"
+    
+    주의: 일기 상세 조회 요청은 검색 요청이 아닙니다.
     """
+    # 일기 상세 조회 요청은 검색 요청이 아님
+    if is_diary_detail_request(message):
+        return False
+    
     message_lower = message.lower()
     
     # 명시적인 검색 키워드
@@ -595,6 +844,24 @@ def is_diary_search_request(message: str) -> bool:
     # 검색 키워드가 있으면 검색 요청
     if any(keyword in message_lower for keyword in search_keywords):
         return True
+    
+    # "~에 관한 일기", "~에 대한 일기", "~ 일기" 패턴 확인
+    # 예: "해전에 관한 일기", "공무에 대한 일기", "오늘 일기"
+    if '일기' in message_lower:
+        # 정규식으로 패턴 매칭
+        import re
+        # "X에 관한 일기", "X에 대한 일기", "X 일기" 패턴
+        patterns = [
+            r'\S+에\s*관한\s*일기',  # "~에 관한 일기"
+            r'\S+에\s*대한\s*일기',  # "~에 대한 일기"
+            r'\S+\s*일기',          # "~ 일기" (예: "해전 일기", "공무 일기")
+        ]
+        for pattern in patterns:
+            if re.search(pattern, message_lower):
+                # "오늘 일기", "내일 일기", "어제 일기"는 일기 검색이 아님 (일기 작성 요청)
+                date_patterns = ['오늘', '내일', '어제', '이번', '지난', '다음']
+                if not any(date_word in message_lower for date_word in date_patterns):
+                    return True
     
     # "일기" + 질문 형식 (예: "일기에서 공무를 언급한 것 찾아줘")
     if '일기' in message_lower:
@@ -616,19 +883,34 @@ def extract_search_query(message: str) -> str:
     - "난중일기 검색: 이순신" -> "이순신"
     - "일기에서 동헌에 대해" -> "동헌"
     - "일기에서 공무와 원수를 찾아줘" -> "공무 원수"
+    - "해전에 관한 일기를 찾아줘" -> "해전"
+    - "공무에 대한 일기" -> "공무"
     """
     # 정규식으로 더 정확하게 검색어 추출
     import re
     
+    # 패턴 0: "X에 관한 일기를 찾아줘", "X에 대한 일기를 찾아줘" 형식 (최우선)
+    pattern0 = r'(.+?)에\s*(?:관한|대한)\s*일기(?:를|을)?\s*(?:찾아|검색|조회|보여|알려|줘)?'
+    match0 = re.search(pattern0, message, re.IGNORECASE)
+    if match0:
+        query = match0.group(1).strip()
+        # 조사 제거
+        query = re.sub(r'\s*(을|를|이|가|에|에서|의|로|으로|와|과|도|만|은|는)\s*$', '', query)
+        query = query.strip()
+        if query:
+            print(f"[검색어 추출] 패턴0 매칭: '{query}' (원본: '{message}')")
+            return query
+    
     # 패턴 1: "일기에서 X를 찾아줘" 형식
-    pattern1 = r'일기(?:에서|에)?\s*(.+?)(?:를|을|에 대해|에 대해서|에 관해|에 관해서)?\s*(?:찾아|검색|조회|보여|알려)'
+    pattern1 = r'일기(?:에서|에)?\s*(.+?)(?:를|을|에 대해|에 대해서|에 관해|에 관해서)?\s*(?:찾아|검색|조회|보여|알려|줘)'
     match1 = re.search(pattern1, message, re.IGNORECASE)
     if match1:
         query = match1.group(1).strip()
-        # 조사 제거
-        query = re.sub(r'\s*(을|를|이|가|에|에서|의|로|으로|와|과|도|만|은|는)\s*', ' ', query)
+        # 조사 제거 (끝에 있는 조사만)
+        query = re.sub(r'\s*(을|를|이|가|에|에서|의|로|으로|와|과|도|만|은|는)\s*$', '', query)
         query = query.strip()
         if query:
+            print(f"[검색어 추출] 패턴1 매칭: '{query}' (원본: '{message}')")
             return query
     
     # 패턴 2: "검색: X" 또는 "검색 X" 형식
@@ -651,18 +933,20 @@ def extract_search_query(message: str) -> str:
             if query:
                 return query
     
-    # 패턴 4: "일기" 키워드 뒤의 모든 내용을 검색어로
+    # 패턴 4: "일기" 키워드 뒤의 모든 내용을 검색어로 (마지막 폴백)
     if '일기' in message.lower():
         parts = re.split(r'일기', message, flags=re.IGNORECASE, maxsplit=1)
         if len(parts) > 1:
             query = parts[1].strip()
             # 검색 관련 키워드 제거
             query = re.sub(r'\s*(찾아|검색|조회|보여|알려|줘|주세요|해줘|해주세요)\s*', '', query, flags=re.IGNORECASE)
-            # 조사 제거
+            # 조사 제거 (앞뒤)
             query = re.sub(r'^\s*(을|를|이|가|에|에서|의|로|으로|와|과|도|만|은|는)\s+', '', query)
             query = re.sub(r'\s+(을|를|이|가|에|에서|의|로|으로|와|과|도|만|은|는)\s*$', '', query)
             query = query.strip()
-            if query:
+            # "를" 같은 단일 조사만 남은 경우 제외
+            if query and query not in ['를', '을', '이', '가', '에', '에서', '의', '로', '으로', '와', '과', '도', '만', '은', '는']:
+                print(f"[검색어 추출] 패턴4 매칭: '{query}' (원본: '{message}')")
                 return query
     
     # 기본: 검색 키워드 제거 후 남은 내용
@@ -919,7 +1203,8 @@ def format_diary_search_results(diaries: list, search_query: str = "") -> str:
                 content = content[:300] + "..."
         
         result_parts.append(f"{i}. [{diary_date}]{relevance_info} {title}")
-        result_parts.append(f"   {content}\n")
+        result_parts.append(f"   {content}")
+        result_parts.append(f"   💡 자세히 보려면: '{i}번 일기 자세히' 또는 '{i}번 일기 전체'라고 말씀해주세요.\n")
     
     if len(diaries) > display_count:
         result_parts.append(f"\n... 외 {len(diaries) - display_count}개 더 있음")
@@ -939,6 +1224,7 @@ def should_classify_as_diary(message: str) -> bool:
     주의: 
     - "일기" 키워드만으로는 일기로 분류하지 않습니다 (일기 검색 요청일 수 있음)
     - 일기 검색 요청("일기에서 ~를 찾아줘")은 일기로 분류하지 않습니다.
+    - 날씨 관련 키워드가 있으면 일기로 분류하지 않습니다 (날씨 질문 우선)
     - 일기 저장은 나중에 별도 AI 라우터 모델이 처리할 예정입니다.
     
     Note:
@@ -955,6 +1241,11 @@ def should_classify_as_diary(message: str) -> bool:
     # "일기" 키워드만으로는 일기로 분류하지 않음 (나중에 AI 라우터가 처리)
     if '일기' in message_lower:
         print(f"[챗봇] '일기' 키워드 감지 - 일기로 분류하지 않음 (AI 라우터가 처리 예정)")
+        return False
+    
+    # ✅ 날씨 관련 키워드가 있으면 일기로 분류하지 않음 (날씨 질문 우선)
+    if is_weather_related(message):
+        print(f"[챗봇] 날씨 관련 키워드 감지 - 일기로 분류하지 않음 (날씨 질문 우선)")
         return False
     
     diary_keywords = [
@@ -1447,21 +1738,28 @@ def classify_and_parse(text: str) -> Optional[Dict[str, Any]]:
     """텍스트를 모든 카테고리 중 하나로 분류하고 구조화
     
     카테고리 우선순위:
-    1. 일기 (최우선 - 일상 기록, 공무/업무 기록)
-    2. 가계 (금액 정보가 명확한 경우)
-    3. 건강 (운동, 식단 등)
-    4. 패스파인더 (목표, 계획 등)
-    5. 문화 (영화, 책 등 - 명시적인 작품 감상만)
+    1. 날씨 (최우선 - 날씨 질문은 다른 카테고리보다 우선)
+    2. 일기 (일상 기록, 공무/업무 기록)
+    3. 가계 (금액 정보가 명확한 경우)
+    4. 건강 (운동, 식단 등)
+    5. 패스파인더 (목표, 계획 등)
+    6. 문화 (영화, 책 등 - 명시적인 작품 감상만)
     
     주의: 
     - "일기" 키워드만으로는 일기로 분류하지 않습니다 (일기 검색 요청일 수 있음)
     - "일기에서 ~를 찾아줘" 같은 검색 요청은 일기로 분류하지 않습니다.
+    - 날씨 관련 키워드가 있으면 일기로 분류하지 않습니다 (날씨 질문 우선)
     - 일기 저장은 나중에 별도 AI 라우터 모델이 처리할 예정입니다.
     - "오늘 공무를 봤다" 같은 일상 기록은 일기로 분류되어야 합니다.
     
     Returns:
         분류된 데이터 또는 None
     """
+    # ✅ 날씨 관련 키워드가 있으면 분류하지 않음 (날씨 질문은 별도 처리)
+    if is_weather_related(text):
+        print(f"[챗봇] 날씨 관련 키워드 감지 - 분류하지 않음 (날씨 질문은 별도 처리)")
+        return None
+    
     # 일기 검색 요청은 분류하지 않음 (최우선 체크)
     if is_diary_search_request(text):
         print(f"[챗봇] 일기 검색 요청 감지 - 분류하지 않음")
@@ -1652,10 +1950,16 @@ def chat():
             ]
         )
         
-        return {
-            "message": response.choices[0].message.content,
-            "model": response.model
-        }
+        from fastapi.responses import JSONResponse
+        chat_response = ChatResponse(
+            message=response.choices[0].message.content or "",
+            model=response.model,
+            status="success"
+        )
+        return JSONResponse(
+            content=chat_response.model_dump(),
+            media_type="application/json; charset=utf-8"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
@@ -1691,13 +1995,50 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         
         start_time = time.time()
         
-        # 날씨 관련 질문인지 확인
-        is_weather = is_weather_related(request.message)
+        # ========== 빠른 키워드 기반 체크 (GPT 호출 전) ==========
+        # 키워드 기반으로 먼저 빠르게 체크하여 불필요한 GPT 호출 방지
+        message_lower = request.message.lower()
+        
+        # 날씨 키워드 빠른 체크
+        quick_weather_keywords = ['날씨', '예보', '기온', '온도', '몇도', '비', '눈', '맑음', '흐림']
+        quick_is_weather = any(keyword in message_lower for keyword in quick_weather_keywords)
+        
+        # 일기 검색 키워드 빠른 체크
+        quick_diary_search_keywords = ['일기 검색', '일기 찾아', '일기에서', '일기 조회', '에 관한 일기', '에 대한 일기']
+        quick_is_diary_search = any(keyword in message_lower for keyword in quick_diary_search_keywords)
+        
+        # ========== NLP 기반 의도 분류 및 엔티티 추출 (필요할 때만) ==========
+        # 키워드로 명확하지 않은 경우에만 GPT 호출
+        intent_result = None
+        intent = "general"
+        confidence = 0.0
+        entities = {}
+        
+        # 키워드로 명확하지 않은 경우에만 의도 분류 수행
+        needs_intent_classification = not quick_is_weather and not quick_is_diary_search
+        
+        if needs_intent_classification:
+            intent_result = classify_intent(request.message)
+            intent = intent_result.get("intent", "general")
+            confidence = intent_result.get("confidence", 0.0)
+            entities = intent_result.get("entities", {})
+            print(f"[챗봇] 🎯 의도 분류 결과: intent={intent}, confidence={confidence:.2f}")
+            print(f"[챗봇] 🎯 추출된 엔티티: {entities}")
+        else:
+            print(f"[챗봇] ⚡ 키워드 기반 빠른 체크 완료 (GPT 호출 생략)")
+        
+        # 날씨 관련 질문인지 확인 (키워드 우선, 필요시 NLP)
+        if quick_is_weather:
+            is_weather = True
+        else:
+            is_weather = is_weather_related(request.message, intent_result)
         # 일기 검색 요청인지 확인
         is_diary_search = is_diary_search_request(request.message)
+        # 일기 상세 조회 요청인지 확인
+        is_diary_detail = is_diary_detail_request(request.message)
         # 분류가 필요한지 확인 ("일기" 키워드만으로는 분류하지 않음, 나중에 AI 라우터가 처리)
-        # 일기 검색 요청이 아니고, "일기" 키워드가 없을 때만 분류 시도
-        needs_classification = not is_diary_search and '일기' not in request.message.lower() and should_classify_as_diary(request.message)
+        # ✅ 날씨 질문이 아니고, 일기 검색/상세 조회 요청이 아니고, "일기" 키워드가 없을 때만 분류 시도
+        needs_classification = not is_weather and not is_diary_search and not is_diary_detail and '일기' not in request.message.lower() and should_classify_as_diary(request.message)
         
         # 병렬 처리: 날씨 API, 일기 검색, 분류를 동시에 실행
         weather_context = ""
@@ -1706,16 +2047,21 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         classification_context = ""
         
         def fetch_weather():
-            """날씨 정보 조회 (별도 스레드)"""
+            """날씨 정보 조회 (별도 스레드) - NLP 엔티티 활용"""
             if not is_weather:
                 return ""
             try:
-                print(f"[챗봇] 날씨 관련 질문 감지: {request.message}")
-                region_info = extract_region(request.message)
-                date_range = extract_date_range(request.message)
+                print(f"[챗봇] 🌤️ 날씨 관련 질문 감지: {request.message}")
+                # NLP로 추출된 엔티티를 활용하여 지역 정보 추출
+                region_info = extract_region(request.message, entities)
+                print(f"[챗봇] 🌤️ 추출된 지역 정보: {region_info}")
+                # NLP로 추출된 날짜 엔티티를 활용하여 날짜 범위 추출
+                date_range = extract_date_range(request.message, entities.get('date'))
+                print(f"[챗봇] 🌤️ 추출된 날짜 범위: {date_range}")
                 weather_info = get_weather_info(region_info, date_range)
+                print(f"[챗봇] 🌤️ 날씨 정보 조회 결과 (길이: {len(weather_info) if weather_info else 0}): {weather_info[:200] if weather_info else 'None'}...")
                 
-                if weather_info and "날씨 정보를 조회할 수 없습니다" not in weather_info and "오류" not in weather_info:
+                if weather_info and "날씨 정보를 조회할 수 없습니다" not in weather_info and "오류" not in weather_info and "실패" not in weather_info:
                     forecast_type = ""
                     if date_range.get('use_short', False) and date_range.get('use_mid', False):
                         forecast_type = "단기예보와 중기예보"
@@ -1723,37 +2069,100 @@ def chat_post(request: ChatRequest, http_request: Request = None):
                         forecast_type = "단기예보"
                     elif date_range.get('use_mid', False):
                         forecast_type = "중기예보"
+                    else:
+                        forecast_type = "단기예보"  # 기본값
                     
-                    return f"\n\n[날씨 정보 - {forecast_type}]\n{weather_info}\n\n위 날씨 정보를 참고하여 사용자의 질문에 정확하게 답변해주세요."
+                    print(f"[챗봇] ✅ 날씨 정보 조회 성공: {forecast_type}")
+                    return f"\n\n[날씨 정보 - {forecast_type}]\n{weather_info}\n\n⚠️ 중요: 위 날씨 정보는 기상청 API에서 가져온 실제 데이터입니다. 이 정보를 반드시 사용해서 답변해주세요. 일기 내용이나 다른 추측은 사용하지 마세요!"
+                else:
+                    print(f"[챗봇] ⚠️ 날씨 정보 조회 실패 또는 오류: {weather_info}")
+                    # 날씨 정보 조회 실패 시에도 일기 컨텍스트를 사용하지 않도록 빈 문자열 반환
+                    return ""
             except Exception as e:
-                print(f"[챗봇] Weather integration error: {e}")
+                print(f"[챗봇] ❌ Weather integration error: {e}")
+                import traceback
+                traceback.print_exc()
             return ""
         
         def fetch_diary_search():
-            """일기 검색 (별도 스레드)"""
-            if not is_diary_search:
+            """일기 검색 또는 상세 조회 (별도 스레드)"""
+            if not is_diary_search and not is_diary_detail:
                 return ""
+            
             # userId 또는 jwtToken이 없으면 검색 불가
             if not request.userId and not jwt_token:
-                print(f"[챗봇] 일기 검색 요청이지만 userId와 jwtToken이 모두 없음")
+                print(f"[챗봇] 일기 요청이지만 userId와 jwtToken이 모두 없음")
                 return "\n\n[일기 검색 안내]\n로그인이 필요합니다. 일기 검색을 위해서는 사용자 인증이 필요합니다."
+            
             try:
-                print(f"[챗봇] 일기 검색 요청 감지: userId={request.userId}, hasJwtToken={jwt_token is not None}, message={request.message}")
-                search_query = extract_search_query(request.message)
-                print(f"[챗봇] 추출된 검색어: '{search_query}'")
-                # JWT 토큰이 있으면 JWT 기반 검색, 없으면 userId 기반 검색
-                diaries = search_diaries(request.userId, search_query, jwt_token)
-                formatted_results = format_diary_search_results(diaries, search_query)
+                # 일기 상세 조회 요청 처리
+                if is_diary_detail:
+                    print(f"[챗봇] 📖 일기 상세 조회 요청 감지: {request.message}")
+                    diary_number = extract_diary_number(request.message)
+                    print(f"[챗봇] 📖 추출된 일기 번호: {diary_number}")
+                    
+                    # 대화 히스토리에서 이전 검색어 추출 시도
+                    previous_search_query = ""
+                    if request.conversation_history:
+                        # 최근 대화에서 일기 검색 관련 메시지 찾기
+                        for msg in reversed(request.conversation_history[-5:]):  # 최근 5개만 확인
+                            if msg.role == "user":
+                                # 이전 사용자 메시지에서 검색어 추출
+                                prev_query = extract_search_query(msg.content)
+                                if prev_query:
+                                    previous_search_query = prev_query
+                                    break
+                    
+                    # 검색어가 없으면 전체 조회
+                    if not previous_search_query:
+                        previous_search_query = ""
+                    
+                    print(f"[챗봇] 📖 이전 검색어 (또는 전체): '{previous_search_query}'")
+                    
+                    # 일기 검색 수행
+                    diaries = search_diaries(request.userId, previous_search_query, jwt_token)
+                    
+                    if not diaries or len(diaries) == 0:
+                        return "\n\n[일기 상세 조회]\n일기를 찾을 수 없습니다. 먼저 일기를 검색해주세요."
+                    
+                    # 요청한 번호의 일기 가져오기 (1부터 시작)
+                    if diary_number > len(diaries):
+                        return f"\n\n[일기 상세 조회]\n{diary_number}번 일기를 찾을 수 없습니다. 검색 결과는 {len(diaries)}개입니다."
+                    
+                    target_diary = diaries[diary_number - 1]  # 0-based index
+                    
+                    # 일기 전체 내용 포맷팅
+                    diary_date = target_diary.get("diaryDate", "")
+                    title = target_diary.get("title", "제목 없음")
+                    content = target_diary.get("content", "")
+                    emotion = target_diary.get("emotion", "")
+                    
+                    detail_text = f"📖 [{diary_date}] {title}\n\n"
+                    if emotion:
+                        detail_text += f"감정: {emotion}\n\n"
+                    detail_text += f"{content}"
+                    
+                    print(f"[챗봇] 📖 일기 상세 조회 완료: {diary_number}번 일기")
+                    return f"\n\n[일기 상세 내용]\n{detail_text}"
                 
-                if formatted_results and "검색 결과가 없습니다" not in formatted_results and "일기가 없습니다" not in formatted_results:
-                    return f"\n\n[일기 검색 결과]\n{formatted_results}\n\n위 일기 정보를 참고하여 사용자의 질문에 정확하게 답변해주세요."
-                else:
-                    return f"\n\n[일기 검색 결과]\n{formatted_results}"
+                # 일기 검색 요청 처리
+                if is_diary_search:
+                    print(f"[챗봇] 일기 검색 요청 감지: userId={request.userId}, hasJwtToken={jwt_token is not None}, message={request.message}")
+                    search_query = extract_search_query(request.message)
+                    print(f"[챗봇] 추출된 검색어: '{search_query}'")
+                    # JWT 토큰이 있으면 JWT 기반 검색, 없으면 userId 기반 검색
+                    diaries = search_diaries(request.userId, search_query, jwt_token)
+                    formatted_results = format_diary_search_results(diaries, search_query)
+                    
+                    if formatted_results and "검색 결과가 없습니다" not in formatted_results and "일기가 없습니다" not in formatted_results:
+                        return f"\n\n[일기 검색 결과]\n{formatted_results}\n\n위 일기 정보를 참고하여 사용자의 질문에 정확하게 답변해주세요. 특정 일기를 자세히 보고 싶으시면 '1번 일기 자세히' 또는 '첫 번째 일기 전체'라고 말씀해주세요."
+                    else:
+                        return f"\n\n[일기 검색 결과]\n{formatted_results}"
             except Exception as e:
-                print(f"[챗봇] 일기 검색 오류: {e}")
+                print(f"[챗봇] 일기 요청 오류: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"\n\n[일기 검색 오류]\n일기 검색 중 오류가 발생했습니다: {str(e)}"
+                return f"\n\n[일기 요청 오류]\n일기 요청 처리 중 오류가 발생했습니다: {str(e)}"
             return ""
         
         def fetch_classification():
@@ -1767,20 +2176,20 @@ def chat_post(request: ChatRequest, http_request: Request = None):
                 print(f"[챗봇] 분류 오류: {e}")
             return None
         
-        # 병렬 실행 (최대 5초 대기)
+        # 병렬 실행 (최대 3초 대기 - 속도 개선)
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {}
             if is_weather:
                 futures['weather'] = executor.submit(fetch_weather)
-            if is_diary_search:
+            if is_diary_search or is_diary_detail:
                 futures['diary_search'] = executor.submit(fetch_diary_search)
             if needs_classification:
                 futures['classification'] = executor.submit(fetch_classification)
             
-            # 결과 수집 (최대 5초 대기)
+            # 결과 수집 (최대 3초 대기 - 속도 개선)
             for key, future in futures.items():
                 try:
-                    result = future.result(timeout=5.0)
+                    result = future.result(timeout=3.0)
                     # 결과 타입에 따라 분류
                     if isinstance(result, str):
                         if key == 'weather':
@@ -1794,6 +2203,29 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         
         parallel_time = time.time() - start_time
         print(f"[챗봇] 병렬 처리 완료 (소요 시간: {parallel_time:.2f}초)")
+        
+        # ========== 일기 조회는 GPT 응답 생성 없이 바로 반환 (속도 개선) ==========
+        # 일기 상세 조회 및 검색 결과는 DB에서 데이터를 가져와서 포맷팅만 하면 되므로 GPT 호출 불필요
+        if (is_diary_detail or is_diary_search) and diary_search_context:
+            print(f"[챗봇] ⚡ 일기 조회 - GPT 응답 생성 생략 (즉시 반환)")
+            # 일기 내용을 그대로 반환 (GPT 응답 생성 없이)
+            # [일기 상세 내용] 또는 [일기 검색 결과] 헤더 제거
+            message_content = diary_search_context
+            if "[일기 상세 내용]\n" in message_content:
+                message_content = message_content.replace("[일기 상세 내용]\n", "").strip()
+            elif "[일기 검색 결과]\n" in message_content:
+                message_content = message_content.replace("[일기 검색 결과]\n", "").strip()
+            
+            chat_response = ChatResponse(
+                message=message_content,
+                model="direct-return",  # GPT를 사용하지 않았음을 표시
+                status="success"
+            )
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content=chat_response.model_dump(),
+                media_type="application/json; charset=utf-8"
+            )
         
         # 분류 결과 처리
         if classification and classification.get("confidence", 0) >= 0.5:
@@ -1880,33 +2312,53 @@ def chat_post(request: ChatRequest, http_request: Request = None):
             classification = None
         
         # 메시지 배열 구성
-        system_content = request.system_message
-        if weather_context:
-            system_content += "\n\n날씨 정보도 제공할 수 있어! 날씨 관련 질문이 있으면 제공된 날씨 정보를 사용해서 답변해줘~"
-        
-        if diary_search_context:
-            system_content += "\n\n사용자의 일기를 검색하고 조회할 수 있어! 일기 검색 요청이 있으면 제공된 일기 정보를 사용해서 정확하게 답변해줘!"
-        
-        if classification_context:
-            category = classification.get("category", "") if classification else ""
-            if category == "일기":
-                system_content += "\n\n사용자의 일기를 기록하고 공감할 수 있어! 일기 내용에 대해 따뜻하게 응답해줘~"
-            elif category == "건강":
-                system_content += "\n\n사용자의 건강 활동을 응원하고 도움을 줄 수 있어! 건강 관련 정보에 대해 유익한 답변을 해줘!"
-            elif category == "가계":
-                system_content += "\n\n사용자의 가계 관리를 도울 수 있어! 가계 정보에 대해 도움이 되는 답변을 해줘~"
-            elif category == "문화":
-                system_content += "\n\n사용자의 문화 활동을 공유하고 토론할 수 있어! 문화 콘텐츠에 대해 공감하며 답변해줘!"
-            elif category == "패스파인더":
-                system_content += "\n\n사용자의 목표와 계획을 도울 수 있어! 목표 달성을 위한 조언과 응원을 해줘~"
+        # ✅ 날씨 질문일 때는 일기 컨텍스트를 제거하고 날씨 정보만 사용
+        if is_weather:
+            # 날씨 질문일 때는 기본 시스템 메시지만 사용 (일기 컨텍스트 완전 제거)
+            system_content = (
+                "너는 20살 명랑한 여자 대학생처럼 대화해야 해. "
+                "밝고 귀엽고 친근한 말투를 쓰고, 문장 끝에는 종종 "
+                "이모티콘이나 느낌표를 붙여서 활기차게 말해."
+            )
+            if weather_context:
+                system_content += "\n\n⚠️ 중요: 사용자가 날씨 질문을 했습니다. 제공된 날씨 정보(기상청 API 데이터)를 반드시 사용해서 답변해야 합니다. 일기 내용이나 다른 정보는 사용하지 마세요. 날씨 정보만 사용해서 정확하게 답변해주세요!"
+            else:
+                system_content += "\n\n⚠️ 중요: 사용자가 날씨 질문을 했습니다. 날씨 정보를 조회하려고 시도했지만 정보를 가져올 수 없었습니다. 일기 내용이나 다른 추측은 사용하지 마세요. 날씨 정보가 없다고 정직하게 말해주세요."
+        else:
+            # 일반 질문일 때는 기존 시스템 메시지 사용
+            system_content = request.system_message
+            if weather_context:
+                system_content += "\n\n날씨 정보도 제공할 수 있어! 날씨 관련 질문이 있으면 제공된 날씨 정보를 사용해서 답변해줘~"
+            
+            if diary_search_context:
+                system_content += "\n\n사용자의 일기를 검색하고 조회할 수 있어! 일기 검색 요청이 있으면 제공된 일기 정보를 사용해서 정확하게 답변해줘!"
+            
+            if classification_context:
+                category = classification.get("category", "") if classification else ""
+                if category == "일기":
+                    system_content += "\n\n사용자의 일기를 기록하고 공감할 수 있어! 일기 내용에 대해 따뜻하게 응답해줘~"
+                elif category == "건강":
+                    system_content += "\n\n사용자의 건강 활동을 응원하고 도움을 줄 수 있어! 건강 관련 정보에 대해 유익한 답변을 해줘!"
+                elif category == "가계":
+                    system_content += "\n\n사용자의 가계 관리를 도울 수 있어! 가계 정보에 대해 도움이 되는 답변을 해줘~"
+                elif category == "문화":
+                    system_content += "\n\n사용자의 문화 활동을 공유하고 토론할 수 있어! 문화 콘텐츠에 대해 공감하며 답변해줘!"
+                elif category == "패스파인더":
+                    system_content += "\n\n사용자의 목표와 계획을 도울 수 있어! 목표 달성을 위한 조언과 응원을 해줘~"
         
         messages = [
             {"role": "system", "content": system_content}
         ]
         
         # 대화 히스토리가 있으면 추가
+        # ✅ 날씨 질문일 때는 일기 관련 히스토리는 제외 (날씨 정보만 사용)
         if request.conversation_history:
             for msg in request.conversation_history:
+                # 날씨 질문일 때는 일기 관련 내용이 포함된 히스토리는 제외
+                if is_weather and weather_context:
+                    # 일기 관련 키워드가 포함된 히스토리는 제외
+                    if msg.role == "assistant" and any(keyword in msg.content.lower() for keyword in ['일기', 'diary', '기록']):
+                        continue
                 messages.append({
                     "role": msg.role,
                     "content": msg.content
@@ -1914,27 +2366,35 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         
         # 현재 사용자 메시지 추가 (날씨/일기 검색/분류 정보 컨텍스트 포함)
         user_message = request.message
+        # ✅ 날씨 질문일 때는 날씨 정보를 우선적으로 강조
         if weather_context:
-            user_message += weather_context
-        if diary_search_context:
+            # 날씨 질문일 때는 날씨 정보를 명확하게 강조
+            user_message = f"{request.message}\n\n{weather_context}\n\n⚠️ 중요: 위 날씨 정보는 기상청 API에서 가져온 실제 데이터입니다. 이 정보를 반드시 사용해서 답변해주세요. 일기 내용이나 다른 추측은 사용하지 마세요!"
+        elif diary_search_context:
             user_message += diary_search_context
-        if classification_context:
+        elif classification_context:
             user_message += classification_context
+        else:
+            # 날씨/일기 검색/분류가 아닌 경우에만 모두 추가
+            if diary_search_context:
+                user_message += diary_search_context
+            if classification_context:
+                user_message += classification_context
         
         messages.append({
             "role": "user",
             "content": user_message
         })
         
-        # 요청 모델 사용 (기본값이면 DEFAULT_CHAT_MODEL 사용)
-        chat_model = DEFAULT_CHAT_MODEL if request.model == "gpt-4-turbo" else request.model
+        # 요청 모델 사용 (사용자가 지정한 모델 그대로 사용)
+        chat_model = request.model if request.model else DEFAULT_CHAT_MODEL
         
-        # GPT 응답 생성 (최적화: max_tokens 제한, temperature 낮춤)
+        # GPT 응답 생성 (최적화: max_tokens 제한, temperature 낮춤, 빠른 모델 사용)
         gpt_start_time = time.time()
         response = client.chat.completions.create(
             model=chat_model,
             messages=messages,
-            max_tokens=1000,  # 응답 길이 제한으로 속도 향상
+            max_tokens=800,  # 응답 길이 제한으로 속도 향상 (1000 → 800)
             temperature=0.7,  # 일관성과 창의성의 균형
         )
         gpt_time = time.time() - gpt_start_time
@@ -1943,14 +2403,20 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         # 응답 생성
         chat_response = ChatResponse(
             message=response.choices[0].message.content or "",
-            model=response.model
+            model=response.model,
+            status="success"
         )
         
         # 분류 정보가 있으면 포함
         if classification:
             chat_response.classification = classification
         
-        return chat_response
+        # UTF-8 인코딩 명시
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=chat_response.model_dump(),
+            media_type="application/json; charset=utf-8"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
