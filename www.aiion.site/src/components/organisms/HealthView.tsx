@@ -355,6 +355,46 @@ export const HealthView: React.FC<HealthViewProps> = ({
     }
   }, []);
 
+  // 운동 관련 건강 기록 필터링
+  const getExerciseRelatedRecords = useCallback(() => {
+    if (!healthcareRecords || healthcareRecords.length === 0) return [];
+
+    // type 필드가 운동 관련 키워드를 포함하는 경우
+    const exerciseTypes = ['exercise', '운동', 'workout'];
+    
+    return healthcareRecords
+      .filter((record) => {
+        const type = record.type?.toLowerCase() || '';
+        // type이 운동 관련이거나, 걸음수가 있고 운동 관련 데이터로 판단되는 경우
+        const isExerciseType = exerciseTypes.some(exType => type.includes(exType.toLowerCase()));
+        const hasExerciseData = record.steps !== null && record.steps !== undefined && record.steps > 0;
+        return isExerciseType || hasExerciseData;
+      })
+      .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
+  }, [healthcareRecords]);
+
+  // 건강 관련 기록 필터링
+  const getHealthRelatedRecords = useCallback(() => {
+    if (!healthcareRecords || healthcareRecords.length === 0) return [];
+
+    // type 필드가 건강 관련 키워드를 포함하거나, 특정 건강 데이터가 있는 경우
+    const healthTypes = ['health', '건강', 'medication', 'sleep', 'nutrition', 'condition', 'bloodpressure', 'weight'];
+
+    return healthcareRecords
+      .filter((record) => {
+        const type = record.type?.toLowerCase() || '';
+        const isHealthType = healthTypes.some(hType => type.includes(hType.toLowerCase()));
+        const hasHealthData = record.sleepHours !== null && record.sleepHours !== undefined ||
+                              record.nutrition !== null && record.nutrition !== undefined ||
+                              record.steps !== null && record.steps !== undefined ||
+                              record.weight !== null && record.weight !== undefined ||
+                              record.bloodPressure !== null && record.bloodPressure !== undefined ||
+                              record.condition !== null && record.condition !== undefined;
+        return isHealthType || hasHealthData;
+      })
+      .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
+  }, [healthcareRecords]);
+
   // 운동 메인 화면 진입 시 맞춤형 메시지 생성
   useEffect(() => {
     if (healthView === 'exercise' && diaries && diaries.length > 0) {
@@ -503,17 +543,22 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // Exercise 메인 뷰
   if (healthView === 'exercise') {
-    const exerciseRelatedDiaries = getExerciseRelatedDiaries();
+    const exerciseOnlyRecords = getExerciseRelatedRecords(); // 운동 관련 기록만
     const exerciseCategories = ['스트레칭', '체중감량', '웨이트', '스포츠'];
 
     // 날짜 포맷팅 함수
     const formatDate = (dateString: string) => {
-      const date = new Date(dateString);
-      const days = ['일', '월', '화', '수', '목', '금', '토'];
-      const month = date.getMonth() + 1;
-      const day = date.getDate();
-      const dayOfWeek = days[date.getDay()];
-      return `${date.getFullYear()}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}-${dayOfWeek}`;
+      try {
+        const date = new Date(dateString);
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dayOfWeek = days[date.getDay()];
+        return `${year}-${month}-${day} ${dayOfWeek}`;
+      } catch (e) {
+        return dateString;
+      }
     };
 
     // 카테고리별 추천 받기
@@ -634,15 +679,25 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* 최근 운동 관련 일기 */}
-            {exerciseRelatedDiaries.length > 0 && (
+            {/* 최근 운동 관련 데이터 */}
+            {exerciseOnlyRecords.length > 0 && (
               <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
-                <h2 className={`text-lg font-bold mb-4 ${styles.title}`}>최근 작성된 운동 관련 일기</h2>
+                <h2 className={`text-lg font-bold mb-4 ${styles.title}`}>최근 운동 기록</h2>
                 <div className="space-y-3">
-                  {exerciseRelatedDiaries.map((diary, index) => (
+                  {exerciseOnlyRecords.slice(0, 5).map((record, index) => (
                     <div key={index} className={`rounded-lg p-4 ${styles.cardBg}`}>
-                      <p className={`text-sm ${styles.textMuted} mb-1`}>{formatDate(diary.date)}</p>
-                      <p className={`${styles.title} whitespace-pre-wrap`}>{diary.content}</p>
+                      <p className={`text-sm ${styles.textMuted} mb-2`}>{formatDate(record.recordDate)}</p>
+                      <div className="space-y-1">
+                        {record.type && (
+                          <p className={`text-sm ${styles.title}`}>유형: {record.type}</p>
+                        )}
+                        {record.steps !== null && record.steps !== undefined && (
+                          <p className={`text-sm ${styles.title}`}>걸음수: {record.steps.toLocaleString()}걸음</p>
+                        )}
+                        {record.weeklySummary && (
+                          <p className={`text-sm ${styles.textMuted} mt-2`}>{record.weeklySummary}</p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1110,12 +1165,8 @@ export const HealthView: React.FC<HealthViewProps> = ({
       }
     };
 
-    // 날짜순으로 정렬 (최신순)
-    const sortedRecords = [...healthcareRecords].sort((a, b) => {
-      const dateA = new Date(a.recordDate).getTime();
-      const dateB = new Date(b.recordDate).getTime();
-      return dateB - dateA;
-    });
+    // 운동 및 건강 관련 기록 필터링 (모든 healthcareRecords 표시)
+    const sortedRecords = getHealthRelatedRecords();
 
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
