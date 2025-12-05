@@ -3,7 +3,7 @@ rootProject.name = 'spring-services'
 // Service modules
 include 'common-service'
 include 'account-service'
-include 'Oauth-service'
+include 'oauth-service'
 include 'calendar-service'
 include 'diary-service'
 include 'user-service'

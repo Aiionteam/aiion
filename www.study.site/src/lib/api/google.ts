@@ -41,8 +41,15 @@ export interface GoogleLoginRequest {
  */
 export const getGoogleAuthUrl = async (): Promise<string> => {
   try {
-    // 백엔드에서 구글 OAuth URL 가져오기
-    const response = await apiClient.get<{ success?: boolean; auth_url?: string; message?: string }>("/api/google/auth-url");
+    // 현재 프론트엔드 URL (자신의 URL)
+    const frontendUrl = typeof window !== 'undefined' 
+      ? `${window.location.protocol}//${window.location.host}`
+      : 'http://localhost:5000';
+    
+    // 백엔드에서 구글 OAuth URL 가져오기 (프론트엔드 URL 파라미터 포함)
+    const response = await apiClient.get<{ success?: boolean; auth_url?: string; message?: string }>(
+      `/api/google/auth-url?frontend_url=${encodeURIComponent(frontendUrl)}`
+    );
     
     if (response.data.success === false) {
       throw new Error(response.data.message || "구글 로그인 URL을 가져오는데 실패했습니다.");
