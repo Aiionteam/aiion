@@ -6,6 +6,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import { type InventoryItem } from '@/service/inventoryService';
 
 interface InventoryViewProps {
@@ -17,10 +18,215 @@ interface InventoryViewProps {
   lowStockCount: number;
   outOfStockCount: number;
   onDelete: (itemId: string | number) => void;
-  onCreate: (item: Omit<InventoryItem, 'id'>) => void;
-  onUpdate: (itemId: string | number, item: Partial<InventoryItem>) => void;
+  onCreate: (item: Omit<InventoryItem, 'id'>) => Promise<void>;
+  onUpdate: (itemId: string | number, item: Partial<InventoryItem>) => Promise<void>;
   onSelect: (item: InventoryItem | null) => void;
   onRefresh: () => void;
+}
+
+// 재고 추가/수정 폼 모달 컴포넌트
+function InventoryFormModal({
+  isOpen,
+  onClose,
+  item,
+  onSubmit,
+  isSubmitting,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  item: InventoryItem | null;
+  onSubmit: (formData: Omit<InventoryItem, 'id'> | Partial<InventoryItem>) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const [formData, setFormData] = useState<Partial<InventoryItem>>({
+    name: item?.name || '',
+    category: item?.category || '',
+    quantity: item?.quantity || 0,
+    unitPrice: item?.unitPrice || 0,
+    status: item?.status || 'available',
+    location: item?.location || '',
+    description: item?.description || '',
+  });
+
+  // item이 변경될 때 formData 업데이트
+  useEffect(() => {
+    if (item) {
+      setFormData({
+        name: item.name || '',
+        category: item.category || '',
+        quantity: item.quantity || 0,
+        unitPrice: item.unitPrice || 0,
+        status: item.status || 'available',
+        location: item.location || '',
+        description: item.description || '',
+      });
+    } else {
+      setFormData({
+        name: '',
+        category: '',
+        quantity: 0,
+        unitPrice: 0,
+        status: 'available',
+        location: '',
+        description: '',
+      });
+    }
+  }, [item]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await onSubmit(formData);
+      onClose();
+      setFormData({
+        name: '',
+        category: '',
+        quantity: 0,
+        unitPrice: 0,
+        status: 'available',
+        location: '',
+        description: '',
+      });
+    } catch (error) {
+      console.error('제출 실패:', error);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        
+        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <form onSubmit={handleSubmit}>
+            <div className="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                {item ? '재고 수정' : '새 재고 추가'}
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    제품명 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    카테고리 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.category || ''}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      수량 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      value={formData.quantity || 0}
+                      onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      단가 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={formData.unitPrice || 0}
+                      onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    상태
+                  </label>
+                  <select
+                    value={formData.status || 'available'}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="available">재고 있음</option>
+                    <option value="low_stock">재고 부족</option>
+                    <option value="out_of_stock">품절</option>
+                    <option value="on_order">주문 중</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    위치
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.location || ''}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    설명
+                  </label>
+                  <textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-slate-900 dark:bg-slate-100 text-base font-medium text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+              >
+                {isSubmitting ? '처리 중...' : item ? '수정' : '추가'}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+              >
+                취소
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function InventoryView({
@@ -37,6 +243,9 @@ export function InventoryView({
   onSelect,
   onRefresh,
 }: InventoryViewProps) {
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const getStatusColor = (status: string) => {
     switch (status) {
       case '재고 있음':
@@ -54,6 +263,36 @@ export function InventoryView({
     if (quantity === 0) return '품절';
     if (quantity < 20) return '재고 부족';
     return '재고 있음';
+  };
+
+  const handleOpenCreateModal = () => {
+    setSelectedItem(null);
+    setIsFormModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setIsFormModalOpen(true);
+    onSelect(item);
+  };
+
+  const handleCloseModal = () => {
+    setIsFormModalOpen(false);
+    setSelectedItem(null);
+    onSelect(null);
+  };
+
+  const handleFormSubmit = async (formData: Omit<InventoryItem, 'id'> | Partial<InventoryItem>) => {
+    setIsSubmitting(true);
+    try {
+      if (selectedItem && selectedItem.id) {
+        await onUpdate(selectedItem.id, formData);
+      } else {
+        await onCreate(formData as Omit<InventoryItem, 'id'>);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 로딩 상태
@@ -170,7 +409,10 @@ export function InventoryView({
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">재고 목록</h2>
-            <button className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors">
+            <button 
+              onClick={handleOpenCreateModal}
+              className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"
+            >
               + 새 재고 추가
             </button>
           </div>
@@ -214,7 +456,7 @@ export function InventoryView({
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">{item.location || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button 
-                            onClick={() => onSelect(item)}
+                            onClick={() => handleOpenEditModal(item)}
                             className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-4"
                           >
                             수정
@@ -237,6 +479,15 @@ export function InventoryView({
           </div>
         </div>
       </div>
+
+      {/* 재고 추가/수정 모달 */}
+      <InventoryFormModal
+        isOpen={isFormModalOpen}
+        onClose={handleCloseModal}
+        item={selectedItem}
+        onSubmit={handleFormSubmit}
+        isSubmitting={isSubmitting}
+      />
     </div>
   );
 }

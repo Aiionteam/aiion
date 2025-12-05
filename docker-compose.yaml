@@ -16,7 +16,7 @@ services:
       - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
-      - SPRING_DATA_REDIS_SSL=true
+      # SSL 설정은 application.yaml에서 관리 (spring.data.redis.ssl.enabled: true)
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY=DEBUG
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_LOADBALANCER=DEBUG
       - LOGGING_LEVEL_REACTOR_NETTY=INFO
@@ -76,9 +76,48 @@ services:
 
   auth-service:
     build:
-      context: ./service.aiion.site
-      dockerfile: ./auth-service/Dockerfile
+      context: ./erp.aiion.site
+      dockerfile: services/auth_service/Dockerfile
     container_name: auth-service
+    ports:
+      - "9000:9000"
+    networks:
+      - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+      - TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_TOKEN_EXPIRE_DAYS=30
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this-in-production}
+    restart: unless-stopped
+
+  admin-user-service:
+    build:
+      context: ./erp.aiion.site
+      dockerfile: services/admin_user_service/Dockerfile
+    container_name: admin-user-service
+    ports:
+      - "9001:9001"
+    networks:
+      - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+    restart: unless-stopped
+
+  oauth-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./Oauth-service/Dockerfile
+    container_name: oauth-service
     ports:
       - "8087:8087"
     networks:
@@ -107,7 +146,8 @@ services:
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
       - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://localhost:5000
+    restart: unless-stopped
 
   user-service:
     build:
@@ -371,7 +411,7 @@ services:
       dockerfile: rag/chatbot_service/Dockerfile
     container_name: aihoyun-chatbot-service
     ports:
-      - "9001:9001"
+      - "9002:9001"
     networks:
       - spring-network
     environment:
@@ -406,15 +446,47 @@ services:
       - spring-network
     restart: unless-stopped
 
+  aihoyun-titanic-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: titanic_service/Dockerfile
+    container_name: aihoyun-titanic-service
+    ports:
+      - "9006:9003"
+    networks:
+      - spring-network
+    restart: unless-stopped
+
   inventory-service:
     build:
       context: ./erp.aiion.site
-      dockerfile: customer_servive/Dockerfile
+      dockerfile: services/customer_service/Dockerfile
     container_name: inventory-service
     ports:
-      - "9002:9002"
+      - "9005:9002"
     networks:
       - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+      # Spring Boot용 (참고용, 현재 사용 안 함)
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
     restart: unless-stopped
 
 # volumes:
