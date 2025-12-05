@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
               <img
                 src="/aiionlogo.png"
                 alt="Aiion Logo"
-                className="w-full h-full object-contain"
+                className={`w-full h-full object-contain ${darkMode ? 'brightness-0 invert' : ''}`}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/logo.png';
                 }}
@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
               <img
                 src="/aiionlogo.png"
                 alt="Aiion Logo"
-                className="w-full h-full object-contain"
+                className={`w-full h-full object-contain ${darkMode ? 'brightness-0 invert' : ''}`}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/logo.png';
                 }}

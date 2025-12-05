@@ -7,6 +7,17 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
+/**
+ * @deprecated 이 클래스는 더 이상 사용되지 않습니다.
+ *             대신 다음 클래스들을 사용하세요:
+ *             - UserExerciseLog: 운동 기록
+ *             - UserHealthLog: 건강 기록
+ *             - UserScanDocument: 스캔 문서
+ *             - ExerciseVideoRecommendation: 운동 영상 추천
+ * 
+ *             이 클래스는 기존 데이터 호환성을 위해 유지되지만, 새로운 기능 개발 시 사용하지 마세요.
+ */
+@Deprecated
 @Entity
 @Table(name = "healthcare_records")
 @Data
