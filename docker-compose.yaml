@@ -116,7 +116,7 @@ services:
   oauth-service:
     build:
       context: ./service.aiion.site
-      dockerfile: ./Oauth-service/Dockerfile
+      dockerfile: ./oauth-service/Dockerfile
     container_name: oauth-service
     ports:
       - "8087:8087"
@@ -447,13 +447,13 @@ services:
       - spring-network
     restart: unless-stopped
 
-  aihoyun-titanic-service:
+  aihoyun-ml-service:
     build:
       context: ./ai.aiion.site
-      dockerfile: titanic_service/Dockerfile
-    container_name: aihoyun-titanic-service
+      dockerfile: ml_service/Dockerfile
+    container_name: aihoyun-ml-service
     ports:
-      - "9006:9003"
+      - "9003:9003"
     networks:
       - spring-network
     restart: unless-stopped

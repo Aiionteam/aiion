@@ -50,6 +50,7 @@ spring:
               filters:
                 - StripPrefix=1
             # OAuth 소셜 로그인 (Google, Naver, Kakao) - oauth-service로 라우팅
+            # 구체적인 경로를 먼저 매칭 (라우팅 우선순위)
             # /auth/google/auth-url -> /google/auth-url (StripPrefix=1로 /auth만 제거)
             - id: oauth-google-service
               uri: http://oauth-service:8087
@@ -70,6 +71,7 @@ spring:
               filters:
                 - StripPrefix=1
             # JWT 인증 서비스 (이메일/비밀번호 로그인)
+            # 일반 경로는 구체적인 경로 이후에 매칭 (/auth/google, /auth/naver, /auth/kakao 제외)
             - id: auth-service
               uri: http://auth-service:9000
               predicates:
@@ -152,11 +154,15 @@ spring:
               predicates:
                 - Path=/crawler/**
             - id: titanic-service
-              uri: http://aihoyun-titanic-service:9003
+              uri: http://aihoyun-ml-service:9003
               predicates:
                 - Path=/titanic/**
               filters:
                 - StripPrefix=1
+            - id: diary-emotion-service
+              uri: http://aihoyun-ml-service:9003
+              predicates:
+                - Path=/diary-emotion/**
             - id: inventory-service
               uri: http://inventory-service:9002
               predicates:
