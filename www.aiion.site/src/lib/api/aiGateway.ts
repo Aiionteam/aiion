@@ -87,7 +87,7 @@ export interface Classification {
 export interface ChatResponse {
   message: string;
   model: string;
-  status: 'success' | 'error';
+  status?: 'success' | 'error'; // 선택사항 (백엔드 호환성)
   classification?: Classification | null; // ⬅️ 새로 추가 (선택사항)
 }
 
@@ -205,6 +205,13 @@ class AIGatewayClient {
    */
   async sendChat(params: ChatRequest) {
     // 타임아웃 설정 (90초) - 챗봇 응답 최적화 (GPT-4 Turbo는 더 긴 시간 필요)
+    console.log('[aiGateway] 📤 챗봇 요청 전송:', {
+      message: params.message.substring(0, 50),
+      model: params.model,
+      hasHistory: params.conversation_history?.length > 0,
+      userId: params.userId
+    });
+
     const { data, error, status } = await fetchJSONFromAIGateway<ChatResponse>(
       '/chatbot/chat',
       {},
@@ -217,6 +224,18 @@ class AIGatewayClient {
         timeout: 90000, // 90초 타임아웃
       }
     );
+
+    console.log('[aiGateway] 📥 챗봇 응답 받음:', {
+      hasError: !!error,
+      error: error,
+      hasData: !!data,
+      dataType: typeof data,
+      message: data?.message?.substring(0, 100),
+      model: data?.model,
+      status: data?.status,
+      hasClassification: !!data?.classification,
+      httpStatus: status
+    });
 
     return {
       data,
