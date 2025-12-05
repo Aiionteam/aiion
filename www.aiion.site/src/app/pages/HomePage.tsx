@@ -10,6 +10,7 @@ import { CultureView } from '../../components/organisms/CultureView';
 import { HealthView } from '../../components/organisms/HealthView';
 import { PathfinderView } from '../../components/organisms/PathfinderView';
 import { SettingsView } from '../../components/organisms/SettingsView';
+import { AccountAlarmNotification } from '../../components/molecules/AccountAlarmNotification';
 
 export const HomePage: React.FC = () => {
   const hookData = useHomePage();

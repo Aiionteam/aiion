@@ -87,13 +87,13 @@ public class PathfinderController {
                 pathfinderAnalysisService.generateComprehensiveRecommendations(userId);
             
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("학습 추천 조회 성공: " + comprehensive.getRecommendations().size() + "개")
                     .data(comprehensive)
                     .build();
         } catch (Exception e) {
             return Messenger.builder()
-                    .Code(500)
+                    .code(500)
                     .message("학습 추천 조회 실패: " + e.getMessage())
                     .build();
         }
@@ -107,13 +107,13 @@ public class PathfinderController {
                 pathfinderAnalysisService.analyzeDiariesAndExtractLearningTopics(userId);
             
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("학습 추천 조회 성공: " + recommendations.size() + "개")
                     .data(recommendations)
                     .build();
         } catch (Exception e) {
             return Messenger.builder()
-                    .Code(500)
+                    .code(500)
                     .message("학습 추천 조회 실패: " + e.getMessage())
                     .build();
         }

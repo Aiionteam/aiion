@@ -36,7 +36,7 @@ public class HomeController {
     public Messenger home() {
     
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("어서옵쇼")
                 .build();
     }
