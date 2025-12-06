@@ -17,7 +17,7 @@ from starlette.types import ASGIApp
 # ===================
 SERVICE_NAME = os.getenv("SERVICE_NAME", "Titanic Service")
 SERVICE_VERSION = os.getenv("SERVICE_VERSION", "1.0.0")
-PORT = int(os.getenv("PORT", "9003"))
+PORT = int(os.getenv("PORT", "9005"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = os.getenv(
     "LOG_FORMAT",

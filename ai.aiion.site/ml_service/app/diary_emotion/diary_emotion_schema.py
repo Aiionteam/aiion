@@ -91,17 +91,17 @@ class DiaryEmotionSchema:
             raise ValueError("userId는 0 이상의 정수여야 합니다.")
         self._user_id = value
     
-    # emotion 프로퍼티 (라벨: 0=평가불가, 1=완전긍정, 2=긍정, 3=평범, 4=부정, 5=완전부정)
+    # emotion 프로퍼티 (라벨: 0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람)
     @property
     def emotion(self) -> int:
-        """Emotion 게터 (0: 평가불가, 1: 완전긍정, 2: 긍정, 3: 평범, 4: 부정, 5: 완전부정)"""
+        """Emotion 게터 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)"""
         return self._emotion
     
     @emotion.setter
     def emotion(self, value: int):
         """Emotion 세터"""
-        if value not in [0, 1, 2, 3, 4, 5]:
-            raise ValueError("emotion은 0(평가불가), 1(완전긍정), 2(긍정), 3(평범), 4(부정), 5(완전부정)이어야 합니다.")
+        if value not in [0, 1, 2, 3, 4, 5, 6]:
+            raise ValueError("emotion은 0(평가불가), 1(기쁨), 2(슬픔), 3(분노), 4(두려움), 5(혐오), 6(놀람)이어야 합니다.")
         self._emotion = value
     
     def to_dict(self) -> dict:
@@ -129,7 +129,7 @@ class DiaryEmotionSchema:
     
     def __repr__(self) -> str:
         """문자열 표현"""
-        emotion_label = {0: "평가불가", 1: "완전긍정", 2: "긍정", 3: "평범", 4: "부정", 5: "완전부정"}.get(self.emotion, "알 수 없음")
+        emotion_label = {0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람"}.get(self.emotion, "알 수 없음")
         return (
             f"DiaryEmotionSchema("
             f"id={self.id}, "
@@ -139,7 +139,7 @@ class DiaryEmotionSchema:
     
     def __str__(self) -> str:
         """사용자 친화적 문자열 표현"""
-        emotion_label = {0: "평가불가", 1: "완전긍정", 2: "긍정", 3: "평범", 4: "부정", 5: "완전부정"}.get(self.emotion, "알 수 없음")
+        emotion_label = {0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람"}.get(self.emotion, "알 수 없음")
         return (
             f"일기 ID: {self.id}\n"
             f"날짜: {self.localdate}\n"

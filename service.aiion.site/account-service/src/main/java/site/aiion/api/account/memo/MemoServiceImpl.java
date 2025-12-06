@@ -104,6 +104,20 @@ public class MemoServiceImpl implements MemoService {
     }
 
     @Override
+    public java.util.Map<Long, MemoModel> findByAccountIds(java.util.List<Long> accountIds, Long userId) {
+        if (accountIds == null || accountIds.isEmpty() || userId == null) {
+            return new java.util.HashMap<>();
+        }
+        List<Memo> entities = memoRepository.findByAccountIdInAndUserId(accountIds, userId);
+        return entities.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Memo::getAccountId,
+                    this::entityToModel,
+                    (existing, replacement) -> existing
+                ));
+    }
+
+    @Override
     public Messenger findByUserId(Long userId) {
         if (userId == null) {
             return Messenger.builder()

@@ -266,6 +266,19 @@ const DiaryViewComponent: React.FC<DiaryViewProps> = ({
       setNewDiaryTitle('');
       setNewDiaryContent('');
       setSelectedEmotion('😊');
+      
+      if (selectedDiary && result.diary) {
+        // 수정 모드: 서버에서 반환된 수정된 일기로 로컬 상태 업데이트
+        setDiaries(prev => prev.map(d => 
+          d.id === selectedDiary.id ? result.diary! : d
+        ));
+        console.log('[DiaryView] ✅ 수정 완료, 로컬 상태 업데이트:', result.diary);
+      } else if (!selectedDiary && result.diary) {
+        // 생성 모드: 새로 생성된 일기를 리스트에 추가
+        setDiaries(prev => [result.diary!, ...prev]);
+        console.log('[DiaryView] ✅ 생성 완료, 새 일기 추가:', result.diary);
+      }
+      
       setSelectedDiary(null);
       setErrorMessage('');
       

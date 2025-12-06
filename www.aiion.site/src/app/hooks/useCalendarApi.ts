@@ -373,7 +373,20 @@ export async function createEvent(event: Event, userId: number): Promise<Event> 
  * 일정 수정
  */
 export async function updateEvent(event: Event, userId: number): Promise<Event> {
+  if (!event.id) {
+    throw new Error('ID가 필요합니다.');
+  }
+  
+  // 업데이트는 ID가 필수이므로 ID를 포함한 EventModel 생성
   const eventModel = eventToModel(event, userId);
+  // ID를 명시적으로 설정 (업데이트 시 필수)
+  const eventId = parseInt(event.id);
+  if (isNaN(eventId)) {
+    throw new Error(`유효하지 않은 ID입니다: ${event.id}`);
+  }
+  eventModel.id = eventId;
+  
+  console.log('[updateEvent] 업데이트할 EventModel:', JSON.stringify(eventModel, null, 2));
   
   const response = await fetchJSONFromGateway<Messenger>(
     `/calendar/events`,
@@ -579,7 +592,18 @@ export async function createTask(task: Task, userId: number): Promise<Task> {
  * 할 일 수정
  */
 export async function updateTask(task: Task, userId: number): Promise<Task> {
+  if (!task.id) {
+    throw new Error('ID가 필요합니다.');
+  }
+  
+  // 업데이트는 ID가 필수이므로 ID를 포함한 TaskModel 생성
   const taskModel = taskToModel(task, userId);
+  // ID를 명시적으로 설정 (업데이트 시 필수)
+  const taskId = parseInt(task.id);
+  if (isNaN(taskId)) {
+    throw new Error(`유효하지 않은 ID입니다: ${task.id}`);
+  }
+  taskModel.id = taskId;
   
   const response = await fetchJSONFromGateway<Messenger>(
     `/calendar/tasks`,

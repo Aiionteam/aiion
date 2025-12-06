@@ -39,13 +39,14 @@ public class NaverOAuthService {
     /**
      * Authorization Code를 Access Token으로 교환
      * @param code Authorization Code
-     * @param state State 값 (CSRF 방지)
      * @return 네이버 토큰 응답 (access_token, refresh_token, expires_in 등)
      */
-    public Map<String, Object> getAccessToken(String code, String state) {
+    public Map<String, Object> getAccessToken(String code) {
         System.out.println("=== 네이버 Access Token 요청 ===");
         System.out.println("Authorization Code: " + code);
-        System.out.println("State: " + state);
+        System.out.println("Client ID: " + (clientId != null ? clientId.substring(0, Math.min(clientId.length(), 10)) + "..." : "null"));
+        System.out.println("Redirect URI: " + redirectUri);
+        System.out.println("Redirect URI 길이: " + (redirectUri != null ? redirectUri.length() : 0));
         
         // 요청 파라미터 설정
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -54,7 +55,6 @@ public class NaverOAuthService {
         params.add("client_secret", clientSecret);
         params.add("redirect_uri", redirectUri);
         params.add("code", code);
-        params.add("state", state);
         
         // 헤더 설정
         HttpHeaders headers = new HttpHeaders();
@@ -71,14 +71,32 @@ public class NaverOAuthService {
                 Map.class
             );
             
+            System.out.println("네이버 토큰 응답 상태: " + response.getStatusCode());
             System.out.println("네이버 토큰 응답: " + response.getBody());
             System.out.println("================================");
             
             @SuppressWarnings("unchecked")
             Map<String, Object> body = response.getBody();
+            
+            // 에러 응답 확인
+            if (body != null && body.containsKey("error")) {
+                String error = (String) body.get("error");
+                String errorDescription = (String) body.getOrDefault("error_description", "");
+                System.err.println("네이버 API 에러: " + error);
+                System.err.println("에러 설명: " + errorDescription);
+                throw new RuntimeException("네이버 토큰 API 에러: " + error + " - " + errorDescription);
+            }
+            
             return body;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            System.err.println("네이버 토큰 요청 HTTP 에러: " + e.getStatusCode());
+            System.err.println("응답 본문: " + e.getResponseBodyAsString());
+            System.err.println("사용한 redirect_uri: " + redirectUri);
+            e.printStackTrace();
+            throw new RuntimeException("네이버 토큰 요청 실패: " + e.getStatusCode() + " - " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             System.err.println("네이버 토큰 요청 실패: " + e.getMessage());
+            System.err.println("사용한 redirect_uri: " + redirectUri);
             e.printStackTrace();
             throw new RuntimeException("네이버 토큰 요청 실패", e);
         }

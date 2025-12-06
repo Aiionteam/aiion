@@ -22,9 +22,5 @@ public interface AccountRepository extends JpaRepository<Account, Long>, Account
     
     // userId와 특정 날짜로 조회
     List<Account> findByUserIdAndTransactionDate(Long userId, LocalDate transactionDate);
-    
-    // 활성화된 알람 조회
-    @Query("SELECT a FROM Account a WHERE a.userId = :userId AND a.alarmEnabled = true AND a.alarmDate IS NOT NULL AND a.alarmTime IS NOT NULL ORDER BY a.alarmDate ASC, a.alarmTime ASC")
-    List<Account> findActiveAlarmsByUserId(@Param("userId") Long userId);
 }
 

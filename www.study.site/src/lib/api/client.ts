@@ -176,7 +176,7 @@ class ApiClient {
           body: body ? JSON.stringify(body) : undefined,
           ...options,
         },
-        options.timeout || 10000
+        options.timeout || 20000 // 기본 타임아웃 20초
       );
 
       if (!response.ok) {

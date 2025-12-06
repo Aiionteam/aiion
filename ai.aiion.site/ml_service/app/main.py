@@ -29,7 +29,10 @@ logger = setup_logging(SERVICE_NAME, LOG_LEVEL, LOG_FORMAT)
 app = FastAPI(
     title="ML Service API",
     description="머신러닝 서비스 API 문서 (타이타닉 데이터, 일기 감정 분류)",
-    version=SERVICE_VERSION
+    version=SERVICE_VERSION,
+    docs_url="/docs",  # Swagger UI 경로 명시
+    redoc_url="/redoc",  # ReDoc 경로 명시
+    openapi_url="/openapi.json"  # OpenAPI JSON 경로 명시
 )
 
 # CORS 설정 제거 - 게이트웨이가 모든 CORS를 처리하므로 백엔드 서비스에서는 제거
@@ -98,9 +101,7 @@ async def root():
 async def startup_event():
     """서비스 시작 시 실행"""
     logger.info(f"{SERVICE_NAME} v{SERVICE_VERSION} started")
-    # 시작 시 상위 10명 출력 (라우터의 함수 사용)
-    from app.titanic.router import print_top_10_passengers
-    await print_top_10_passengers()
+    # 타이타닉 승객 정보 출력 제거 (터미널 출력 불필요)
 
 
 @app.on_event("shutdown")

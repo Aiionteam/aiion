@@ -92,12 +92,26 @@ class DiaryEmotionDataSet:
         self._label = label
     
     def load_csv(self, file_path: Path) -> pd.DataFrame:
-        """CSV 파일 로드"""
+        """
+        CSV 파일 로드 (Python 엔진 사용)
+        pandas, numpy, scikit-learn을 활용한 데이터 처리
+        """
         try:
-            df = pd.read_csv(file_path, encoding='utf-8')
+            # Python 엔진으로 CSV 읽기 (모든 데이터 로드)
+            df = pd.read_csv(
+                file_path,
+                encoding='utf-8',
+                engine='python',  # Python 엔진 명시적 사용 (C 엔진 미사용)
+                sep=',',
+                skip_blank_lines=True,
+                skipinitialspace=True,
+            )
+            
             return df
         except Exception as e:
             print(f"CSV 파일 로드 오류: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     def save_csv(self, df: pd.DataFrame, file_path: Path):

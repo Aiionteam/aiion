@@ -189,5 +189,40 @@ public class DiaryController {
         return result;
     }
 
+    @PostMapping("/reanalyze-emotions/{userId}")
+    @Operation(summary = "기존 일기 감정 분석 재실행 (수동)", description = "모델 재학습 후 기존 일기들을 새 모델로 재분석합니다. 수동 실행용입니다.")
+    public Messenger reanalyzeEmotionsForUser(
+            @org.springframework.web.bind.annotation.PathVariable Long userId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        // JWT 토큰 검증 (선택사항)
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = jwtTokenUtil.extractTokenFromHeader(authHeader);
+            if (token != null && jwtTokenUtil.validateToken(token)) {
+                Long tokenUserId = jwtTokenUtil.getUserIdFromToken(token);
+                if (tokenUserId != null && !tokenUserId.equals(userId)) {
+                    return Messenger.builder()
+                            .code(403)
+                            .message("권한이 없습니다. 자신의 일기만 재분석할 수 있습니다.")
+                            .build();
+                }
+            }
+        }
+        
+        System.out.println("[DiaryController] 사용자 ID " + userId + "의 기존 일기 감정 분석 재실행 시작");
+        Messenger result = diaryService.reanalyzeEmotionsForUser(userId);
+        System.out.println("[DiaryController] 감정 분석 재실행 결과: " + result.getMessage());
+        return result;
+    }
+
+    @PostMapping("/reanalyze-all-emotions")
+    @Operation(summary = "모든 일기 감정 분석 (수동)", description = "일기 테이블의 모든 일기를 새 모델로 분석합니다. 수동 실행용입니다.")
+    public Messenger reanalyzeAllEmotions(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        System.out.println("[DiaryController] 모든 일기 감정 분석 시작");
+        Messenger result = diaryService.reanalyzeAllEmotions();
+        System.out.println("[DiaryController] 전체 감정 분석 결과: " + result.getMessage());
+        return result;
+    }
+
 }
 

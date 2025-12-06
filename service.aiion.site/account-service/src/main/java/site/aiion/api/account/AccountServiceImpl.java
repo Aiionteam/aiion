@@ -47,10 +47,6 @@ public class AccountServiceImpl implements AccountService {
                 .vatAmount(entity.getVatAmount())
                 .incomeSource(entity.getIncomeSource())
                 .userId(entity.getUserId())
-                .memo(entity.getMemo())
-                .alarmEnabled(entity.getAlarmEnabled())
-                .alarmDate(entity.getAlarmDate())
-                .alarmTime(entity.getAlarmTime())
                 .build();
     }
 
@@ -68,10 +64,6 @@ public class AccountServiceImpl implements AccountService {
                 .vatAmount(model.getVatAmount())
                 .incomeSource(model.getIncomeSource())
                 .userId(model.getUserId() != null ? model.getUserId() : 1L) // 기본값 1로 설정
-                .memo(model.getMemo())
-                .alarmEnabled(model.getAlarmEnabled())
-                .alarmDate(model.getAlarmDate())
-                .alarmTime(model.getAlarmTime())
                 .build();
     }
 
@@ -299,35 +291,6 @@ public class AccountServiceImpl implements AccountService {
                 .collect(Collectors.toList());
         System.out.println("[AccountServiceImpl] 변환된 모델 개수: " + modelList.size());
         
-        // 각 AccountModel에 메모와 알람 정보 추가
-        for (AccountModel model : modelList) {
-            try {
-                // 메모 조회
-                site.aiion.api.account.memo.MemoModel memoModel = new site.aiion.api.account.memo.MemoModel();
-                memoModel.setAccountId(model.getId());
-                memoModel.setUserId(userId);
-                Messenger memoResult = memoService.findByAccountId(model.getId(), userId);
-                if (memoResult.getCode() == 200 && memoResult.getData() != null) {
-                    site.aiion.api.account.memo.MemoModel foundMemo = (site.aiion.api.account.memo.MemoModel) memoResult.getData();
-                    if (foundMemo != null && foundMemo.getContent() != null) {
-                        model.setMemo(foundMemo.getContent());
-                    }
-                }
-                
-                // 알람 조회
-                Messenger alertResult = alertService.findByAccountId(model.getId(), userId);
-                if (alertResult.getCode() == 200 && alertResult.getData() != null) {
-                    site.aiion.api.account.alert.AlertModel foundAlert = (site.aiion.api.account.alert.AlertModel) alertResult.getData();
-                    if (foundAlert != null) {
-                        model.setAlarmEnabled(foundAlert.getAlarmEnabled());
-                        model.setAlarmDate(foundAlert.getAlarmDate());
-                        model.setAlarmTime(foundAlert.getAlarmTime());
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("[AccountServiceImpl] 메모/알람 조회 중 오류 (accountId=" + model.getId() + "): " + e.getMessage());
-            }
-        }
         
         // 캘린더 형태로 날짜별로 그룹화
         Map<String, Object> calendarData = new HashMap<>();
@@ -571,106 +534,6 @@ public class AccountServiceImpl implements AccountService {
         }
     }
 
-    @Override
-    @Transactional
-    public Messenger updateMemo(Long id, Long userId, String memo) {
-        if (id == null) {
-            return Messenger.builder()
-                    .code(400)
-                    .message("가계부 ID가 필요합니다.")
-                    .build();
-        }
-        
-        Optional<Account> accountOpt = accountRepository.findById(id);
-        if (accountOpt.isEmpty()) {
-            return Messenger.builder()
-                    .code(404)
-                    .message("가계부를 찾을 수 없습니다.")
-                    .build();
-        }
-        
-        Account account = accountOpt.get();
-        
-        // userId 검증
-        if (!account.getUserId().equals(userId)) {
-            return Messenger.builder()
-                    .code(403)
-                    .message("다른 사용자의 가계부는 수정할 수 없습니다.")
-                    .build();
-        }
-        
-        account.setMemo(memo);
-        Account saved = accountRepository.save(account);
-        AccountModel model = entityToModel(saved);
-        
-        return Messenger.builder()
-                .code(200)
-                .message("메모 수정 성공")
-                .data(model)
-                .build();
-    }
-
-    @Override
-    @Transactional
-    public Messenger updateAlarm(Long id, Long userId, Boolean alarmEnabled, LocalDate alarmDate, LocalTime alarmTime) {
-        if (id == null) {
-            return Messenger.builder()
-                    .code(400)
-                    .message("가계부 ID가 필요합니다.")
-                    .build();
-        }
-        
-        Optional<Account> accountOpt = accountRepository.findById(id);
-        if (accountOpt.isEmpty()) {
-            return Messenger.builder()
-                    .code(404)
-                    .message("가계부를 찾을 수 없습니다.")
-                    .build();
-        }
-        
-        Account account = accountOpt.get();
-        
-        // userId 검증
-        if (!account.getUserId().equals(userId)) {
-            return Messenger.builder()
-                    .code(403)
-                    .message("다른 사용자의 가계부는 수정할 수 없습니다.")
-                    .build();
-        }
-        
-        account.setAlarmEnabled(alarmEnabled);
-        account.setAlarmDate(alarmDate);
-        account.setAlarmTime(alarmTime);
-        Account saved = accountRepository.save(account);
-        AccountModel model = entityToModel(saved);
-        
-        return Messenger.builder()
-                .code(200)
-                .message("알람 설정 성공")
-                .data(model)
-                .build();
-    }
-
-    @Override
-    public Messenger findActiveAlarms(Long userId) {
-        if (userId == null) {
-            return Messenger.builder()
-                    .code(400)
-                    .message("사용자 ID가 필요합니다.")
-                    .build();
-        }
-        
-        List<Account> accounts = accountRepository.findActiveAlarmsByUserId(userId);
-        List<AccountModel> modelList = accounts.stream()
-                .map(this::entityToModel)
-                .collect(Collectors.toList());
-        
-        return Messenger.builder()
-                .code(200)
-                .message("활성 알람 조회 성공: " + modelList.size() + "개")
-                .data(modelList)
-                .build();
-    }
 
     @Override
     @Transactional

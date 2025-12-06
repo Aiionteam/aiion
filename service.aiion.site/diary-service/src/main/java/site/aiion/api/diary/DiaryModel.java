@@ -20,5 +20,10 @@ public class DiaryModel {
     private String title;
     private String content;
     private Long userId;
+    
+    // 감정 분석 결과 (선택적)
+    private Integer emotion;
+    private String emotionLabel;
+    private Double emotionConfidence;
 }
 

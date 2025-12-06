@@ -6,6 +6,8 @@ import { useLoginStore } from "@/store";
 import { getUserIdFromToken } from "@/lib/api/auth";
 import { WeatherForecast } from "./WeatherForecast";
 import { TitanicPassengers } from "./TitanicPassengers";
+import { NanjungDiaries } from "./NanjungDiaries";
+import { useRouter } from "next/navigation";
 
 interface Message {
   role: "user" | "assistant";
@@ -58,6 +60,7 @@ const saveMessagesToStorage = (messages: Message[], userId: string | null): void
 };
 
 export const ChatInterface: React.FC = () => {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -280,6 +283,25 @@ export const ChatInterface: React.FC = () => {
 
           {/* User Menu */}
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/diaries")}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              title="일기 리스트"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+              </svg>
+              <span>일기 리스트</span>
+            </button>
             {messages.length > 0 && (
               <button
                 onClick={handleClearChat}
@@ -332,6 +354,8 @@ export const ChatInterface: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-6 py-8 relative">
         {/* Titanic Passengers Info - Left Top */}
         <TitanicPassengers />
+        {/* Nanjung Diaries Info - Right Top */}
+        <NanjungDiaries />
         <div className="max-w-4xl mx-auto">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-20">
