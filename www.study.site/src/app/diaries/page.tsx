@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getUserDiaries, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
 
@@ -15,9 +15,12 @@ export default function DiariesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzedIds, setAnalyzedIds] = useState<Set<number>>(new Set());
+  const scrollRestored = useRef(false);
+  const listContainerRef = useRef<HTMLDivElement>(null);
 
   // 로컬 스토리지 키
   const EMOTION_CACHE_KEY = "diary_emotions_cache";
+  const SCROLL_POSITION_KEY = "diaries_scroll_position";
 
   // 감정 분석 결과 캐시 인터페이스
   interface EmotionCache {
@@ -113,11 +116,70 @@ export default function DiariesPage() {
     }
   };
 
+  // 스크롤 위치 저장
+  const saveScrollPosition = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      sessionStorage.setItem(SCROLL_POSITION_KEY, scrollY.toString());
+    } catch (err) {
+      console.error("스크롤 위치 저장 실패:", err);
+    }
+  };
+
+  // 스크롤 위치 복원
+  const restoreScrollPosition = () => {
+    if (typeof window === "undefined" || scrollRestored.current) return;
+    try {
+      const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
+      if (savedPosition) {
+        const scrollY = parseInt(savedPosition, 10);
+        if (isNaN(scrollY) || scrollY < 0) return;
+        
+        // 여러 번 시도하여 확실히 복원
+        const attemptRestore = (attempts = 0) => {
+          if (attempts > 20) {
+            // 최대 시도 횟수 초과 시 강제로 스크롤
+            window.scrollTo({ top: scrollY, behavior: 'instant' });
+            scrollRestored.current = true;
+            return;
+          }
+          
+          // DOM이 준비되었는지 확인
+          const container = listContainerRef.current;
+          if (container && container.children.length > 0) {
+            // 리스트가 렌더링되었으면 스크롤 복원
+            window.scrollTo({ top: scrollY, behavior: 'instant' });
+            scrollRestored.current = true;
+            console.log(`[DiariesPage] 스크롤 위치 복원: ${scrollY}px`);
+          } else {
+            // DOM이 아직 준비되지 않았으면 다시 시도
+            setTimeout(() => attemptRestore(attempts + 1), 50);
+          }
+        };
+        
+        attemptRestore();
+      }
+    } catch (err) {
+      console.error("스크롤 위치 복원 실패:", err);
+      scrollRestored.current = true;
+    }
+  };
+
+  // 브라우저 기본 스크롤 복원 비활성화
+  useEffect(() => {
+    if (typeof window !== "undefined" && 'scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+  }, []);
+
   useEffect(() => {
     const fetchDiaries = async () => {
       try {
         setLoading(true);
         setError(null);
+        // 스크롤 복원 플래그 리셋 (새로 로드할 때마다)
+        scrollRestored.current = false;
         const diariesList = await getUserDiaries("1"); // userId1
         
         // 백엔드에서 감정 정보를 포함해서 반환 (diary.emotion, diary.emotionLabel, diary.emotionConfidence)
@@ -171,6 +233,56 @@ export default function DiariesPage() {
 
     fetchDiaries();
   }, []); // 초기 로드만
+
+  // 스크롤 위치 저장 (스크롤 이벤트)
+  useEffect(() => {
+    const handleScroll = () => {
+      saveScrollPosition();
+    };
+
+    // 스크롤 이벤트 리스너 추가 (throttle 적용)
+    let ticking = false;
+    const throttledScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          handleScroll();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener("scroll", throttledScroll, { passive: true });
+    
+    return () => {
+      window.removeEventListener("scroll", throttledScroll);
+    };
+  }, []);
+
+  // 페이지를 떠날 때 스크롤 위치 저장
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveScrollPosition();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  // 로딩 완료 후 스크롤 위치 복원 (useLayoutEffect로 DOM 업데이트 직후 실행)
+  useLayoutEffect(() => {
+    if (!loading && diaries.length > 0 && !scrollRestored.current) {
+      // requestAnimationFrame을 사용하여 브라우저 렌더링 사이클에 맞춤
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreScrollPosition();
+        });
+      });
+    }
+  }, [loading, diaries.length]);
 
   // 새 일기 추가 시 자동 감정 분석
   useEffect(() => {
@@ -277,7 +389,7 @@ export default function DiariesPage() {
         0: "😐", // 평가불가
         1: "😊", // 기쁨
         2: "😢", // 슬픔
-        3: "😠", // 분노
+        3: "😡", // 분노 (빨간 얼굴)
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
@@ -296,7 +408,7 @@ export default function DiariesPage() {
         0: "😐", // 평가불가
         1: "😊", // 기쁨
         2: "😢", // 슬픔
-        3: "😠", // 분노
+        3: "😡", // 분노 (빨간 얼굴)
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
@@ -360,7 +472,7 @@ export default function DiariesPage() {
         )}
 
         {!loading && !error && diaries.length > 0 && (
-          <div className="bg-white">
+          <div className="bg-white" ref={listContainerRef}>
             {diaries.map((diary) => {
               const { year, month, day, dayOfWeek } = formatDate(diary.diaryDate);
               const title = cleanTitle(diary.title);
@@ -370,6 +482,7 @@ export default function DiariesPage() {
                   key={diary.id}
                   className="flex items-center justify-between py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors px-2 cursor-pointer"
                   onClick={() => {
+                    saveScrollPosition(); // 클릭 시 스크롤 위치 저장
                     router.push(`/diaries/${diary.id}`);
                   }}
                 >

@@ -16,6 +16,7 @@ class DiaryEmotionModel:
         self.model = None
         self.scaler = None
         self.vectorizer = None
+        self.word2vec_model = None  # Word2Vec 모델 (문맥 이해)
         self.label_encoder = None
         ic("DiaryEmotionModel 초기화")
     
