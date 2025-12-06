@@ -18,7 +18,7 @@ class InventoryItem(Base):
     name = Column(String(255), nullable=False, index=True, comment="재고 항목명")
     category = Column(String(100), nullable=False, index=True, comment="카테고리")
     quantity = Column(Integer, nullable=False, default=0, comment="수량")
-    unit_price = Column(Numeric(10, 2), nullable=False, comment="단가")
+    unit_price = Column(Numeric(18, 2), nullable=False, comment="단가")
     status = Column(String(50), default="available", comment="상태 (available, low_stock, out_of_stock)")
     location = Column(String(255), comment="위치")
     description = Column(Text, comment="설명")

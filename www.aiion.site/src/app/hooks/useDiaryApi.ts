@@ -346,14 +346,19 @@ export async function fetchDiaries(): Promise<Diary[]> {
 export async function createDiary(diary: Diary, userId: number): Promise<Diary> {
   console.log('[createDiary] 일기 저장 시작:', { diary, userId });
   const diaryModel = diaryToModel(diary, userId);
-  console.log('[createDiary] 변환된 DiaryModel:', diaryModel);
+  
+  // 새 일기 생성 시 id를 제거 (백엔드에서 자동 생성)
+  const { id, ...diaryModelWithoutId } = diaryModel;
+  const cleanDiaryModel = diaryModelWithoutId as DiaryModel;
+  
+  console.log('[createDiary] 변환된 DiaryModel (id 제거):', cleanDiaryModel);
   console.log('[createDiary] 날짜 형식 확인:', {
-    diaryDate: diaryModel.diaryDate,
+    diaryDate: cleanDiaryModel.diaryDate,
     format: 'YYYY-MM-DD',
-    isValid: /^\d{4}-\d{2}-\d{2}$/.test(diaryModel.diaryDate || '')
+    isValid: /^\d{4}-\d{2}-\d{2}$/.test(cleanDiaryModel.diaryDate || '')
   });
   
-  const requestBody = JSON.stringify(diaryModel);
+  const requestBody = JSON.stringify(cleanDiaryModel);
   console.log('[createDiary] Gateway로 전송할 요청 본문:', requestBody);
   
   try {
@@ -399,7 +404,7 @@ export async function createDiary(diary: Diary, userId: number): Promise<Diary> 
       console.error('[createDiary] ⚠️ 백엔드 에러 응답 발생!');
       console.error('[createDiary] 에러 코드:', responseCode);
       console.error('[createDiary] 에러 메시지:', messenger.message);
-      console.error('[createDiary] 전송한 DiaryModel:', JSON.stringify(diaryModel, null, 2));
+      console.error('[createDiary] 전송한 DiaryModel:', JSON.stringify(cleanDiaryModel, null, 2));
       console.error('[createDiary] 전송한 요청 본문:', requestBody);
       
       // 구체적인 에러 메시지 제공
@@ -408,9 +413,9 @@ export async function createDiary(diary: Diary, userId: number): Promise<Diary> 
       // 백엔드 검증 에러 메시지에 따라 더 친절한 메시지 제공
       if (responseCode === 400) {
         if (messenger.message?.includes('일자 정보')) {
-          errorMessage = `날짜 정보가 올바르지 않습니다: ${diaryModel.diaryDate}`;
+          errorMessage = `날짜 정보가 올바르지 않습니다: ${cleanDiaryModel.diaryDate}`;
         } else if (messenger.message?.includes('사용자 ID')) {
-          errorMessage = `사용자 ID가 필요합니다. 현재 userId: ${diaryModel.userId}`;
+          errorMessage = `사용자 ID가 필요합니다. 현재 userId: ${cleanDiaryModel.userId}`;
         }
       }
       

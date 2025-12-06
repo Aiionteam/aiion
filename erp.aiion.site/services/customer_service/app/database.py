@@ -66,14 +66,20 @@ elif DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 
 # 비동기 엔진 생성
+connect_args = {}
+if "neon.tech" in DATABASE_URL or "neon" in DATABASE_URL.lower():
+    connect_args["ssl"] = "require"
+# asyncpg의 prepared statement 캐시를 완전히 비활성화 (스키마 변경 시 문제 방지)
+connect_args["statement_cache_size"] = 0
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-    poolclass=NullPool,
+    poolclass=NullPool,  # 연결 풀 사용 안 함 (매번 새 연결)
     future=True,
-    connect_args={
-        "ssl": "require"
-    } if "neon.tech" in DATABASE_URL or "neon" in DATABASE_URL.lower() else {}
+    connect_args=connect_args,
+    # SQLAlchemy의 컴파일 캐시도 비활성화
+    execution_options={"compiled_cache": None},
 )
 
 # 비동기 세션 팩토리 생성
