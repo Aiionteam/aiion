@@ -189,9 +189,9 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
       - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
       - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
-      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
-      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=true
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
       - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
@@ -222,27 +222,6 @@ services:
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
       - JWT_SECRET=${JWT_SECRET}
-
-  # soccer-service는 현재 구현되지 않음
-  # soccer-service:
-  #   build:
-  #     context: ./service.aiion.site
-  #     dockerfile: ./soccer-service/Dockerfile
-  #   container_name: soccer-service
-  #   ports:
-  #     - "8085:8085"
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   networks:
-  #     - spring-network
-  #   environment:
-  #     - SPRING_PROFILES_ACTIVE=docker
-  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aidb
-  #     - SPRING_DATASOURCE_USERNAME=aiion
-  #     - SPRING_DATASOURCE_PASSWORD=aiion4man
-  #     - SPRING_REDIS_HOST=redis
-  #     - SPRING_REDIS_PORT=6379
 
   culture-service:
     build:
@@ -412,7 +391,7 @@ services:
       dockerfile: rag/chatbot_service/Dockerfile
     container_name: aihoyun-chatbot-service
     ports:
-      - "9002:9001"
+      - "9002:9002"
     networks:
       - spring-network
     environment:
@@ -452,10 +431,18 @@ services:
       context: ./ai.aiion.site
       dockerfile: ml_service/Dockerfile
     container_name: aihoyun-ml-service
+    volumes:
+      # 모델 파일 영구 저장 (컨테이너 재시작 시에도 유지)
+      - ./ai.aiion.site/ml_service/app/diary_emotion/models:/app/app/diary_emotion/models
+      # CSV 파일 실시간 반영 (개발 중 데이터 추가 시 즉시 반영)
+      - ./ai.aiion.site/ml_service/app/diary_emotion/diary.csv:/app/app/diary_emotion/diary.csv
+      - ./ai.aiion.site/ml_service/app/diary_emotion/nanjung.csv:/app/app/diary_emotion/nanjung.csv
     ports:
-      - "9003:9003"
+      - "9005:9005"
     networks:
       - spring-network
+    environment:
+      - PORT=9005
     restart: unless-stopped
 
   inventory-service:
@@ -464,7 +451,7 @@ services:
       dockerfile: services/customer_service/Dockerfile
     container_name: inventory-service
     ports:
-      - "9005:9002"
+      - "9006:9006"
     networks:
       - spring-network
     environment:

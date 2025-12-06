@@ -50,8 +50,11 @@ public class NaverController {
         String clientId = System.getenv("NAVER_CLIENT_ID");
         String redirectUri = System.getenv("NAVER_REDIRECT_URI");
         
+        System.out.println("NAVER_CLIENT_ID: " + (clientId != null ? clientId.substring(0, Math.min(clientId.length(), 10)) + "..." : "null"));
+        System.out.println("NAVER_REDIRECT_URI: " + redirectUri);
+        
         if (clientId == null || clientId.isEmpty()) {
-            System.err.println("경고: NAVER_CLIENT_ID가 설정되지 않았습니다.");
+            System.err.println("ERROR: NAVER_CLIENT_ID가 설정되지 않았습니다!");
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "네이버 CLIENT ID가 설정되지 않았습니다.");
@@ -59,7 +62,7 @@ public class NaverController {
         }
         
         if (redirectUri == null || redirectUri.isEmpty()) {
-            System.err.println("경고: NAVER_REDIRECT_URI가 설정되지 않았습니다.");
+            System.err.println("ERROR: NAVER_REDIRECT_URI가 설정되지 않았습니다!");
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "네이버 리다이렉트 URI가 설정되지 않았습니다.");
@@ -70,6 +73,7 @@ public class NaverController {
         if (frontend_url == null || frontend_url.isEmpty()) {
             String referer = request.getHeader("Referer");
             if (referer != null && !referer.isEmpty()) {
+                // Referer에서 origin 추출 (예: http://localhost:3000)
                 try {
                     java.net.URL refererUrl = new java.net.URL(referer);
                     frontend_url = refererUrl.getProtocol() + "://" + refererUrl.getAuthority();
@@ -79,6 +83,7 @@ public class NaverController {
             }
         }
         
+        // 여전히 없으면 환경변수나 기본값 사용
         if (frontend_url == null || frontend_url.isEmpty()) {
             frontend_url = System.getenv("FRONTEND_URL");
             if (frontend_url == null || frontend_url.isEmpty()) {
@@ -86,7 +91,8 @@ public class NaverController {
             }
         }
         
-        String csrfToken = UUID.randomUUID().toString();
+        String csrfToken = UUID.randomUUID().toString(); // CSRF 방지용 토큰
+        // State에 프론트엔드 URL과 CSRF 토큰을 인코딩: "frontend_url|csrf_token"
         String state = URLEncoder.encode(frontend_url, StandardCharsets.UTF_8) + "|" + csrfToken;
         
         String encodedRedirectUri = URLEncoder.encode(redirectUri, StandardCharsets.UTF_8);
@@ -97,6 +103,8 @@ public class NaverController {
             URLEncoder.encode(state, StandardCharsets.UTF_8)
         );
         
+        System.out.println("생성된 인증 URL의 redirect_uri: " + redirectUri);
+        System.out.println("인코딩된 redirect_uri: " + encodedRedirectUri);
         System.out.println("네이버 인증 URL 생성 완료");
         System.out.println("============================");
         
@@ -108,7 +116,7 @@ public class NaverController {
     
     /**
      * 네이버 인증 콜백 처리
-     * OAuth2 표준 경로 /login/oauth2/code/naver는 Gateway에서 /naver/callback으로 리라이트됨
+     * Gateway에서 /oauth/naver/callback 요청을 /naver/callback으로 리라이트하여 이 메서드로 전달됨
      * Authorization Code를 받아서 바로 토큰 교환 및 JWT 생성 후 프론트엔드로 리다이렉트
      */
     @GetMapping("/callback")
@@ -129,13 +137,16 @@ public class NaverController {
         String frontendUrl = null;
         if (state != null && !state.isEmpty()) {
             try {
-                String decodedState = URLDecoder.decode(state, StandardCharsets.UTF_8);
+                // State 형식: "frontend_url|csrf_token" 또는 단순 URL
+                String decodedState = java.net.URLDecoder.decode(state, StandardCharsets.UTF_8);
                 if (decodedState.contains("|")) {
+                    // "frontend_url|csrf_token" 형식인 경우
                     String[] parts = decodedState.split("\\|", 2);
                     if (parts.length > 0 && !parts[0].isEmpty()) {
                         frontendUrl = parts[0];
                     }
                 } else {
+                    // 단순 URL인 경우 (하위 호환성)
                     frontendUrl = decodedState;
                 }
             } catch (Exception e) {
@@ -143,6 +154,7 @@ public class NaverController {
             }
         }
         
+        // State에서 프론트엔드 URL을 추출하지 못한 경우 기본값 사용
         if (frontendUrl == null || frontendUrl.isEmpty()) {
             frontendUrl = System.getenv("FRONTEND_URL");
             if (frontendUrl == null || frontendUrl.isEmpty()) {
@@ -155,7 +167,7 @@ public class NaverController {
         if (code != null) {
             try {
                 // 1. Authorization Code를 Access Token으로 교환
-                Map<String, Object> tokenResponse = naverOAuthService.getAccessToken(code, state);
+                Map<String, Object> tokenResponse = naverOAuthService.getAccessToken(code);
                 String accessToken = (String) tokenResponse.get("access_token");
                 String refreshToken = (String) tokenResponse.get("refresh_token");
                 

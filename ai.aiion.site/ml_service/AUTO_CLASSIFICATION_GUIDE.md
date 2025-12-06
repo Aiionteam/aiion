@@ -21,9 +21,13 @@ id,localdate,title,content,userId,emotion,
 ```
 
 **감정 라벨:**
-- `0`: 중립 (neutral)
-- `1`: 긍정 (positive)
-- `2`: 부정 (negative)
+- `0`: 평가불가
+- `1`: 기쁨
+- `2`: 슬픔
+- `3`: 분노
+- `4`: 두려움
+- `5`: 혐오
+- `6`: 놀람
 
 ### 2단계: 모델 재학습
 
@@ -60,11 +64,15 @@ POST http://localhost:9003/diary-emotion/predict
 ```json
 {
   "emotion": 1,
-  "emotion_label": "긍정",
+  "emotion_label": "기쁨",
   "probabilities": {
-    "중립": 0.05,
-    "긍정": 0.90,
-    "부정": 0.05
+    "평가불가": 0.02,
+    "기쁨": 0.90,
+    "슬픔": 0.03,
+    "분노": 0.02,
+    "두려움": 0.01,
+    "혐오": 0.01,
+    "놀람": 0.01
   }
 }
 ```
@@ -87,9 +95,13 @@ POST http://localhost:9003/diary-emotion/predict
 각 감정 레이블의 비율을 균형있게:
 
 ```
-중립(0): 33% (약 330개)
-긍정(1): 33% (약 330개)
-부정(2): 34% (약 340개)
+평가불가(0): 14% (약 140개)
+기쁨(1): 14% (약 140개)
+슬픔(2): 14% (약 140개)
+분노(3): 14% (약 140개)
+두려움(4): 14% (약 140개)
+혐오(5): 15% (약 150개)
+놀람(6): 15% (약 150개)
 ```
 
 ### 3. 데이터 품질
@@ -122,17 +134,21 @@ POST http://localhost:9003/diary-emotion/predict
 ```json
 {
   "emotion": 1,
-  "emotion_label": "긍정",
+  "emotion_label": "기쁨",
   "probabilities": {
-    "중립": 0.03,
-    "긍정": 0.94,
-    "부정": 0.03
+    "평가불가": 0.02,
+    "기쁨": 0.94,
+    "슬픔": 0.01,
+    "분노": 0.01,
+    "두려움": 0.01,
+    "혐오": 0.00,
+    "놀람": 0.01
   }
 }
 ```
 
 **해석:**
-- ✅ **94%의 확률로 긍정 감정**
+- ✅ **94%의 확률로 기쁨 감정**
 - 일기 작성 시 자동으로 긍정 태그 추가 가능
 - 감정 분석 리포트에 포함 가능
 
@@ -211,6 +227,235 @@ for diary in diaries:
 - 목표 정확도: 90% 이상
 - 데이터 추가 필요: +979개
 - **이 시점에서 프로덕션 사용 가능**
+
+---
+
+## 💾 DB에 있는 일기 감정분석하기
+
+### ✅ 가능합니다!
+
+현재 감정분류 모델이 100%의 감정을 분류할 수 있는 상태라면, **DB에 저장된 일기들도 감정분석이 가능합니다!**
+
+### 방법 1: 일기 서비스에서 일기 가져와서 감정분석
+
+#### 1단계: DB에서 일기 조회
+
+**diary-service API를 통해 일기 가져오기:**
+
+```bash
+# JWT 토큰 기반 조회 (권장)
+GET http://api-gateway:8080/diary/diaries/user
+Headers:
+  Authorization: Bearer {JWT_TOKEN}
+
+# 또는 userId로 조회
+GET http://api-gateway:8080/diary/diaries/user/{userId}
+```
+
+**응답 예시:**
+```json
+{
+  "code": 200,
+  "message": "조회 성공",
+  "data": [
+    {
+      "id": 1,
+      "diaryDate": "2024-12-05",
+      "title": "오늘의 일기",
+      "content": "오늘 정말 행복한 하루였다. 좋은 일이 많이 생겼다.",
+      "userId": 1
+    },
+    {
+      "id": 2,
+      "diaryDate": "2024-12-06",
+      "title": "우울한 하루",
+      "content": "오늘은 정말 힘들었다. 모든 게 마음에 들지 않는다.",
+      "userId": 1
+    }
+  ]
+}
+```
+
+#### 2단계: 각 일기에 대해 감정분석 수행
+
+**일기 내용을 감정분석 API로 전송:**
+
+```bash
+POST http://localhost:9003/diary-emotion/predict
+Content-Type: application/json
+
+{
+  "text": "오늘 정말 행복한 하루였다. 좋은 일이 많이 생겼다."
+}
+```
+
+**응답:**
+```json
+{
+  "emotion": 1,
+  "emotion_label": "기쁨",
+  "probabilities": {
+    "평가불가": 0.02,
+    "기쁨": 0.95,
+    "슬픔": 0.01,
+    "분노": 0.01,
+    "두려움": 0.00,
+    "혐오": 0.00,
+    "놀람": 0.01
+  }
+}
+```
+
+#### 3단계: 배치 처리 스크립트 예시
+
+**Python 스크립트로 DB 일기 일괄 감정분석:**
+
+```python
+import requests
+import json
+
+# 1. DB에서 일기 가져오기
+api_gateway_url = "http://api-gateway:8080"
+jwt_token = "YOUR_JWT_TOKEN"
+
+headers = {
+    "Authorization": f"Bearer {jwt_token}"
+}
+
+# 일기 조회
+diaries_response = requests.get(
+    f"{api_gateway_url}/diary/diaries/user",
+    headers=headers
+)
+
+diaries = diaries_response.json().get("data", [])
+
+# 2. 각 일기에 대해 감정분석
+ml_service_url = "http://localhost:9003"
+
+results = []
+for diary in diaries:
+    # 제목과 내용 결합
+    text = f"{diary.get('title', '')} {diary.get('content', '')}"
+    
+    # 감정분석 요청
+    emotion_response = requests.post(
+        f"{ml_service_url}/diary-emotion/predict",
+        json={"text": text}
+    )
+    
+    emotion_result = emotion_response.json()
+    
+    results.append({
+        "diary_id": diary.get("id"),
+        "diary_date": diary.get("diaryDate"),
+        "title": diary.get("title"),
+        "emotion": emotion_result.get("emotion"),
+        "emotion_label": emotion_result.get("emotion_label"),
+        "confidence": max(emotion_result.get("probabilities", {}).values())
+    })
+
+# 3. 결과 출력
+for result in results:
+    print(f"일기 ID {result['diary_id']}: {result['emotion_label']} "
+          f"(신뢰도: {result['confidence']:.2%})")
+```
+
+### 방법 2: 자동화된 배치 처리 엔드포인트 (향후 구현 가능)
+
+**일괄 감정분석 API:**
+
+```bash
+POST http://localhost:9003/diary-emotion/batch-predict
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "jwt_token": "YOUR_JWT_TOKEN",
+  "update_database": true  # DB에 감정 결과 저장 여부
+}
+```
+
+**응답:**
+```json
+{
+  "total_count": 50,
+  "processed_count": 50,
+  "results": [
+    {
+      "diary_id": 1,
+      "emotion": 1,
+      "emotion_label": "기쁨",
+      "confidence": 0.95
+    },
+    ...
+  ],
+  "summary": {
+    "평가불가": 5,
+    "기쁨": 20,
+    "슬픔": 10,
+    "분노": 5,
+    "두려움": 5,
+    "혐오": 3,
+    "놀람": 2
+  }
+}
+```
+
+### 방법 3: 일기 저장 시 자동 감정분석 (프론트엔드 통합)
+
+**일기 작성 후 자동으로 감정분석:**
+
+```javascript
+// 일기 저장 후 자동 감정분석
+async function saveDiaryWithEmotion(diaryData) {
+  // 1. 일기 저장
+  const saveResponse = await fetch('http://api-gateway:8080/diary/diaries', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwtToken}`
+    },
+    body: JSON.stringify(diaryData)
+  });
+  
+  const savedDiary = await saveResponse.json();
+  
+  // 2. 감정분석
+  const text = `${diaryData.title} ${diaryData.content}`;
+  const emotionResponse = await fetch('http://localhost:9003/diary-emotion/predict', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ text })
+  });
+  
+  const emotionResult = await emotionResponse.json();
+  
+  // 3. 감정 결과를 일기에 추가 (선택사항)
+  // 일기 수정 API로 emotion 필드 업데이트 가능
+  
+  return {
+    diary: savedDiary,
+    emotion: emotionResult
+  };
+}
+```
+
+### ⚠️ 주의사항
+
+1. **대량 처리 시 성능 고려**
+   - 많은 일기를 한번에 처리할 때는 배치 크기를 제한 (예: 100개씩)
+   - API 호출 간 딜레이 추가 고려
+
+2. **DB 업데이트**
+   - 현재는 감정분석 결과를 DB에 자동 저장하는 기능이 없음
+   - 필요시 일기 수정 API를 통해 emotion 필드 업데이트 필요
+
+3. **인증 및 권한**
+   - diary-service는 JWT 토큰 기반 인증 필요
+   - ml_service는 현재 인증 없이 접근 가능 (프로덕션에서는 보안 강화 필요)
 
 ---
 

@@ -21,6 +21,28 @@ interface DiaryModel {
   title: string;
   content: string;
   userId?: number;
+  // 감정 분석 결과 (백엔드에서 자동으로 포함)
+  emotion?: number; // 감정 코드 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)
+  emotionLabel?: string; // 감정 라벨
+  emotionConfidence?: number; // 신뢰도 (0.0 ~ 1.0)
+}
+
+/**
+ * 감정 코드를 이모지로 변환
+ */
+function emotionCodeToEmoji(emotionCode?: number): string {
+  const emotionMap: Record<number, string> = {
+    0: '😐', // 평가불가
+    1: '😊', // 기쁨
+    2: '😢', // 슬픔
+    3: '😠', // 분노
+    4: '😨', // 두려움
+    5: '🤢', // 혐오
+    6: '😲', // 놀람
+  };
+  return emotionCode !== undefined && emotionCode in emotionMap 
+    ? emotionMap[emotionCode] 
+    : '😊'; // 기본값
 }
 
 /**
@@ -28,15 +50,30 @@ interface DiaryModel {
  */
 function modelToDiary(model: DiaryModel): Diary {
   console.log('[modelToDiary] 변환 시작:', model);
+  
+  // 백엔드에서 감정 분석 결과가 있으면 사용, 없으면 기본값
+  const emotion = model.emotionLabel 
+    ? emotionCodeToEmoji(model.emotion) 
+    : '😊';
+  const emotionScore = model.emotionConfidence !== undefined 
+    ? Math.round(model.emotionConfidence * 10) // 0.0~1.0을 0~10으로 변환
+    : 5; // 기본값
+  
   const diary = {
     id: model.id?.toString() || Date.now().toString(),
     date: model.diaryDate || new Date().toISOString().split('T')[0],
     title: model.title || '',
     content: model.content || '',
-    emotion: '😊', // 기본값 (백엔드에 없음)
-    emotionScore: 5, // 기본값 (백엔드에 없음)
+    emotion: emotion,
+    emotionScore: emotionScore,
   };
-  console.log('[modelToDiary] 변환 완료:', diary);
+  console.log('[modelToDiary] 변환 완료:', diary, {
+    원본_감정코드: model.emotion,
+    원본_감정라벨: model.emotionLabel,
+    원본_신뢰도: model.emotionConfidence,
+    변환된_이모지: emotion,
+    변환된_점수: emotionScore
+  });
   return diary;
 }
 

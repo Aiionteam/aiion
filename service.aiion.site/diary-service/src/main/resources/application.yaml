@@ -31,9 +31,6 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-        # FK 제약조건 자동 생성 설정
-        hbm2ddl:
-          jdbc_metadata_extraction_strategy: individually
     generate-ddl: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false

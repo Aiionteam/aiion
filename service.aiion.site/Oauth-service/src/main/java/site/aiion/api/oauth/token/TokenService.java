@@ -72,8 +72,17 @@ public class TokenService {
     public void deleteTokens(String provider, String userId) {
         String accessKey = String.format("token:%s:%s:access", provider, userId);
         String refreshKey = String.format("token:%s:%s:refresh", provider, userId);
-        redisTemplate.delete(accessKey);
-        redisTemplate.delete(refreshKey);
+        
+        System.out.println("[TokenService] 토큰 삭제 시작 - provider: " + provider + ", userId: " + userId);
+        System.out.println("[TokenService] Access Token Key: " + accessKey);
+        System.out.println("[TokenService] Refresh Token Key: " + refreshKey);
+        
+        Boolean accessDeleted = redisTemplate.delete(accessKey);
+        Boolean refreshDeleted = redisTemplate.delete(refreshKey);
+        
+        System.out.println("[TokenService] Access Token 삭제 결과: " + (accessDeleted ? "성공" : "실패 (키가 없거나 이미 삭제됨)"));
+        System.out.println("[TokenService] Refresh Token 삭제 결과: " + (refreshDeleted ? "성공" : "실패 (키가 없거나 이미 삭제됨)"));
+        System.out.println("[TokenService] 토큰 삭제 완료");
     }
     
     /**
