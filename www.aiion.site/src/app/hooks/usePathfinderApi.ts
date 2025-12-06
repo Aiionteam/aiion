@@ -155,11 +155,13 @@ export async function fetchSimpleRecommendations(userId: number): Promise<Learni
 
 /**
  * 사용자 일기 조회 (Pathfinder용)
+ * @param userId 사용자 ID
+ * @param skipAuth 테스트 모드: true이면 JWT 토큰 없이 호출 (기본값: false)
  */
-export async function fetchDiariesForPathfinder(userId?: number): Promise<Diary[]> {
+export async function fetchDiariesForPathfinder(userId?: number, skipAuth: boolean = false): Promise<Diary[]> {
   try {
-    console.log('[fetchDiariesForPathfinder] 일기 조회 시작, userId:', userId);
-    const diaries = await fetchDiariesByUserId(userId);
+    console.log('[fetchDiariesForPathfinder] 일기 조회 시작, userId:', userId, skipAuth ? '(인증 스킵)' : '');
+    const diaries = await fetchDiariesByUserId(userId, skipAuth);
     console.log('[fetchDiariesForPathfinder] 일기 조회 완료:', diaries.length, '개');
     return diaries;
   } catch (error) {

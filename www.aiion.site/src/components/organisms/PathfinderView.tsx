@@ -38,34 +38,54 @@ export const PathfinderView: React.FC<PathfinderViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<string | null>(null);
   const [diaries, setDiaries] = useState<Diary[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<{diaryCount: number; recommendationCount: number; lastUpdate: string} | null>(null);
 
   // 학습 추천 데이터 및 일기 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.id) return;
+      // 테스트용: userId 1 사용 (PL/관리자 데이터로 테스트)
+      const testUserId = 1;
+      console.log('[PathfinderView] 테스트 모드: userId 1 사용 (실제 로그인 userId:', user?.id, ')');
 
       // 일기 데이터 로드 (항상 로드)
+      // 테스트 모드: skipAuth=true로 설정하여 JWT 토큰 없이 호출 (userId 1로 테스트)
+      let diaryData: Diary[] = [];
       try {
-        console.log('[PathfinderView] 일기 데이터 로드 시작...');
-        const diaryData = await fetchDiariesForPathfinder(user.id);
+        console.log('[PathfinderView] 일기 데이터 로드 시작... (testUserId:', testUserId, ', skipAuth: true)');
+        diaryData = await fetchDiariesForPathfinder(testUserId, true); // skipAuth=true
         console.log('[PathfinderView] 일기 데이터 로드 완료:', diaryData.length, '개');
         setDiaries(diaryData);
+        setApiError(null);
       } catch (error) {
         console.error('[PathfinderView] 일기 데이터 로드 실패:', error);
         setDiaries([]);
+        setApiError(`일기 데이터 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
       }
 
       // 학습 추천 데이터 로드 (recommendations 탭에서만)
       if (pathfinderView === 'recommendations') {
         try {
           setIsLoading(true);
-          console.log('[PathfinderView] 추천 데이터 API 호출 시작...');
-          const data = await fetchRecommendations(user.id);
+          setApiError(null);
+          console.log('[PathfinderView] 추천 데이터 API 호출 시작... (testUserId:', testUserId, ')');
+          const data = await fetchRecommendations(testUserId);
           console.log('[PathfinderView] 추천 데이터 API 응답:', data);
           setRecommendations(data);
+          
+          // 디버깅 정보 업데이트 (일기 데이터는 위에서 로드한 diaryData 사용)
+          // 사용자 요구사항: 모든 행을 1개의 일기로 간주
+          const uniqueDiaryCount = diaryData.length > 0 ? 1 : 0;
+          
+          setDebugInfo({
+            diaryCount: uniqueDiaryCount, // 고유한 일기 개수
+            recommendationCount: data?.recommendations?.length || 0,
+            lastUpdate: new Date().toLocaleTimeString('ko-KR')
+          });
         } catch (error) {
           console.error('[PathfinderView] 추천 데이터 로드 실패:', error);
           setRecommendations(null);
+          setApiError(`추천 데이터 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
         } finally {
           setIsLoading(false);
         }
@@ -199,14 +219,77 @@ export const PathfinderView: React.FC<PathfinderViewProps> = ({
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-6">
             
+            {/* 디버깅 정보 표시 */}
+            <div className={`rounded-xl border-2 p-4 ${styles.card} bg-opacity-50`}>
+              <h3 className={`text-sm font-bold mb-2 ${styles.title}`}>🔍 디버깅 정보</h3>
+              <div className="space-y-1 text-xs">
+                {/* 일기 개수 표시 */}
+                {(() => {
+                  // 사용자 요구사항: 638개 행이 모두 다른 id를 가지고 있지만 실제 일기는 1개
+                  // 예시 데이터(nanjung.csv)는 모두 1개의 일기 컬렉션으로 간주
+                  // 따라서 데이터가 있으면 항상 1개로 표시
+                  
+                  const totalRowCount = diaries.length;
+                  const uniqueDiaryCount = totalRowCount > 0 ? 1 : 0;
+                  
+                  return (
+                    <>
+                      <p className={styles.textMuted}>
+                        일기 데이터: <span className={styles.title}>{uniqueDiaryCount}개</span>
+                        {totalRowCount > 1 && (
+                          <span className="text-gray-400 ml-1">(총 {totalRowCount}개 행)</span>
+                        )}
+                      </p>
+                    </>
+                  );
+                })()}
+                {debugInfo && (
+                  <>
+                    <p className={styles.textMuted}>
+                      추천 결과: <span className={styles.title}>{debugInfo.recommendationCount}개</span>
+                    </p>
+                    <p className={styles.textMuted}>
+                      마지막 업데이트: <span className={styles.title}>{debugInfo.lastUpdate}</span>
+                    </p>
+                  </>
+                )}
+                {apiError && (
+                  <p className="text-red-500 text-xs">⚠️ {apiError}</p>
+                )}
+                {(() => {
+                  // 모든 행을 1개의 일기로 간주
+                  const uniqueDiaryCount = diaries.length > 0 ? 1 : 0;
+                  return (
+                    <>
+                      {!apiError && uniqueDiaryCount === 0 && (
+                        <p className="text-yellow-500 text-xs">⚠️ 일기 데이터가 없습니다. 일기를 작성해주세요.</p>
+                      )}
+                      {!apiError && uniqueDiaryCount > 0 && (!recommendations || recommendations.recommendations.length === 0) && (
+                        <p className="text-yellow-500 text-xs">⚠️ 일기는 있지만 추천 결과가 없습니다. 일기 내용에 학습 키워드가 포함되어 있는지 확인해주세요.</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+            
             {isLoading ? (
               <div className={`rounded-xl border-2 p-8 ${styles.card}`}>
                 <p className={`text-center ${styles.textMuted}`}>일기를 분석하는 중...</p>
+                <p className={`text-center text-xs mt-2 ${styles.textMuted}`}>
+                  일기 {diaries.length}개를 분석하고 있습니다...
+                </p>
               </div>
             ) : !recommendations || !recommendations.recommendations || recommendations.recommendations.length === 0 ? (
               <div className={`rounded-xl border-2 p-8 ${styles.card}`}>
                 <p className={`text-center ${styles.textMuted}`}>
-                  일기를 작성하면 맞춤 학습을 추천해드려요
+                  {(() => {
+                    // 모든 행을 1개의 일기로 간주
+                    const uniqueDiaryCount = diaries.length > 0 ? 1 : 0;
+                    return uniqueDiaryCount === 0 
+                      ? '일기를 작성하면 맞춤 학습을 추천해드려요'
+                      : `일기 ${uniqueDiaryCount}개를 분석했지만 추천할 학습이 없습니다.\n일기 내용에 "요리", "운동", "공부", "여행" 등의 키워드가 포함되어 있는지 확인해주세요.`;
+                  })()}
                 </p>
               </div>
             ) : (
