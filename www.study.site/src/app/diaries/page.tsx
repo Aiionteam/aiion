@@ -180,7 +180,9 @@ export default function DiariesPage() {
         setError(null);
         // 스크롤 복원 플래그 리셋 (새로 로드할 때마다)
         scrollRestored.current = false;
-        const diariesList = await getUserDiaries("1"); // userId1
+        
+        // JWT 토큰에서 userId를 자동으로 추출하여 조회 (백엔드에서 처리)
+        const diariesList = await getUserDiaries();
         
         // 백엔드에서 감정 정보를 포함해서 반환 (diary.emotion, diary.emotionLabel, diary.emotionConfidence)
         // 일괄 조회로 N+1 문제 해결되어 있음
@@ -288,7 +290,8 @@ export default function DiariesPage() {
   useEffect(() => {
     const checkForNewDiaries = async () => {
       try {
-        const diariesList = await getUserDiaries("1");
+        // JWT 토큰에서 userId를 자동으로 추출하여 조회 (백엔드에서 처리)
+        const diariesList = await getUserDiaries();
         const currentIds = new Set(diaries.map(d => d.id));
         const newDiaries = diariesList.filter(d => !currentIds.has(d.id));
 
