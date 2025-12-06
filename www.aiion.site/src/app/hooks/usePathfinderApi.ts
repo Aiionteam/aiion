@@ -5,6 +5,7 @@
 
 import { fetchJSONFromGateway } from '../../lib/api/client';
 import { Diary } from '../../components/types';
+import { fetchDiariesByUserId } from './useDiaryApi';
 
 // 백엔드 응답 형식
 interface Messenger {
@@ -152,3 +153,17 @@ export async function fetchSimpleRecommendations(userId: number): Promise<Learni
   }
 }
 
+/**
+ * 사용자 일기 조회 (Pathfinder용)
+ */
+export async function fetchDiariesForPathfinder(userId?: number): Promise<Diary[]> {
+  try {
+    console.log('[fetchDiariesForPathfinder] 일기 조회 시작, userId:', userId);
+    const diaries = await fetchDiariesByUserId(userId);
+    console.log('[fetchDiariesForPathfinder] 일기 조회 완료:', diaries.length, '개');
+    return diaries;
+  } catch (error) {
+    console.error('[fetchDiariesForPathfinder] 일기 조회 실패:', error);
+    return [];
+  }
+}
