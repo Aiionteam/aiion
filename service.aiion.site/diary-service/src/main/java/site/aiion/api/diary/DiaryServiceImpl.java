@@ -56,13 +56,6 @@ public class DiaryServiceImpl implements DiaryService {
             builder.emotion(emotion.getEmotion())
                    .emotionLabel(emotion.getEmotionLabel())
                    .emotionConfidence(emotion.getConfidence());
-            // 디버깅: emotion 값 로그 출력
-            System.out.println("[DiaryServiceImpl] 일기 ID " + entity.getId() + 
-                             ": emotion=" + emotion.getEmotion() + 
-                             ", label=" + emotion.getEmotionLabel() + 
-                             ", confidence=" + emotion.getConfidence());
-        } else {
-            System.out.println("[DiaryServiceImpl] 일기 ID " + entity.getId() + ": 감정 정보 없음");
         }
         
         return builder.build();
@@ -102,7 +95,11 @@ public class DiaryServiceImpl implements DiaryService {
                         .message("다른 사용자의 일기는 조회할 수 없습니다.")
                         .build();
             }
-            DiaryModel model = entityToModel(diary);
+            // 일괄 조회 방식 사용 (N+1 문제 해결)
+            List<Long> diaryIds = List.of(diary.getId());
+            Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+                diaryEmotionService.findByDiaryIdIn(diaryIds);
+            DiaryModel model = entityToModel(diary, emotionMap);
             return Messenger.builder()
                     .code(200)
                     .message("조회 성공")
@@ -206,7 +203,11 @@ public class DiaryServiceImpl implements DiaryService {
             System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
         }
         
-        DiaryModel model = entityToModel(saved);
+        // 일괄 조회 방식 사용 (N+1 문제 해결)
+        List<Long> diaryIds = List.of(saved.getId());
+        Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+            diaryEmotionService.findByDiaryIdIn(diaryIds);
+        DiaryModel model = entityToModel(saved, emotionMap);
         return Messenger.builder()
                 .code(200)
                 .message("저장 성공: " + saved.getId())
@@ -309,7 +310,11 @@ public class DiaryServiceImpl implements DiaryService {
                 System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
             }
             
-            DiaryModel model = entityToModel(saved);
+            // 일괄 조회 방식 사용 (N+1 문제 해결)
+            List<Long> diaryIds = List.of(saved.getId());
+            Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+                diaryEmotionService.findByDiaryIdIn(diaryIds);
+            DiaryModel model = entityToModel(saved, emotionMap);
             return Messenger.builder()
                     .code(200)
                     .message("수정 성공: " + diaryModel.getId())
