@@ -296,6 +296,10 @@ services:
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
+      # CSV 초기화 제어 (기본값: true, false로 설정하면 CSV 초기화 비활성화)
+      - CSV_INIT_ENABLED=${CSV_INIT_ENABLED:-true}
+      # 최소 데이터 개수 기준 (이 개수 이상이면 이미 초기화된 것으로 간주)
+      - CSV_INIT_MIN_COUNT=${CSV_INIT_MIN_COUNT:-100}
 
   account-service:
     build:

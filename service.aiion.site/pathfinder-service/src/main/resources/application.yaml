@@ -45,3 +45,14 @@ springdoc:
     path: /swagger-ui.html
     enabled: true
 
+# CSV 초기화 설정
+csv:
+  init:
+    enabled: ${CSV_INIT_ENABLED:true}  # 환경 변수로 제어 가능 (기본값: true)
+    min-count: ${CSV_INIT_MIN_COUNT:100}  # 최소 데이터 개수 기준 (이 개수 이상이면 중복으로 간주)
+
+# ML 서비스 설정
+ml:
+  service:
+    url: ${ML_SERVICE_URL:http://aihoyun-ml-service:9005}  # ML 서비스 URL
+
