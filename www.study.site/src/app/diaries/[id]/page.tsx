@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getUserDiaries, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
+import { getUserDiaries, getDiaryById, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
 
 // 로컬 스토리지 키
 const EMOTION_CACHE_KEY = "diary_emotions_cache";
@@ -81,9 +81,8 @@ export default function DiaryDetailPage() {
         setLoading(true);
         setError(null);
         
-        // userId1의 모든 일기 조회 후 해당 ID 찾기
-        const diariesList = await getUserDiaries("1");
-        const foundDiary = diariesList.find((d) => d.id === diaryId);
+        // 개별 일기 조회 (일괄 조회 방식 사용, N+1 문제 해결)
+        const foundDiary = await getDiaryById(diaryId, 1);
         
         if (!foundDiary) {
           setError("일기를 찾을 수 없습니다.");

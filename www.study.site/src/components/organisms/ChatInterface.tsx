@@ -6,7 +6,6 @@ import { useLoginStore } from "@/store";
 import { getUserIdFromToken } from "@/lib/api/auth";
 import { WeatherForecast } from "./WeatherForecast";
 import { TitanicPassengers } from "./TitanicPassengers";
-import { NanjungDiaries } from "./NanjungDiaries";
 import { useRouter } from "next/navigation";
 
 interface Message {
@@ -354,8 +353,6 @@ export const ChatInterface: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-6 py-8 relative">
         {/* Titanic Passengers Info - Left Top */}
         <TitanicPassengers />
-        {/* Nanjung Diaries Info - Right Top */}
-        <NanjungDiaries />
         <div className="max-w-4xl mx-auto">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-20">

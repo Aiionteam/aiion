@@ -17,6 +17,9 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from scipy.sparse import hstack
+
+# ic 먼저 정의
 try:
     from icecream import ic  # type: ignore
 except ImportError:
@@ -24,6 +27,15 @@ except ImportError:
         if args or kwargs:
             print(*args, **kwargs)
         return args[0] if args else None
+
+# gensim import (ic 정의 후)
+try:
+    from gensim.models import Word2Vec, FastText
+    from gensim.utils import simple_preprocess
+    GENSIM_AVAILABLE = True
+except ImportError:
+    GENSIM_AVAILABLE = False
+    ic("경고: gensim이 설치되지 않았습니다. Word2Vec 기능을 사용할 수 없습니다.")
 
 # 공통 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -47,7 +59,9 @@ class DiaryEmotionService:
         self.model_dir.mkdir(exist_ok=True)
         self.model_file = self.model_dir / "diary_emotion_model.pkl"
         self.vectorizer_file = self.model_dir / "diary_emotion_vectorizer.pkl"
+        self.word2vec_file = self.model_dir / "diary_emotion_word2vec.pkl"
         self.metadata_file = self.model_dir / "diary_emotion_metadata.pkl"
+        self.use_word2vec = GENSIM_AVAILABLE  # Word2Vec 사용 여부
         ic("DiaryEmotionService 초기화")
         
         # 서비스 시작 시 모델 자동 로드 시도
@@ -121,13 +135,25 @@ class DiaryEmotionService:
                 raise ValueError("데이터가 없습니다. preprocess()를 먼저 실행하세요.")
             
             # 텍스트 벡터화 (TF-IDF) - 정확도 향상을 위해 파라미터 조정
+            # 문맥 이해를 위해 더 긴 n-gram 사용
             self.model_obj.vectorizer = TfidfVectorizer(
                 max_features=10000,  # 5000 -> 10000으로 증가 (더 많은 특징 추출)
-                ngram_range=(1, 3),  # (1,2) -> (1,3)으로 증가 (3-gram까지 포함)
+                ngram_range=(1, 4),  # (1,3) -> (1,4)로 증가 (4-gram까지 포함, 문맥 더 많이 반영)
                 min_df=1,  # 2 -> 1로 감소 (더 많은 단어 포함)
                 max_df=0.90,  # 0.95 -> 0.90으로 감소 (너무 흔한 단어 제거)
                 sublinear_tf=True  # 로그 스케일링으로 정확도 향상
             )
+            
+            # Word2Vec 모델 초기화 (문맥 기반 임베딩)
+            if self.use_word2vec:
+                ic("Word2Vec 모델 초기화 (문맥 이해)")
+                self.model_obj.word2vec_model = Word2Vec(
+                    vector_size=100,      # 임베딩 차원
+                    window=5,              # 문맥 윈도우 크기 (앞뒤 5개 단어)
+                    min_count=2,           # 최소 등장 횟수
+                    workers=4,             # 병렬 처리
+                    sg=0                  # CBOW 사용 (0: CBOW, 1: Skip-gram)
+                )
             
             # 모델 초기화 (Random Forest) - 정확도 향상을 위해 하이퍼파라미터 튜닝
             self.model_obj.model = RandomForestClassifier(
@@ -159,7 +185,49 @@ class DiaryEmotionService:
             
             # 텍스트 벡터화
             X_text = self.df['text'].values
-            X = self.model_obj.vectorizer.fit_transform(X_text)
+            
+            # TF-IDF 벡터화
+            X_tfidf = self.model_obj.vectorizer.fit_transform(X_text)
+            
+            # Word2Vec 임베딩 생성 (문맥 정보 포함)
+            if self.use_word2vec and self.model_obj.word2vec_model is not None:
+                ic("Word2Vec 모델 학습 중...")
+                # 텍스트를 단어 리스트로 변환
+                sentences = [simple_preprocess(text, deacc=True, min_len=1) for text in X_text]
+                # Word2Vec 모델 학습
+                self.model_obj.word2vec_model.build_vocab(sentences)
+                self.model_obj.word2vec_model.train(
+                    sentences, 
+                    total_examples=len(sentences), 
+                    epochs=10
+                )
+                
+                # 각 텍스트를 Word2Vec 임베딩 벡터로 변환 (평균 벡터)
+                def text_to_embedding(text):
+                    words = simple_preprocess(text, deacc=True, min_len=1)
+                    if len(words) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    # 문장의 모든 단어 임베딩의 평균
+                    word_vectors = [
+                        self.model_obj.word2vec_model.wv[word] 
+                        for word in words 
+                        if word in self.model_obj.word2vec_model.wv
+                    ]
+                    if len(word_vectors) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    return np.mean(word_vectors, axis=0)
+                
+                X_word2vec = np.array([text_to_embedding(text) for text in X_text])
+                
+                # TF-IDF와 Word2Vec 결합 (문맥 정보 포함)
+                from scipy.sparse import csr_matrix
+                X_word2vec_sparse = csr_matrix(X_word2vec)
+                X = hstack([X_tfidf, X_word2vec_sparse])
+                ic(f"TF-IDF + Word2Vec 결합 완료 (TF-IDF: {X_tfidf.shape}, Word2Vec: {X_word2vec.shape})")
+            else:
+                # Word2Vec 없이 TF-IDF만 사용
+                X = X_tfidf
+                ic("TF-IDF만 사용 (Word2Vec 없음)")
             
             # 라벨 추출 (emotion)
             y = self.df['emotion'].values
@@ -224,7 +292,29 @@ class DiaryEmotionService:
             
             # 테스트 데이터 준비
             X_test_text = self.dataset.test['text'].values
-            X_test = self.model_obj.vectorizer.transform(X_test_text)
+            X_test_tfidf = self.model_obj.vectorizer.transform(X_test_text)
+            
+            # Word2Vec 임베딩 생성 (있는 경우)
+            if self.use_word2vec and self.model_obj.word2vec_model is not None:
+                def text_to_embedding(text):
+                    words = simple_preprocess(text, deacc=True, min_len=1)
+                    if len(words) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    word_vectors = [
+                        self.model_obj.word2vec_model.wv[word] 
+                        for word in words 
+                        if word in self.model_obj.word2vec_model.wv
+                    ]
+                    if len(word_vectors) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    return np.mean(word_vectors, axis=0)
+                
+                X_test_word2vec = np.array([text_to_embedding(text) for text in X_test_text])
+                from scipy.sparse import csr_matrix
+                X_test_word2vec_sparse = csr_matrix(X_test_word2vec)
+                X_test = hstack([X_test_tfidf, X_test_word2vec_sparse])
+            else:
+                X_test = X_test_tfidf
             y_test = self.dataset.test['emotion'].values
             
             # 예측
@@ -279,8 +369,32 @@ class DiaryEmotionService:
             # 연속된 공백을 하나로 통합
             processed_text = re.sub(r'\s+', ' ', processed_text).strip()
             
-            # 텍스트 벡터화
-            X = self.model_obj.vectorizer.transform([processed_text])
+            # TF-IDF 벡터화
+            X_tfidf = self.model_obj.vectorizer.transform([processed_text])
+            
+            # Word2Vec 임베딩 생성 (문맥 정보 포함)
+            if self.use_word2vec and self.model_obj.word2vec_model is not None:
+                def text_to_embedding(text):
+                    words = simple_preprocess(text, deacc=True, min_len=1)
+                    if len(words) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    word_vectors = [
+                        self.model_obj.word2vec_model.wv[word] 
+                        for word in words 
+                        if word in self.model_obj.word2vec_model.wv
+                    ]
+                    if len(word_vectors) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    return np.mean(word_vectors, axis=0)
+                
+                X_word2vec = np.array([text_to_embedding(processed_text)])
+                
+                # TF-IDF와 Word2Vec 결합
+                from scipy.sparse import csr_matrix
+                X_word2vec_sparse = csr_matrix(X_word2vec)
+                X = hstack([X_tfidf, X_word2vec_sparse])
+            else:
+                X = X_tfidf
             
             # 예측
             prediction = self.model_obj.model.predict(X)[0]
@@ -309,6 +423,11 @@ class DiaryEmotionService:
                     self.model_obj.model = pickle.load(f)
                 with open(self.vectorizer_file, 'rb') as f:
                     self.model_obj.vectorizer = pickle.load(f)
+                # Word2Vec 모델 로드 (있는 경우)
+                if self.word2vec_file.exists() and self.use_word2vec:
+                    with open(self.word2vec_file, 'rb') as f:
+                        self.model_obj.word2vec_model = pickle.load(f)
+                    ic("Word2Vec 모델 로드 완료")
                 
                 # 메타데이터 확인 (CSV 파일이 업데이트되었는지 확인)
                 if self.metadata_file.exists():
@@ -360,6 +479,12 @@ class DiaryEmotionService:
             with open(self.vectorizer_file, 'wb') as f:
                 pickle.dump(self.model_obj.vectorizer, f)
             ic(f"Vectorizer 저장 완료: {self.vectorizer_file}")
+            
+            # Word2Vec 모델 저장 (있는 경우)
+            if self.model_obj.word2vec_model is not None:
+                with open(self.word2vec_file, 'wb') as f:
+                    pickle.dump(self.model_obj.word2vec_model, f)
+                ic(f"Word2Vec 모델 저장 완료: {self.word2vec_file}")
             
             # 메타데이터 저장 (CSV 파일 수정 시간 포함)
             # pathlib을 사용하여 파일 수정 시간 가져오기 (os 대신)
