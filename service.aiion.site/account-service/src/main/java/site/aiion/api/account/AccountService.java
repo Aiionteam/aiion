@@ -15,8 +15,5 @@ public interface AccountService {
     public Messenger saveAll(List<AccountModel> accountModelList);
     public Messenger update(AccountModel accountModel);
     public Messenger delete(AccountModel accountModel);
-    public Messenger updateMemo(Long id, Long userId, String memo);
-    public Messenger updateAlarm(Long id, Long userId, Boolean alarmEnabled, LocalDate alarmDate, LocalTime alarmTime);
-    public Messenger findActiveAlarms(Long userId);
 }
 

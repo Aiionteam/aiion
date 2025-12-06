@@ -1,6 +1,7 @@
 package site.aiion.api.diary;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -16,15 +17,55 @@ import site.aiion.api.diary.common.domain.Messenger;
 public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
+    private final site.aiion.api.diary.emotion.DiaryEmotionService diaryEmotionService;
 
     private DiaryModel entityToModel(Diary entity) {
-        return DiaryModel.builder()
+        // 감정 분석 결과 조회
+        site.aiion.api.diary.common.domain.Messenger emotionResult = diaryEmotionService.findByDiaryId(entity.getId());
+        
+        DiaryModel.DiaryModelBuilder builder = DiaryModel.builder()
                 .id(entity.getId())
                 .diaryDate(entity.getDiaryDate())
                 .title(entity.getTitle())
                 .content(entity.getContent())
-                .userId(entity.getUserId())
-                .build();
+                .userId(entity.getUserId());
+        
+        // 감정 분석 결과가 있으면 추가
+        if (emotionResult != null && emotionResult.getCode() == 200 && emotionResult.getData() != null) {
+            site.aiion.api.diary.emotion.DiaryEmotionModel emotion = 
+                (site.aiion.api.diary.emotion.DiaryEmotionModel) emotionResult.getData();
+            builder.emotion(emotion.getEmotion())
+                   .emotionLabel(emotion.getEmotionLabel())
+                   .emotionConfidence(emotion.getConfidence());
+        }
+        
+        return builder.build();
+    }
+
+    private DiaryModel entityToModel(Diary entity, Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap) {
+        DiaryModel.DiaryModelBuilder builder = DiaryModel.builder()
+                .id(entity.getId())
+                .diaryDate(entity.getDiaryDate())
+                .title(entity.getTitle())
+                .content(entity.getContent())
+                .userId(entity.getUserId());
+        
+        // 감정 분석 결과가 있으면 추가
+        site.aiion.api.diary.emotion.DiaryEmotionModel emotion = emotionMap.get(entity.getId());
+        if (emotion != null) {
+            builder.emotion(emotion.getEmotion())
+                   .emotionLabel(emotion.getEmotionLabel())
+                   .emotionConfidence(emotion.getConfidence());
+            // 디버깅: emotion 값 로그 출력
+            System.out.println("[DiaryServiceImpl] 일기 ID " + entity.getId() + 
+                             ": emotion=" + emotion.getEmotion() + 
+                             ", label=" + emotion.getEmotionLabel() + 
+                             ", confidence=" + emotion.getConfidence());
+        } else {
+            System.out.println("[DiaryServiceImpl] 일기 ID " + entity.getId() + ": 감정 정보 없음");
+        }
+        
+        return builder.build();
     }
 
     private Diary modelToEntity(DiaryModel model) {
@@ -78,8 +119,16 @@ public class DiaryServiceImpl implements DiaryService {
     @Override
     public Messenger findAll() {
         List<Diary> entities = diaryRepository.findAll();
+        
+        // 일괄 조회로 N+1 문제 해결
+        List<Long> diaryIds = entities.stream()
+                .map(Diary::getId)
+                .collect(Collectors.toList());
+        Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+            diaryEmotionService.findByDiaryIdIn(diaryIds);
+        
         List<DiaryModel> modelList = entities.stream()
-                .map(this::entityToModel)
+                .map(entity -> entityToModel(entity, emotionMap))
                 .collect(Collectors.toList());
         return Messenger.builder()
                 .code(200)
@@ -97,8 +146,17 @@ public class DiaryServiceImpl implements DiaryService {
                     .build();
         }
         List<Diary> entities = diaryRepository.findByUserId(userId);
+        
+        // 일괄 조회로 N+1 문제 해결
+        List<Long> diaryIds = entities.stream()
+                .map(Diary::getId)
+                .collect(Collectors.toList());
+        Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+            diaryEmotionService.findByDiaryIdIn(diaryIds);
+        
+        // 감정 분석 결과를 포함하여 모델 변환
         List<DiaryModel> modelList = entities.stream()
-                .map(this::entityToModel)
+                .map(entity -> entityToModel(entity, emotionMap))
                 .collect(Collectors.toList());
         return Messenger.builder()
                 .code(200)
@@ -135,6 +193,19 @@ public class DiaryServiceImpl implements DiaryService {
                 .build();
         
         Diary saved = diaryRepository.save(entity);
+        
+        // 감정 분석 파이프라인 실행 (비동기로 처리하여 응답 지연 방지)
+        try {
+            site.aiion.api.diary.common.domain.Messenger result = 
+                diaryEmotionService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
+            if (result.getCode() != 200) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + result.getMessage());
+            }
+        } catch (Exception e) {
+            // 감정 분석 실패해도 일기 저장은 성공으로 처리
+            System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
+        }
+        
         DiaryModel model = entityToModel(saved);
         return Messenger.builder()
                 .code(200)
@@ -169,6 +240,20 @@ public class DiaryServiceImpl implements DiaryService {
                 .collect(Collectors.toList());
         
         List<Diary> saved = diaryRepository.saveAll(entities);
+        
+        // 일괄 저장된 일기들에 대해 감정 분석 수행 (비동기로 처리)
+        for (Diary diary : saved) {
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryEmotionService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " 감정 분석 실패: " + result.getMessage());
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " 감정 분석 실패: " + e.getMessage());
+            }
+        }
+        
         return Messenger.builder()
                 .code(200)
                 .message("일괄 저장 성공: " + saved.size() + "개")
@@ -211,6 +296,19 @@ public class DiaryServiceImpl implements DiaryService {
                     .build();
             
             Diary saved = diaryRepository.save(updated);
+            
+            // 일기 수정 시 감정 분석 재실행 (제목이나 내용이 변경되었을 수 있음)
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryEmotionService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + result.getMessage());
+                }
+            } catch (Exception e) {
+                // 감정 분석 실패해도 일기 수정은 성공으로 처리
+                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
+            }
+            
             DiaryModel model = entityToModel(saved);
             return Messenger.builder()
                     .code(200)
@@ -228,6 +326,18 @@ public class DiaryServiceImpl implements DiaryService {
     @Override
     @Transactional
     public Messenger delete(DiaryModel diaryModel) {
+        // 일기 삭제 전에 감정 분석 결과도 함께 삭제
+        if (diaryModel.getId() != null) {
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryEmotionService.deleteByDiaryId(diaryModel.getId());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " 감정 분석 결과 삭제 실패: " + result.getMessage());
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " 감정 분석 결과 삭제 실패: " + e.getMessage());
+            }
+        }
         if (diaryModel.getId() == null) {
             return Messenger.builder()
                     .code(400)
@@ -263,6 +373,95 @@ public class DiaryServiceImpl implements DiaryService {
                     .message("삭제할 일기를 찾을 수 없습니다.")
                     .build();
         }
+    }
+
+    @Override
+    @Transactional
+    public Messenger reanalyzeEmotionsForUser(Long userId) {
+        if (userId == null) {
+            return Messenger.builder()
+                    .code(400)
+                    .message("사용자 ID가 필요합니다.")
+                    .build();
+        }
+        
+        // 해당 사용자의 모든 일기 조회
+        List<Diary> diaries = diaryRepository.findByUserId(userId);
+        
+        if (diaries.isEmpty()) {
+            return Messenger.builder()
+                    .code(200)
+                    .message("재분석할 일기가 없습니다.")
+                    .data(0)
+                    .build();
+        }
+        
+        int successCount = 0;
+        int failCount = 0;
+        
+        // 각 일기에 대해 감정 분석 재수행 (기존 결과 업데이트)
+        for (Diary diary : diaries) {
+            try {
+                // 감정 분석 수행 (기존 결과가 있으면 자동으로 업데이트됨)
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryEmotionService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() == 200) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " 감정 분석 재실행 실패: " + e.getMessage());
+                failCount++;
+            }
+        }
+        
+        return Messenger.builder()
+                .code(200)
+                .message("감정 분석 재실행 완료: 성공 " + successCount + "개, 실패 " + failCount + "개")
+                .data(Map.of("success", successCount, "fail", failCount, "total", diaries.size()))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public Messenger reanalyzeAllEmotions() {
+        // 모든 일기 조회
+        List<Diary> allDiaries = diaryRepository.findAll();
+        
+        if (allDiaries.isEmpty()) {
+            return Messenger.builder()
+                    .code(200)
+                    .message("분석할 일기가 없습니다.")
+                    .data(0)
+                    .build();
+        }
+        
+        int successCount = 0;
+        int failCount = 0;
+        
+        // 각 일기에 대해 감정 분석 수행
+        for (Diary diary : allDiaries) {
+            try {
+                // 감정 분석 수행 (기존 결과가 있으면 자동으로 업데이트됨)
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryEmotionService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() == 200) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " 감정 분석 실패: " + e.getMessage());
+                failCount++;
+            }
+        }
+        
+        return Messenger.builder()
+                .code(200)
+                .message("전체 일기 감정 분석 완료: 성공 " + successCount + "개, 실패 " + failCount + "개")
+                .data(Map.of("success", successCount, "fail", failCount, "total", allDiaries.size()))
+                .build();
     }
 
 }

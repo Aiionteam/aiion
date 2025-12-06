@@ -51,17 +51,5 @@ public class Account {
 
     @Column(name = "user_id", nullable = false)
     private Long userId;
-
-    @Column(columnDefinition = "TEXT")
-    private String memo; // 메모
-
-    @Column(name = "alarm_enabled")
-    private Boolean alarmEnabled; // 알람 활성화 여부
-
-    @Column(name = "alarm_date")
-    private LocalDate alarmDate; // 알람 날짜
-
-    @Column(name = "alarm_time")
-    private LocalTime alarmTime; // 알람 시간
 }
 

@@ -27,6 +27,11 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     Optional<Alert> findByAccountIdAndUserId(Long accountId, Long userId);
     
     /**
+     * 계정 ID 리스트와 사용자 ID로 알람 배치 조회 (N+1 쿼리 문제 해결)
+     */
+    java.util.List<Alert> findByAccountIdInAndUserId(java.util.List<Long> accountIds, Long userId);
+    
+    /**
      * 계정 ID로 알람 삭제
      */
     void deleteByAccountId(Long accountId);
