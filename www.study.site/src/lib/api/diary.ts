@@ -25,7 +25,7 @@ export interface NanjungDiariesResponse {
 export interface MessengerResponse {
   code: number;
   message: string;
-  data: Diary[]; // DiaryModel 배열
+  data: Diary[] | Diary; // DiaryModel 배열 또는 단일 DiaryModel
 }
 
 /**
@@ -58,6 +58,26 @@ export async function getUserDiaries(userId: string): Promise<Diary[]> {
     throw new Error(response.data.message || "일기 목록을 가져올 수 없습니다.");
   } catch (error: any) {
     console.error("[Diary API] 사용자 일기 조회 실패:", error);
+    throw error;
+  }
+}
+
+/**
+ * 단일 일기 조회 (일괄 조회 방식 사용, N+1 문제 해결)
+ */
+export async function getDiaryById(diaryId: number, userId: number): Promise<Diary> {
+  try {
+    const response = await apiClient.post<{ code: number; message: string; data: Diary }>(
+      `/diary/diaries/findById`,
+      { id: diaryId, userId: userId }
+    );
+    // Messenger 형식: { code, message, data }
+    if (response.data.code === 200 && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.message || "일기를 가져올 수 없습니다.");
+  } catch (error: any) {
+    console.error("[Diary API] 일기 조회 실패:", error);
     throw error;
   }
 }
