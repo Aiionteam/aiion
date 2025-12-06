@@ -27,6 +27,12 @@ export interface SaveDiaryParams {
   updateDiaryMutation: ReturnType<typeof useUpdateDiary>;
 }
 
+export interface SaveDiaryResult {
+  success: boolean;
+  errorMessage?: string;
+  diary?: Diary;
+}
+
 export interface DeleteDiaryParams {
   selectedDiary: Diary;
   deleteDiaryMutation: ReturnType<typeof useDeleteDiary>;
@@ -118,7 +124,7 @@ export function formatDiaryDate(year: number, month: number, day: number): strin
  */
 export async function saveDiaryService(
   params: SaveDiaryParams
-): Promise<{ success: boolean; errorMessage?: string }> {
+): Promise<SaveDiaryResult> {
   const { formData, selectedDiary, createDiaryMutation, updateDiaryMutation } = params;
 
   // 유효성 검사
@@ -145,8 +151,9 @@ export async function saveDiaryService(
         emotion: formData.emotion,
       };
 
-      await updateDiaryMutation.mutateAsync(updatedDiary);
-      console.log('[diaryService] 수정 완료');
+      const savedDiary = await updateDiaryMutation.mutateAsync(updatedDiary);
+      console.log('[diaryService] 수정 완료:', savedDiary);
+      return { success: true, diary: savedDiary };
     } else {
       // 생성 모드
       console.log('[diaryService] 생성 모드');
@@ -159,12 +166,10 @@ export async function saveDiaryService(
         emotionScore: 5,
       };
 
-      await createDiaryMutation.mutateAsync(newDiary);
-      console.log('[diaryService] 생성 완료');
+      const savedDiary = await createDiaryMutation.mutateAsync(newDiary);
+      console.log('[diaryService] 생성 완료:', savedDiary);
+      return { success: true, diary: savedDiary };
     }
-
-    console.log('[diaryService] ✅ 저장 성공');
-    return { success: true };
   } catch (error) {
     console.error('[diaryService] ❌ 일기 저장 실패:', error);
     return {

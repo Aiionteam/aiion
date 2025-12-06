@@ -108,6 +108,20 @@ public class AlertServiceImpl implements AlertService {
     }
 
     @Override
+    public java.util.Map<Long, AlertModel> findByAccountIds(java.util.List<Long> accountIds, Long userId) {
+        if (accountIds == null || accountIds.isEmpty() || userId == null) {
+            return new java.util.HashMap<>();
+        }
+        List<Alert> entities = alertRepository.findByAccountIdInAndUserId(accountIds, userId);
+        return entities.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Alert::getAccountId,
+                    this::entityToModel,
+                    (existing, replacement) -> existing
+                ));
+    }
+
+    @Override
     public Messenger findActiveAlarmsByUserId(Long userId) {
         if (userId == null) {
             return Messenger.builder()

@@ -175,10 +175,17 @@ export function useUpdateDiary() {
       console.log('[useUpdateDiary] 일기 수정 시작:', { diary, userId });
       return updateDiary(diary, userId);
     },
-    onSuccess: () => {
-      console.log('[useUpdateDiary] 일기 수정 성공, 리스트 갱신');
-      // 전체 일기 목록 캐시 무효화 (user_id 없이도 동작)
+    onSuccess: (updatedDiary) => {
+      console.log('[useUpdateDiary] 일기 수정 성공, 리스트 갱신:', updatedDiary);
+      // JWT 토큰 기반 조회 캐시 무효화
+      queryClient.invalidateQueries({ queryKey: diaryKeys.list('token') });
+      // 전체 일기 목록 캐시 무효화
       queryClient.invalidateQueries({ queryKey: diaryKeys.allList() });
+      // 특정 일기 상세 캐시도 무효화
+      if (updatedDiary?.id) {
+        queryClient.invalidateQueries({ queryKey: diaryKeys.detail(updatedDiary.id) });
+      }
+      console.log('[useUpdateDiary] 캐시 무효화 완료, 일기 리스트 자동 갱신 예정');
     },
     onError: (error) => {
       console.error('[useUpdateDiary] 일기 수정 실패:', error);

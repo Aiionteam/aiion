@@ -1,2 +1,5 @@
-﻿# Environment variables
+# Environment variables
 .env
+
+# Cursor IDE assets (temporary image files)
+assets/

@@ -1,0 +1,23 @@
+# ===================
+# 웹 프레임워크 및 서버 (Core Framework)
+# ===================
+fastapi==0.104.1              # FastAPI 웹 프레임워크 - REST API 엔드포인트 정의 (app/main.py)
+uvicorn[standard]==0.24.0     # ASGI 서버 - FastAPI 애플리케이션 실행 (app/main.py)
+
+# ===================
+# 데이터 처리 및 분석 (Data Processing)
+# ===================
+pandas>=2.2.0,<2.3.0          # 데이터프레임 처리 - CSV 데이터 분석 및 조작 (권장: 2.2.x)
+numpy>=1.26.0,<2.1.0          # 수치 계산 라이브러리 - 머신러닝 데이터 전처리 및 연산 (권장: 1.26.x 또는 2.0.x, scikit-learn 호환)
+
+# ===================
+# 머신러닝 (Machine Learning)
+# ===================
+scikit-learn>=1.4.0,<1.5.0    # 머신러닝 라이브러리 - 모델 학습, 평가, 데이터셋 (권장: 1.4.x)
+datasets>=2.14.0              # Hugging Face 데이터셋 - 외부 데이터셋 로드 및 관리
+
+# ===================
+# 데이터 검증 및 유틸리티 (Validation & Utilities)
+# ===================
+pydantic>=2.0.0               # 데이터 검증 - API 요청/응답 모델 검증 (app/titanic/model.py)
+icecream>=2.1.0               # 디버깅 유틸리티 - 개발 시 변수 값 출력 및 디버깅 (app/titanic/service.py: ic)

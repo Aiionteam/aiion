@@ -69,7 +69,23 @@ async def logout(token: str = Depends(oauth2_scheme)):
     """
     로그아웃
     JWT는 stateless이므로 클라이언트에서 토큰 삭제만 하면 됨
+    
+    보안 강화를 위해 토큰 블랙리스트를 Redis에 저장하는 것을 권장합니다.
+    현재는 토큰이 만료될 때까지 유효할 수 있으므로, 
+    향후 Redis를 사용하여 토큰 블랙리스트를 구현하는 것을 권장합니다.
+    
+    TODO: Redis를 사용하여 토큰 블랙리스트 구현
+    - 로그아웃 시 토큰을 Redis 블랙리스트에 추가
+    - 토큰 검증 시 블랙리스트 확인
     """
+    # 토큰에서 사용자 ID 추출 (로깅용)
+    payload = verify_token(token)
+    if payload:
+        user_id = payload.get("sub")
+        print(f"[AuthService] 로그아웃 요청 - userId: {user_id}")
+        # TODO: Redis에 토큰 블랙리스트 추가
+        # redis_client.setex(f"blacklist:{token}", ACCESS_TOKEN_EXPIRE_MINUTES * 60, "1")
+    
     return None
 
 

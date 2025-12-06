@@ -6,23 +6,23 @@ WORKDIR /build
 COPY build.gradle settings.gradle ./
 COPY gradle.properties* ./
 COPY gradle/ ./gradle/
-COPY Oauth-service/build.gradle ./Oauth-service/
+COPY oauth-service/build.gradle ./oauth-service/
 
 # 의존성 다운로드 (Gradle 캐시 활용 + 최적화 옵션)
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
-    gradle :Oauth-service:dependencies --no-daemon --parallel || true
+    gradle :oauth-service:dependencies --no-daemon --parallel || true
 
 # 나머지 소스 코드 복사
-COPY Oauth-service/ ./Oauth-service/
+COPY oauth-service/ ./oauth-service/
 
 # 빌드 실행 (병렬 빌드 + 빌드 캐시 활용)
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
-    gradle :Oauth-service:build -x test --no-daemon --parallel --build-cache
+    gradle :oauth-service:build -x test --no-daemon --parallel --build-cache
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=builder /build/Oauth-service/build/libs/*.jar app.jar
+COPY --from=builder /build/oauth-service/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
