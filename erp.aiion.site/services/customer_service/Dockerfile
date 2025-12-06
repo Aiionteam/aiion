@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 애플리케이션 코드 복사
 COPY services/customer_service/app/ .
 
-EXPOSE 9002
+EXPOSE 9006
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9002"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9006"]
 

@@ -50,3 +50,11 @@ class InventoryListResponse(BaseModel):
     total: int
     message: Optional[str] = None
 
+
+class InventoryStatisticsResponse(BaseModel):
+    """재고 통계 응답 스키마"""
+    total_quantity: int = Field(..., description="전체 재고 수량 합계 (품절 제외, 실제 판매 가능한 재고만)")
+    in_stock_count: int = Field(..., description="재고 있음 항목 개수 (수량 >= 20)")
+    low_stock_count: int = Field(..., description="재고 부족 항목 개수 (0 < 수량 < 20)")
+    out_of_stock_count: int = Field(..., description="품절 항목 개수 (수량 = 0)")
+    total_items: int = Field(..., description="전체 항목 개수")

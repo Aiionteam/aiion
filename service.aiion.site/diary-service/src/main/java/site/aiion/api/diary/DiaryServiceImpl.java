@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
     private final site.aiion.api.diary.emotion.DiaryEmotionService diaryEmotionService;
+    private final JdbcTemplate jdbcTemplate;
 
     private DiaryModel entityToModel(Diary entity) {
         // 감정 분석 결과 조회
@@ -171,7 +174,7 @@ public class DiaryServiceImpl implements DiaryService {
                     .message("일자 정보는 필수 값입니다.")
                     .build();
         }
-        
+
         // userId가 필수값
         if (diaryModel.getUserId() == null) {
             return Messenger.builder()
@@ -179,7 +182,7 @@ public class DiaryServiceImpl implements DiaryService {
                     .message("사용자 ID는 필수 값입니다.")
                     .build();
         }
-        
+
         // 새 일기 저장 시 ID를 null로 설정 (데이터베이스에서 자동 생성)
         Diary entity = Diary.builder()
                 .id(null)  // 새 엔티티는 ID를 null로 설정
@@ -188,12 +191,36 @@ public class DiaryServiceImpl implements DiaryService {
                 .content(diaryModel.getContent())
                 .userId(diaryModel.getUserId())
                 .build();
-        
-        Diary saved = diaryRepository.save(entity);
-        
+
+        Diary saved;
+        try {
+            saved = diaryRepository.save(entity);
+        } catch (DataIntegrityViolationException e) {
+            // duplicate key 에러 발생 시 시퀀스 재설정 후 재시도
+            if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
+                System.out.println("[DiaryServiceImpl] Duplicate key 에러 발생, 시퀀스 재설정 중...");
+                try {
+                    String maxIdQuery = "SELECT COALESCE(MAX(id), 0) FROM diaries";
+                    Integer maxId = jdbcTemplate.queryForObject(maxIdQuery, Integer.class);
+                    if (maxId != null && maxId > 0) {
+                        String resetSequence = String.format("SELECT setval('diaries_id_seq', %d, true)", maxId);
+                        jdbcTemplate.execute(resetSequence);
+                        System.out.println("[DiaryServiceImpl] 시퀀스 재설정 완료: " + maxId);
+                    }
+                    // 재시도
+                    saved = diaryRepository.save(entity);
+                } catch (Exception ex) {
+                    System.err.println("[DiaryServiceImpl] 시퀀스 재설정 실패: " + ex.getMessage());
+                    throw e; // 원래 예외를 다시 던짐
+                }
+            } else {
+                throw e; // 다른 에러는 그대로 던짐
+            }
+        }
+
         // 감정 분석 파이프라인 실행 (비동기로 처리하여 응답 지연 방지)
         try {
-            site.aiion.api.diary.common.domain.Messenger result = 
+            site.aiion.api.diary.common.domain.Messenger result =
                 diaryEmotionService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
             if (result.getCode() != 200) {
                 System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + result.getMessage());
@@ -202,10 +229,10 @@ public class DiaryServiceImpl implements DiaryService {
             // 감정 분석 실패해도 일기 저장은 성공으로 처리
             System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
         }
-        
+
         // 일괄 조회 방식 사용 (N+1 문제 해결)
         List<Long> diaryIds = List.of(saved.getId());
-        Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
+        Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap =
             diaryEmotionService.findByDiaryIdIn(diaryIds);
         DiaryModel model = entityToModel(saved, emotionMap);
         return Messenger.builder()
