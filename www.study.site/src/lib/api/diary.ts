@@ -45,15 +45,19 @@ export async function getNanjungDiaries(limit: number = 10): Promise<NanjungDiar
 
 /**
  * 사용자의 일기 목록 조회
+ * JWT 토큰에서 userId를 자동으로 추출하여 조회합니다.
+ * @param userId - 선택적 파라미터 (하위 호환성 유지). 제공되지 않으면 JWT 토큰에서 자동 추출
  */
-export async function getUserDiaries(userId: string): Promise<Diary[]> {
+export async function getUserDiaries(userId?: string): Promise<Diary[]> {
   try {
-    const response = await apiClient.get<MessengerResponse>(
-      `/diary/diaries/user/${userId}`
-    );
+    // userId가 제공되지 않으면 JWT 토큰 기반 엔드포인트 사용 (권장)
+    const endpoint = userId ? `/diary/diaries/user/${userId}` : `/diary/diaries/user`;
+    const response = await apiClient.get<MessengerResponse>(endpoint);
     // Messenger 형식: { code, message, data }
     if (response.data.code === 200 && response.data.data) {
-      return response.data.data;
+      // data가 배열인지 확인
+      const data = response.data.data;
+      return Array.isArray(data) ? data : [data];
     }
     throw new Error(response.data.message || "일기 목록을 가져올 수 없습니다.");
   } catch (error: any) {
@@ -109,6 +113,62 @@ export async function predictEmotion(text: string, timeout: number = 20000): Pro
     return response.data;
   } catch (error: any) {
     console.error("[Diary API] 감정 분석 실패:", error);
+    throw error;
+  }
+}
+
+/**
+ * 일기 생성 요청 인터페이스 (id 제외)
+ */
+export interface CreateDiaryRequest {
+  diaryDate: string; // yyyy-MM-dd 형식
+  title: string;
+  content: string;
+  userId: number;
+}
+
+/**
+ * 일기 생성
+ */
+export async function createDiary(diaryData: CreateDiaryRequest | Diary): Promise<Diary> {
+  try {
+    // 새 일기 생성 시 id를 제거 (백엔드에서 자동 생성)
+    const { id, ...requestData } = diaryData as Diary;
+    const cleanData: CreateDiaryRequest = {
+      diaryDate: requestData.diaryDate,
+      title: requestData.title,
+      content: requestData.content,
+      userId: requestData.userId,
+    };
+
+    console.log("[createDiary] 전송한 요청 본문:", cleanData);
+
+    const response = await apiClient.post<MessengerResponse>(
+      `/diary/diaries/save`,
+      cleanData
+    );
+
+    // Messenger 형식: { code, message, data }
+    if (response.data.code === 200 && response.data.data) {
+      const data = response.data.data;
+      // data가 배열인 경우 첫 번째 요소 반환, 단일 객체인 경우 그대로 반환
+      const diary = Array.isArray(data) ? data[0] : data;
+      return diary;
+    }
+    
+    const errorMessage = response.data.message || "저장 실패";
+    const errorCode = response.data.code;
+    console.error(`[createDiary] 저장 실패: ${errorMessage} (코드: ${errorCode})`);
+    throw new Error(`${errorMessage} (코드: ${errorCode})`);
+  } catch (error: any) {
+    console.error("[createDiary] 예외 발생:", error);
+    // 에러 메시지에서 코드 추출
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      const errorMessage = errorData.message || "저장 실패";
+      const errorCode = errorData.code;
+      throw new Error(`${errorMessage} (코드: ${errorCode})`);
+    }
     throw error;
   }
 }

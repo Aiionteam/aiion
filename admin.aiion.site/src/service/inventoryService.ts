@@ -19,6 +19,14 @@ export interface InventoryResponse {
   message?: string;
 }
 
+export interface InventoryStatistics {
+  total_quantity: number;
+  in_stock_count: number;
+  low_stock_count: number;
+  out_of_stock_count: number;
+  total_items: number;
+}
+
 // 백엔드 응답 형식 (snake_case)
 interface BackendInventoryItem {
   id: number;
@@ -37,6 +45,18 @@ interface BackendInventoryResponse {
   items: BackendInventoryItem[];
   total: number;
   message?: string;
+}
+
+export interface InventoryListParams {
+  skip?: number;
+  limit?: number;
+  name?: string;
+  category?: string;
+  status?: string;
+  location?: string;
+  quantity_min?: number;
+  quantity_max?: number;
+  order_by?: string; // 'desc' 또는 'asc'
 }
 
 // 백엔드 형식을 프론트엔드 형식으로 변환
@@ -100,12 +120,45 @@ const getHeaders = (): HeadersInit => {
 };
 
 /**
- * 재고 목록 조회
+ * 재고 목록 조회 (페이징 지원)
  */
-export async function getInventoryItems(): Promise<InventoryItem[]> {
+export async function getInventoryItems(params?: InventoryListParams): Promise<{ items: InventoryItem[]; total: number }> {
   try {
     const gatewayUrl = getGatewayUrl();
-    const response = await fetch(`${gatewayUrl}/inventory/items`, {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.skip !== undefined) {
+      queryParams.append('skip', params.skip.toString());
+    }
+    if (params?.limit !== undefined) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.name) {
+      queryParams.append('name', params.name);
+    }
+    if (params?.category) {
+      queryParams.append('category', params.category);
+    }
+    if (params?.status) {
+      queryParams.append('status', params.status);
+    }
+    if (params?.location) {
+      queryParams.append('location', params.location);
+    }
+    if (params?.quantity_min !== undefined) {
+      queryParams.append('quantity_min', params.quantity_min.toString());
+    }
+    if (params?.quantity_max !== undefined) {
+      queryParams.append('quantity_max', params.quantity_max.toString());
+    }
+    if (params?.order_by) {
+      queryParams.append('order_by', params.order_by);
+    }
+    
+    const queryString = queryParams.toString();
+    const url = `${gatewayUrl}/inventory/items${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: getHeaders(),
       credentials: 'include',
@@ -116,7 +169,10 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     }
 
     const data: BackendInventoryResponse = await response.json();
-    return (data.items || []).map(transformBackendToFrontend);
+    return {
+      items: (data.items || []).map(transformBackendToFrontend),
+      total: data.total || 0,
+    };
   } catch (error) {
     console.error('재고 목록 조회 오류:', error);
     throw error;
@@ -223,6 +279,30 @@ export async function deleteInventoryItem(itemId: string | number): Promise<void
     }
   } catch (error) {
     console.error('재고 삭제 오류:', error);
+    throw error;
+  }
+}
+
+/**
+ * 재고 통계 조회
+ */
+export async function getInventoryStatistics(): Promise<InventoryStatistics> {
+  try {
+    const gatewayUrl = getGatewayUrl();
+    const response = await fetch(`${gatewayUrl}/inventory/statistics`, {
+      method: 'GET',
+      headers: getHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error(`재고 통계 조회 실패: ${response.statusText}`);
+    }
+
+    const data: InventoryStatistics = await response.json();
+    return data;
+  } catch (error) {
+    console.error('재고 통계 조회 오류:', error);
     throw error;
   }
 }

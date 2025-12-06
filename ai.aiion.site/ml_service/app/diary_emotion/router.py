@@ -184,6 +184,48 @@ async def predict_emotion(request: PredictRequest):
         raise HTTPException(status_code=500, detail=f"예측 중 오류 발생: {str(e)}")
 
 
+@router.post("/reset")
+async def reset_model():
+    """모델 초기화 - 저장된 모델 파일 삭제"""
+    try:
+        service = get_diary_emotion_service()
+        
+        deleted_files = []
+        files_to_delete = [
+            ("model", service.model_file),
+            ("vectorizer", service.vectorizer_file),
+            ("word2vec", service.word2vec_file),
+            ("metadata", service.metadata_file)
+        ]
+        
+        for name, file_path in files_to_delete:
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                    deleted_files.append(name)
+                except Exception as e:
+                    return {
+                        "message": f"모델 초기화 중 오류 발생: {name} 파일 삭제 실패",
+                        "error": str(e),
+                        "deleted_files": deleted_files
+                    }
+        
+        # 메모리의 모델도 초기화
+        service.model_obj.model = None
+        service.model_obj.vectorizer = None
+        service.model_obj.word2vec_model = None
+        service.dataset.train = None
+        service.dataset.test = None
+        
+        return {
+            "message": "모델이 초기화되었습니다.",
+            "deleted_files": deleted_files,
+            "total_deleted": len(deleted_files)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"모델 초기화 중 오류 발생: {str(e)}")
+
+
 @router.post("/train")
 async def train_model():
     """모델 학습 실행"""

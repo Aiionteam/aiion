@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getUserDiaries, getDiaryById, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
+import { getUserIdFromToken } from "@/lib/api/auth";
 
 // 로컬 스토리지 키
 const EMOTION_CACHE_KEY = "diary_emotions_cache";
@@ -81,8 +82,22 @@ export default function DiaryDetailPage() {
         setLoading(true);
         setError(null);
         
+        // 현재 로그인한 사용자 ID 가져오기
+        const userIdStr = getUserIdFromToken();
+        if (!userIdStr) {
+          setError("로그인이 필요합니다.");
+          setLoading(false);
+          return;
+        }
+        const userId = parseInt(userIdStr, 10);
+        if (isNaN(userId)) {
+          setError("유효하지 않은 사용자 ID입니다.");
+          setLoading(false);
+          return;
+        }
+        
         // 개별 일기 조회 (일괄 조회 방식 사용, N+1 문제 해결)
-        const foundDiary = await getDiaryById(diaryId, 1);
+        const foundDiary = await getDiaryById(diaryId, userId);
         
         if (!foundDiary) {
           setError("일기를 찾을 수 없습니다.");

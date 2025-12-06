@@ -49,7 +49,10 @@ export const createInventorySlice: StateCreator<
 
   // Actions
   setItems: (items) => set((state) => ({ 
-    inventory: { ...state.inventory, items } 
+    inventory: { 
+      ...state.inventory, 
+      items: Array.isArray(items) ? items : [] 
+    } 
   })),
   
   setSelectedItem: (item) => set((state) => ({ 
@@ -64,28 +67,37 @@ export const createInventorySlice: StateCreator<
     inventory: { ...state.inventory, error } 
   })),
   
-  addItem: (item) => set((state) => ({ 
-    inventory: { 
-      ...state.inventory, 
-      items: [...state.inventory.items, item] 
-    } 
-  })),
+  addItem: (item) => set((state) => {
+    const currentItems = Array.isArray(state.inventory?.items) ? state.inventory.items : [];
+    return {
+      inventory: { 
+        ...state.inventory, 
+        items: [...currentItems, item] 
+      } 
+    };
+  }),
   
-  updateItem: (item) => set((state) => ({ 
-    inventory: { 
-      ...state.inventory, 
-      items: state.inventory.items.map(i => 
-        i.id === item.id ? item : i
-      ) 
-    } 
-  })),
+  updateItem: (item) => set((state) => {
+    const currentItems = Array.isArray(state.inventory?.items) ? state.inventory.items : [];
+    return {
+      inventory: { 
+        ...state.inventory, 
+        items: currentItems.map(i => 
+          i.id === item.id ? item : i
+        ) 
+      } 
+    };
+  }),
   
-  removeItem: (itemId) => set((state) => ({ 
-    inventory: { 
-      ...state.inventory, 
-      items: state.inventory.items.filter(i => i.id !== itemId) 
-    } 
-  })),
+  removeItem: (itemId) => set((state) => {
+    const currentItems = Array.isArray(state.inventory?.items) ? state.inventory.items : [];
+    return {
+      inventory: { 
+        ...state.inventory, 
+        items: currentItems.filter(i => i.id !== itemId) 
+      } 
+    };
+  }),
   
   resetInventory: () => set((state) => ({ 
     inventory: { 
