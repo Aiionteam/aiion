@@ -251,6 +251,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=aiion4man
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
 
   pathfinder-service:
     build:
@@ -394,6 +395,17 @@ services:
     container_name: aihoyun-crawler-service
     ports:
       - "9003:9003"
+    networks:
+      - spring-network
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: ../erp.aiion.site
+      dockerfile: customer_servive/Dockerfile
+    container_name: inventory-service
+    ports:
+      - "9002:9002"
     networks:
       - spring-network
     restart: unless-stopped

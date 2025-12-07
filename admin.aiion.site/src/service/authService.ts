@@ -56,13 +56,19 @@ const getHeaders = (): HeadersInit => {
 export async function login(credentials: LoginRequest): Promise<TokenResponse> {
   try {
     const gatewayUrl = getGatewayUrl();
+    
+    // OAuth2PasswordRequestForm 형식으로 변환 (FormData)
+    const formData = new FormData();
+    formData.append('username', credentials.username);
+    formData.append('password', credentials.password);
+    
     const response = await fetch(`${gatewayUrl}/api/auth/login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        // FormData를 사용할 때는 Content-Type을 설정하지 않음 (브라우저가 자동 설정)
       },
       credentials: 'include',
-      body: JSON.stringify(credentials),
+      body: formData,
     });
 
     if (!response.ok) {

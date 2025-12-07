@@ -86,9 +86,14 @@ export interface PredictEmotionResponse {
  */
 export async function predictEmotion(text: string, timeout: number = 20000): Promise<PredictEmotionResponse> {
   try {
+    // 빈 텍스트 체크
+    if (!text || !text.trim()) {
+      throw new Error("분석할 텍스트가 비어있습니다.");
+    }
+    
     const response = await apiClient.post<PredictEmotionResponse>(
       `/diary-emotion/predict`,
-      { text },
+      { text: text.trim() },
       { timeout } // 기본 20초 타임아웃
     );
     return response.data;

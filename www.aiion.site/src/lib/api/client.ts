@@ -265,25 +265,15 @@ export async function fetchFromGateway(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  // options의 headers와 병합
+  // options의 headers와 병합 (JWT 토큰은 항상 보존)
   const mergedHeaders: HeadersInit = {
     ...headers,
     ...options.headers,
   };
   
-  // JWT 토큰 추가 로직
-  // options.headers에 Authorization이 명시적으로 설정되어 있으면 그대로 사용 (테스트 모드용)
-  // 그렇지 않으면 accessToken이 있으면 추가
-  if (!options.headers || !('Authorization' in options.headers)) {
-    if (accessToken) {
-      mergedHeaders['Authorization'] = `Bearer ${accessToken}`;
-    }
-  } else {
-    // options.headers에 Authorization이 있으면 그대로 사용 (빈 문자열이어도)
-    // 이 경우 토큰을 추가하지 않음 (테스트 모드)
-    if (options.headers['Authorization'] === '') {
-      delete mergedHeaders['Authorization'];
-    }
+  // JWT 토큰이 있으면 항상 Authorization 헤더에 추가 (덮어쓰기 방지)
+  if (accessToken) {
+    mergedHeaders['Authorization'] = `Bearer ${accessToken}`;
   }
 
   return fetchWithRetry(url, {

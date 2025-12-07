@@ -198,13 +198,48 @@ export default function DiaryDetailPage() {
     return title.replace(/<[^>]*>/g, "").trim() || "제목 없음";
   };
 
-  // 감정에 따른 이모티콘 반환
+  // 감정 라벨을 "평범"으로 변환하는 함수
+  const normalizeEmotionLabel = (label: string | undefined): string => {
+    if (!label) return "";
+    return label === "평가불가" ? "평범" : label;
+  };
+
+  // 1위/2위 감정을 표시하는 함수
+  const getEmotionDisplay = (): string => {
+    // probabilities가 있으면 1위/2위 표시
+    if (emotion?.probabilities) {
+      const sorted = Object.entries(emotion.probabilities)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 2);
+      
+      if (sorted.length >= 2) {
+        const first = normalizeEmotionLabel(sorted[0][0]);
+        const second = normalizeEmotionLabel(sorted[1][0]);
+        return `${first}/${second}`;
+      } else if (sorted.length === 1) {
+        return normalizeEmotionLabel(sorted[0][0]);
+      }
+    }
+    
+    // probabilities가 없으면 기본 라벨 사용
+    if (diary?.emotionLabel) {
+      return normalizeEmotionLabel(diary.emotionLabel);
+    }
+    
+    if (emotion?.emotion_label) {
+      return normalizeEmotionLabel(emotion.emotion_label);
+    }
+    
+    return "";
+  };
+
+  // 감정에 따른 이모티콘 반환 (1위만)
   const getEmotionEmoji = (): string => {
     // DB에서 가져온 감정 정보 우선 사용
     // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
     if (diary?.emotion !== null && diary?.emotion !== undefined) {
       const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가
+        0: "😐", // 평가불가 -> 평범
         1: "😊", // 기쁨
         2: "😢", // 슬픔
         3: "😠", // 분노
@@ -226,7 +261,7 @@ export default function DiaryDetailPage() {
     // 캐시된 감정 분석 결과 사용
     if (emotion) {
       const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가
+        0: "😐", // 평가불가 -> 평범
         1: "😊", // 기쁨
         2: "😢", // 슬픔
         3: "😠", // 분노
@@ -343,9 +378,9 @@ export default function DiaryDetailPage() {
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span>{year}년 {month}월 {day}일</span>
             {dayOfWeek && <span className="text-gray-500">{dayOfWeek}</span>}
-            {(diary.emotionLabel || emotion?.emotion_label) && (
+            {getEmotionDisplay() && (
               <span className="ml-auto text-gray-500">
-                감정: {diary.emotionLabel || emotion?.emotion_label}
+                감정: {getEmotionDisplay()}
               </span>
             )}
           </div>
@@ -356,7 +391,7 @@ export default function DiaryDetailPage() {
               .sort(([, a], [, b]) => b - a); // 확률이 높은 순으로 정렬
             const mainEmotion = sortedProbabilities[0];
             const otherEmotions = sortedProbabilities.slice(1);
-            const mainEmotionLabel = diary.emotionLabel || emotion?.emotion_label;
+            const mainEmotionLabel = normalizeEmotionLabel(diary.emotionLabel || emotion?.emotion_label);
             
             return (
               <div className="mt-4 pt-4 border-t border-gray-200">
@@ -389,14 +424,15 @@ export default function DiaryDetailPage() {
                   {/* 메인 감정 (항상 표시) */}
                   {mainEmotion && (() => {
                     const [label, prob] = mainEmotion;
+                    const normalizedLabel = normalizeEmotionLabel(label);
                     const percentage = (prob * 100).toFixed(1);
-                    const isMainEmotion = label === mainEmotionLabel;
+                    const isMainEmotion = normalizedLabel === mainEmotionLabel;
                     return (
                       <div key={label} className="flex items-center gap-3">
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
                             <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
-                              {label}
+                              {normalizedLabel}
                             </span>
                             <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
                               {percentage}%
@@ -419,14 +455,15 @@ export default function DiaryDetailPage() {
                   
                   {/* 나머지 감정들 (접기/열기) */}
                   {showAllProbabilities && otherEmotions.map(([label, prob]) => {
+                    const normalizedLabel = normalizeEmotionLabel(label);
                     const percentage = (prob * 100).toFixed(1);
-                    const isMainEmotion = label === mainEmotionLabel;
+                    const isMainEmotion = normalizedLabel === mainEmotionLabel;
                     return (
                       <div key={label} className="flex items-center gap-3">
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
                             <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
-                              {label}
+                              {normalizedLabel}
                             </span>
                             <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
                               {percentage}%
