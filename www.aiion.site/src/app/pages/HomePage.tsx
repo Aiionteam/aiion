@@ -40,6 +40,7 @@ export const HomePage: React.FC = () => {
     diaries,
     setDiaries,
     darkMode,
+    aiResponse,
   } = hookData;
 
   // 카테고리별 컴포넌트를 메모이제이션하여 불필요한 재생성 방지

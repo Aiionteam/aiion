@@ -69,6 +69,7 @@ export default function DiaryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [emotionLoading, setEmotionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAllProbabilities, setShowAllProbabilities] = useState(false);
 
   useEffect(() => {
     const fetchDiary = async () => {
@@ -108,14 +109,26 @@ export default function DiaryDetailPage() {
         setDiary(foundDiary);
 
         // DB에 감정 정보가 있으면 사용 (이미 분석 완료)
-        if (foundDiary.emotion != null) {
+        // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주
+        // emotion: 0 (평가불가)도 이미 분석된 것으로 간주
+        if (foundDiary.emotion !== null && foundDiary.emotion !== undefined) {
           setEmotionLoading(false);
           // DB에서 가져온 감정 정보를 PredictEmotionResponse 형식으로 변환
           if (foundDiary.emotionLabel) {
+            // probabilities JSON 문자열을 파싱
+            let probabilities: Record<string, number> | undefined;
+            if (foundDiary.emotionProbabilities) {
+              try {
+                probabilities = JSON.parse(foundDiary.emotionProbabilities);
+              } catch (e) {
+                console.warn(`[DiaryDetailPage] probabilities JSON 파싱 실패: ${e}`);
+              }
+            }
             setEmotion({
               emotion: foundDiary.emotion,
               emotion_label: foundDiary.emotionLabel,
               confidence: foundDiary.emotionConfidence,
+              probabilities: probabilities,
             });
           }
         } else {
@@ -125,10 +138,12 @@ export default function DiaryDetailPage() {
           
           if (cachedEmotion) {
             // 캐시된 감정 분석 결과 사용
+            console.log(`[DiaryDetailPage] 일기 ID ${diaryId}의 캐시된 감정 정보 사용`);
             setEmotion(cachedEmotion.emotion);
             setEmotionLoading(false);
           } else {
-            // 캐시에도 없으면 분석 수행
+            // 캐시에도 없으면 분석 수행 (백엔드 분석 실패 시에만)
+            console.log(`[DiaryDetailPage] 일기 ID ${diaryId}의 감정 분석 시작 (DB와 캐시 모두 없음)`);
             setEmotionLoading(true);
             try {
               const text = `${foundDiary.title || ""} ${foundDiary.content || ""}`.trim();
@@ -137,9 +152,10 @@ export default function DiaryDetailPage() {
                 setEmotion(emotionResult);
                 // 캐시에 저장
                 setEmotionCache(diaryId, emotionResult);
+                console.log(`[DiaryDetailPage] 일기 ID ${diaryId}의 감정 분석 완료: ${emotionResult.emotion_label}`);
               }
             } catch (err) {
-              console.error("감정 분석 실패:", err);
+              console.error(`[DiaryDetailPage] 일기 ID ${diaryId} 감정 분석 실패:`, err);
             } finally {
               setEmotionLoading(false);
             }
@@ -185,7 +201,8 @@ export default function DiaryDetailPage() {
   // 감정에 따른 이모티콘 반환
   const getEmotionEmoji = (): string => {
     // DB에서 가져온 감정 정보 우선 사용
-    if (diary?.emotion != null) {
+    // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
+    if (diary?.emotion !== null && diary?.emotion !== undefined) {
       const emotionMap: Record<number, string> = {
         0: "😐", // 평가불가
         1: "😊", // 기쁨
@@ -194,6 +211,14 @@ export default function DiaryDetailPage() {
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
+        7: "🤝", // 신뢰
+        8: "✨", // 기대
+        9: "😰", // 불안
+        10: "😌", // 안도
+        11: "😔", // 후회
+        12: "💭", // 그리움
+        13: "🙏", // 감사
+        14: "😞", // 외로움
       };
       return emotionMap[diary.emotion] || "😐";
     }
@@ -208,6 +233,14 @@ export default function DiaryDetailPage() {
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
+        7: "🤝", // 신뢰
+        8: "✨", // 기대
+        9: "😰", // 불안
+        10: "😌", // 안도
+        11: "😔", // 후회
+        12: "💭", // 그리움
+        13: "🙏", // 감사
+        14: "😞", // 외로움
       };
       return emotionMap[emotion.emotion] || "😐";
     }
@@ -316,6 +349,107 @@ export default function DiaryDetailPage() {
               </span>
             )}
           </div>
+          
+          {/* Emotion Probabilities */}
+          {emotion?.probabilities && Object.keys(emotion.probabilities).length > 0 && (() => {
+            const sortedProbabilities = Object.entries(emotion.probabilities)
+              .sort(([, a], [, b]) => b - a); // 확률이 높은 순으로 정렬
+            const mainEmotion = sortedProbabilities[0];
+            const otherEmotions = sortedProbabilities.slice(1);
+            const mainEmotionLabel = diary.emotionLabel || emotion?.emotion_label;
+            
+            return (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">감정 분석 확률</h3>
+                  {otherEmotions.length > 0 && (
+                    <button
+                      onClick={() => setShowAllProbabilities(!showAllProbabilities)}
+                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                    >
+                      {showAllProbabilities ? (
+                        <>
+                          <span>접기</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 15l-6-6-6 6" />
+                          </svg>
+                        </>
+                      ) : (
+                        <>
+                          <span>전체 보기</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {/* 메인 감정 (항상 표시) */}
+                  {mainEmotion && (() => {
+                    const [label, prob] = mainEmotion;
+                    const percentage = (prob * 100).toFixed(1);
+                    const isMainEmotion = label === mainEmotionLabel;
+                    return (
+                      <div key={label} className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+                              {label}
+                            </span>
+                            <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                              {percentage}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                isMainEmotion 
+                                  ? 'bg-blue-500' 
+                                  : 'bg-gray-400'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* 나머지 감정들 (접기/열기) */}
+                  {showAllProbabilities && otherEmotions.map(([label, prob]) => {
+                    const percentage = (prob * 100).toFixed(1);
+                    const isMainEmotion = label === mainEmotionLabel;
+                    return (
+                      <div key={label} className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+                              {label}
+                            </span>
+                            <span className={`text-sm ${isMainEmotion ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                              {percentage}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                isMainEmotion 
+                                  ? 'bg-blue-500' 
+                                  : 'bg-gray-400'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Content Section */}

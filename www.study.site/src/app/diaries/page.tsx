@@ -75,6 +75,19 @@ export default function DiariesPage() {
 
   // 감정 분석 함수 (재사용 가능)
   const analyzeDiaryEmotion = async (diary: DiaryWithEmotion, index: number, isFirstRequest: boolean = false) => {
+    // 이미 분석된 일기는 분석하지 않음
+    if (diary.emotion !== null && diary.emotion !== undefined) {
+      console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}는 이미 분석 완료 (emotion=${diary.emotion})`);
+      setAnalyzedIds((prev) => new Set(prev).add(diary.id));
+      return;
+    }
+    
+    // 이미 analyzedIds에 포함된 일기는 분석하지 않음
+    if (analyzedIds.has(diary.id)) {
+      console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}는 이미 분석 중이거나 완료됨`);
+      return;
+    }
+    
     try {
       // 제목과 내용을 결합하여 분석
       const text = `${diary.title || ""} ${diary.content || ""}`.trim();
@@ -187,7 +200,7 @@ export default function DiariesPage() {
         // 백엔드에서 감정 정보를 포함해서 반환 (diary.emotion, diary.emotionLabel, diary.emotionConfidence)
         // 일괄 조회로 N+1 문제 해결되어 있음
         console.log("[DiariesPage] 일기 목록 로드:", diariesList.length, "개");
-        console.log("[DiariesPage] 감정 정보 포함 일기:", diariesList.filter(d => d.emotion != null).length, "개");
+        console.log("[DiariesPage] 감정 정보 포함 일기:", diariesList.filter(d => d.emotion !== null && d.emotion !== undefined).length, "개");
         
         // 각 일기의 감정 값 디버깅
         diariesList.forEach((diary, idx) => {
@@ -196,8 +209,9 @@ export default function DiariesPage() {
         
         const diariesWithEmotion: DiaryWithEmotion[] = diariesList.map((diary) => {
           // 백엔드 DB에 감정 정보가 있으면 사용 (우선순위 1)
-          // 백엔드에서 이미 분석된 결과를 포함해서 반환하므로 프론트엔드 분석 불필요
-          const hasEmotion = diary.emotion != null;
+          // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주
+          // emotion: 0 (평가불가)도 이미 분석된 것으로 간주
+          const hasEmotion = diary.emotion !== null && diary.emotion !== undefined;
           
           return {
             ...diary,
@@ -209,8 +223,13 @@ export default function DiariesPage() {
 
         // 백엔드에서 감정 정보를 포함해서 반환하므로 프론트엔드에서 추가 분석 불필요
         // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
+        // emotion이 null이거나 undefined인 경우에만 분석 (0은 이미 분석된 것으로 간주)
+        // 이미 analyzedIds에 포함된 일기는 제외
         const diariesToAnalyze = diariesWithEmotion.filter(
-          (diary) => diary.emotion == null && diary.emotionLoading
+          (diary) => 
+            (diary.emotion === null || diary.emotion === undefined) && 
+            diary.emotionLoading &&
+            !analyzedIds.has(diary.id)
         );
 
         if (diariesToAnalyze.length > 0) {
@@ -303,7 +322,9 @@ export default function DiariesPage() {
           // 백엔드에서 감정 정보를 포함해서 반환하므로 캐시 확인 불필요
           const newDiariesWithEmotion: DiaryWithEmotion[] = newDiaries.map((diary) => {
             // 백엔드 DB에 감정 정보가 있으면 사용
-            const hasEmotion = diary.emotion != null;
+            // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주
+            // emotion: 0 (평가불가)도 이미 분석된 것으로 간주
+            const hasEmotion = diary.emotion !== null && diary.emotion !== undefined;
             return {
               ...diary,
               emotionLoading: !hasEmotion, // 백엔드에 감정 정보가 없을 때만 로딩 표시
@@ -314,8 +335,13 @@ export default function DiariesPage() {
 
           // 백엔드에서 감정 정보를 포함해서 반환하므로 프론트엔드에서 추가 분석 불필요
           // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
+          // emotion이 null이거나 undefined인 경우에만 분석 (0은 이미 분석된 것으로 간주)
+          // 이미 analyzedIds에 포함된 일기는 제외
           const diariesToAnalyze = newDiariesWithEmotion.filter(
-            (diary) => diary.emotion == null && diary.emotionLoading
+            (diary) => 
+              (diary.emotion === null || diary.emotion === undefined) && 
+              diary.emotionLoading &&
+              !analyzedIds.has(diary.id)
           );
 
           if (diariesToAnalyze.length > 0) {
@@ -387,7 +413,8 @@ export default function DiariesPage() {
   // 감정에 따른 이모티콘 반환
   const getEmotionEmoji = (diary: DiaryWithEmotion): string => {
     // DB에서 가져온 감정 정보 우선 사용
-    if (diary.emotion != null) {
+    // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
+    if (diary.emotion !== null && diary.emotion !== undefined) {
       const emotionMap: Record<number, string> = {
         0: "😐", // 평가불가
         1: "😊", // 기쁨
@@ -396,6 +423,14 @@ export default function DiariesPage() {
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
+        7: "🤝", // 신뢰
+        8: "✨", // 기대
+        9: "😰", // 불안
+        10: "😌", // 안도
+        11: "😔", // 후회
+        12: "💭", // 그리움
+        13: "🙏", // 감사
+        14: "😞", // 외로움
       };
       const emoji = emotionMap[diary.emotion] || "😐";
       // 디버깅: emotion 값과 매핑된 이모지 확인
@@ -415,6 +450,14 @@ export default function DiariesPage() {
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
+        7: "🤝", // 신뢰
+        8: "✨", // 기대
+        9: "😰", // 불안
+        10: "😌", // 안도
+        11: "😔", // 후회
+        12: "💭", // 그리움
+        13: "🙏", // 감사
+        14: "😞", // 외로움
       };
       const emoji = emotionMap[diary.emotionResponse.emotion] || "😐";
       if (process.env.NODE_ENV === 'development') {

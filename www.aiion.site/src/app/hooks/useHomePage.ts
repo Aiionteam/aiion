@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { TTSService } from '../../lib/utils/tts';
 import {
   Interaction,
   Category,
@@ -29,6 +30,8 @@ export const useHomePage = () => {
   const [avatarMode, setAvatarMode] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false); // TTS 재생 중 여부
+  const [aiResponse, setAiResponse] = useState<string>(''); // AI 응답 상태 (아바타 비디오 재생용)
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   // 사용자별 localStorage 키 생성
@@ -298,13 +301,41 @@ export const useHomePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarMode]);
 
-  const speakResponse = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ko-KR';
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+  const speakResponse = async (text: string) => {
+    if (!avatarMode) return;
+    
+    try {
+      setIsSpeaking(true);
+      
+      // 현재는 Web Speech API만 사용 (TTS API는 준비만 해둠)
+      // 향후 환경변수 NEXT_PUBLIC_TTS_SERVICE로 google, azure, clova 선택 가능
+      const ttsService = (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_TTS_SERVICE) 
+        ? (process.env.NEXT_PUBLIC_TTS_SERVICE as TTSService)
+        : 'web'; // 기본값: Web Speech API
+      
+      // TTS 서비스 사용
+      const { speakText } = await import('../../lib/utils/tts');
+      await speakText(text, {
+        service: ttsService,
+        language: 'ko-KR',
+        speed: 1.0,
+        pitch: 1.0,
+      });
+    } catch (error) {
+      console.error('TTS 재생 실패:', error);
+      // TTS 실패 시 Web Speech API로 fallback
+      try {
+        const { speakWithWebTTS } = await import('../../lib/utils/tts');
+        await speakWithWebTTS(text, {
+          language: 'ko-KR',
+          speed: 1.0,
+          pitch: 1.0,
+        });
+      } catch (fallbackError) {
+        console.error('Web TTS fallback 실패:', fallbackError);
+      }
+    } finally {
+      setIsSpeaking(false);
     }
   };
 
@@ -341,7 +372,7 @@ export const useHomePage = () => {
     // 현재는 카테고리 자동 분류 기능 비활성화
     const categories: string[] = [];
 
-    let aiResponse = ''; // 기본값은 빈 문자열로 설정
+    let currentAiResponse = ''; // 기본값은 빈 문자열로 설정
     let chatResponse: any = null; // 챗봇 응답 변수 (스코프 밖에서도 사용)
 
     // ✅ 모든 요청을 챗봇으로 전달 (키워드 감지 로직 제거)
@@ -396,17 +427,17 @@ export const useHomePage = () => {
 
         // 응답 처리
         if (chatResponse.error) {
-          aiResponse = chatResponse.error || 'AI 응답을 받을 수 없습니다.';
+          currentAiResponse = chatResponse.error || 'AI 응답을 받을 수 없습니다.';
           console.error('[useHomePage] ❌ 챗봇 응답 에러:', chatResponse.error);
         } else if (!chatResponse.data) {
-          aiResponse = 'AI 응답 데이터가 없습니다.';
+          currentAiResponse = 'AI 응답 데이터가 없습니다.';
           console.error('[useHomePage] ❌ 챗봇 응답 데이터 없음');
         } else if (chatResponse.data.message) {
           // ✅ 메시지가 있으면 먼저 설정
-          aiResponse = chatResponse.data.message;
-          console.log('[useHomePage] ✅ 챗봇 응답 메시지:', aiResponse.substring(0, 100));
+          currentAiResponse = chatResponse.data.message;
+          console.log('[useHomePage] ✅ 챗봇 응답 메시지:', currentAiResponse.substring(0, 100));
         } else {
-          aiResponse = '응답을 생성할 수 없습니다.';
+          currentAiResponse = '응답을 생성할 수 없습니다.';
           console.error('[useHomePage] ❌ 챗봇 응답 메시지 없음:', chatResponse.data);
         }
 
@@ -443,7 +474,7 @@ export const useHomePage = () => {
                 try {
                   const diaryResponse = await createDiaryMutation.mutateAsync(newDiary);
                   // 일기 저장 성공 시 메시지 추가
-                  aiResponse = `${aiResponse}\n\n✅ 일기가 저장되었습니다!`;
+                  currentAiResponse = `${currentAiResponse}\n\n✅ 일기가 저장되었습니다!`;
                   console.log('[useHomePage] ✅ 일기 저장 성공:', diaryResponse);
                 } catch (diaryError) {
                   // 일기 저장 실패해도 원래 AI 응답은 유지
@@ -476,12 +507,12 @@ export const useHomePage = () => {
         }
       } catch (error) {
         console.error('[useHomePage] ❌ AI 챗봇 호출 중 오류:', error);
-        aiResponse = `AI 챗봇과 통신하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`;
+        currentAiResponse = `AI 챗봇과 통신하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`;
       }
 
-    // ✅ aiResponse가 빈 문자열이면 경고 로그 출력
-    if (!aiResponse || aiResponse.trim() === '') {
-      console.warn('[useHomePage] ⚠️ aiResponse가 비어있습니다!', {
+    // ✅ currentAiResponse가 빈 문자열이면 경고 로그 출력
+    if (!currentAiResponse || currentAiResponse.trim() === '') {
+      console.warn('[useHomePage] ⚠️ currentAiResponse가 비어있습니다!', {
         submitText,
         chatResponse: chatResponse ? {
           error: chatResponse.error,
@@ -490,7 +521,7 @@ export const useHomePage = () => {
         } : null
       });
       // 빈 응답 대신 기본 메시지 설정
-      aiResponse = '응답을 받지 못했습니다. 다시 시도해주세요.';
+      currentAiResponse = '응답을 받지 못했습니다. 다시 시도해주세요.';
     }
 
     const newInteraction: Interaction = {
@@ -499,7 +530,7 @@ export const useHomePage = () => {
       dayOfWeek: dayOfWeek,
       userInput: submitText,
       categories: categories.length > 0 ? categories : [],
-      aiResponse: aiResponse,
+      aiResponse: currentAiResponse,
     };
 
     console.log('[useHomePage] 📝 새 Interaction 생성:', {
@@ -519,6 +550,9 @@ export const useHomePage = () => {
 
     if (avatarMode) {
       speakResponse(newInteraction.aiResponse);
+      
+      // AI 응답 상태 업데이트 (아바타 비디오 재생용)
+      setAiResponse(currentAiResponse);
     }
   }, [inputText, avatarMode, interactions, diaries, user, createDiaryMutation]);
 
@@ -607,6 +641,10 @@ export const useHomePage = () => {
     // Handlers
     handleMicClick,
     handleSubmit,
+    
+    // AI Response (아바타 비디오 재생용)
+    aiResponse,
+    isSpeaking,
   };
 };
 
