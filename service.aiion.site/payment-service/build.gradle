@@ -1,0 +1,46 @@
+tasks {
+	bootJar {
+		enabled = true
+	}
+	jar {
+		enabled = false
+	}
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:2025.0.0"
+	}
+}
+
+dependencies {
+	// Spring Cloud
+	implementation 'org.springframework.cloud:spring-cloud-starter-config'
+	
+	// Spring Boot 스타터
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	
+	// Redis (Cache, Session, Pub/Sub)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	
+	// Database (PostgreSQL)
+	runtimeOnly 'org.postgresql:postgresql:42.7.3'
+	
+	// Swagger
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.2'
+	
+	// JWT (토큰 파싱용)
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+	
+	// HTTP Client (Toss Payments API 호출용)
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	
+	// Spring Boot DevTools
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+}
+

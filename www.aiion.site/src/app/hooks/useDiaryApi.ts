@@ -142,20 +142,29 @@ function diaryToModel(diary: Diary, userId?: number): DiaryModel {
 /**
  * 사용자별 일기 조회
  */
-export async function fetchDiariesByUserId(userId?: number): Promise<Diary[]> {
+export async function fetchDiariesByUserId(userId?: number, skipAuth: boolean = false): Promise<Diary[]> {
   // Gateway 라우팅: /diary/** → diary-service
   // 백엔드 컨트롤러: @RequestMapping("/diaries")
   // JWT 토큰 기반 조회: /diary/diaries/user (토큰에서 userId 자동 추출)
   // 또는 기존 방식: /diary/diaries/user/{userId} (하위 호환성)
   const endpoint = userId ? `/diary/diaries/user/${userId}` : `/diary/diaries/user`;
-  console.log('[fetchDiariesByUserId] API 호출 시작:', endpoint, userId ? `(userId: ${userId})` : '(JWT 토큰 기반)');
+  console.log('[fetchDiariesByUserId] API 호출 시작:', endpoint, userId ? `(userId: ${userId})` : '(JWT 토큰 기반)', skipAuth ? '(인증 스킵)' : '');
   
   try {
+    // 테스트 모드: skipAuth가 true이면 Authorization 헤더 제거
+    const headers: HeadersInit = {};
+    if (skipAuth) {
+      // Authorization 헤더를 명시적으로 제거하기 위해 빈 값 설정
+      // 실제로는 fetchJSONFromGateway에서 토큰을 추가하지 않도록 해야 함
+      console.log('[fetchDiariesByUserId] 테스트 모드: 인증 헤더 제거');
+    }
+    
     const response = await fetchJSONFromGateway<Messenger>(
       endpoint,
       {},
       {
         method: 'GET',
+        headers: skipAuth ? { 'Authorization': '' } : undefined, // 빈 Authorization 헤더로 덮어쓰기
       }
     );
 

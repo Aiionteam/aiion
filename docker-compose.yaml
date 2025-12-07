@@ -294,6 +294,10 @@ services:
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
+      # CSV 초기화 제어 (기본값: true, false로 설정하면 CSV 초기화 비활성화)
+      - CSV_INIT_ENABLED=${CSV_INIT_ENABLED:-true}
+      # 최소 데이터 개수 기준 (이 개수 이상이면 이미 초기화된 것으로 간주)
+      - CSV_INIT_MIN_COUNT=${CSV_INIT_MIN_COUNT:-100}
 
   account-service:
     build:
@@ -319,6 +323,36 @@ services:
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
       - JWT_SECRET=${JWT_SECRET}
+
+  payment-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./payment-service/Dockerfile
+    container_name: payment-service
+    ports:
+      - "8091:8091"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
+      - TOSS_PAYMENTS_SECRET_KEY=${TOSS_PAYMENTS_SECRET_KEY}
+      - TOSS_PAYMENTS_CLIENT_KEY=${TOSS_PAYMENTS_CLIENT_KEY}
+      - TOSS_PAYMENTS_TEST_MODE=${TOSS_PAYMENTS_TEST_MODE:-true}
+      - CSV_INIT_ENABLED=${CSV_INIT_ENABLED:-true}
+      - CSV_INIT_MIN_COUNT=${CSV_INIT_MIN_COUNT:-5}
   # ===================
   # Client Layer
   # ===================
