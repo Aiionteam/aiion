@@ -7,3 +7,10 @@ assets/
 # ML Service - Model files (large files, can be regenerated)
 ai.aiion.site/ml_service/app/diary_emotion/models/
 *.pkl
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
