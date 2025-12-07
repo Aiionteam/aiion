@@ -169,6 +169,9 @@ export const useLoginStore = create<LoginState>((set, get) => ({
         return;
       }
       
+      // 팝업 상태 확인을 위한 변수들 (스코프 문제 해결)
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       // Callback 페이지에서 메시지 수신 대기
       const messageListener = async (event: MessageEvent) => {
         // 보안: 같은 origin에서 온 메시지만 처리
@@ -201,10 +204,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             }
             
             // 팝업 닫기 (아직 열려있으면)
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
             
             // 블로그로 이동
             if (typeof window !== "undefined") {
@@ -229,10 +240,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             });
             
             alert("로그인 실패: " + errorMsg);
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
           }
         }
         
@@ -244,23 +263,29 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             error: errorMsg,
           });
           alert("로그인 실패: " + errorMsg);
-          if (popup && !popup.closed) {
-            popup.close();
+          try {
+            if (popup && !popup.closed) {
+              popup.close();
+            }
+          } catch (error) {
+            // COOP 정책으로 인한 오류는 무시
           }
           window.removeEventListener("message", messageListener);
+          // timeout 정리
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
         }
       };
       
       window.addEventListener("message", messageListener);
       
-      // 팝업이 닫혔는지 확인
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          window.removeEventListener("message", messageListener);
-          set({ isLoading: false, loadingType: null });
-        }
-      }, 1000);
+      // 사용자가 팝업을 수동으로 닫은 경우를 대비한 타임아웃 (5분)
+      // COOP 정책으로 인해 popup.closed를 체크할 수 없으므로 타임아웃만 사용
+      timeoutId = setTimeout(() => {
+        window.removeEventListener("message", messageListener);
+        set({ isLoading: false, loadingType: null });
+      }, 5 * 60 * 1000); // 5분
       
     } catch (error: any) {
       console.error("Google login error:", error);
@@ -314,6 +339,9 @@ export const useLoginStore = create<LoginState>((set, get) => ({
         return;
       }
       
+      // 팝업 상태 확인을 위한 변수들 (스코프 문제 해결)
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       // Callback 페이지에서 메시지 수신 대기
       const messageListener = async (event: MessageEvent) => {
         // 보안: 같은 origin에서 온 메시지만 처리
@@ -346,10 +374,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             }
             
             // 팝업 닫기 (아직 열려있으면)
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
             
             // 블로그로 이동
             if (typeof window !== "undefined") {
@@ -374,10 +410,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             });
             
             alert("로그인 실패: " + errorMsg);
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
           }
         }
         
@@ -389,23 +433,29 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             error: errorMsg,
           });
           alert("로그인 실패: " + errorMsg);
-          if (popup && !popup.closed) {
-            popup.close();
+          try {
+            if (popup && !popup.closed) {
+              popup.close();
+            }
+          } catch (error) {
+            // COOP 정책으로 인한 오류는 무시
           }
           window.removeEventListener("message", messageListener);
+          // timeout 정리
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
         }
       };
       
       window.addEventListener("message", messageListener);
       
-      // 팝업이 닫혔는지 확인
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          window.removeEventListener("message", messageListener);
-          set({ isLoading: false, loadingType: null });
-        }
-      }, 1000);
+      // 사용자가 팝업을 수동으로 닫은 경우를 대비한 타임아웃 (5분)
+      // COOP 정책으로 인해 popup.closed를 체크할 수 없으므로 타임아웃만 사용
+      timeoutId = setTimeout(() => {
+        window.removeEventListener("message", messageListener);
+        set({ isLoading: false, loadingType: null });
+      }, 5 * 60 * 1000); // 5분
       
     } catch (error: any) {
       console.error("Kakao login error:", error);
@@ -459,6 +509,9 @@ export const useLoginStore = create<LoginState>((set, get) => ({
         return;
       }
       
+      // 팝업 상태 확인을 위한 변수들 (스코프 문제 해결)
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       // Callback 페이지에서 메시지 수신 대기
       const messageListener = async (event: MessageEvent) => {
         // 보안: 같은 origin에서 온 메시지만 처리
@@ -491,10 +544,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             }
             
             // 팝업 닫기 (아직 열려있으면)
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
             
             // 블로그로 이동
             if (typeof window !== "undefined") {
@@ -519,10 +580,18 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             });
             
             alert("로그인 실패: " + errorMsg);
-            if (popup && !popup.closed) {
-              popup.close();
+            try {
+              if (popup && !popup.closed) {
+                popup.close();
+              }
+            } catch (error) {
+              // COOP 정책으로 인한 오류는 무시
             }
             window.removeEventListener("message", messageListener);
+            // timeout 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
           }
         }
         
@@ -534,23 +603,29 @@ export const useLoginStore = create<LoginState>((set, get) => ({
             error: errorMsg,
           });
           alert("로그인 실패: " + errorMsg);
-          if (popup && !popup.closed) {
-            popup.close();
+          try {
+            if (popup && !popup.closed) {
+              popup.close();
+            }
+          } catch (error) {
+            // COOP 정책으로 인한 오류는 무시
           }
           window.removeEventListener("message", messageListener);
+          // timeout 정리
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
         }
       };
       
       window.addEventListener("message", messageListener);
       
-      // 팝업이 닫혔는지 확인
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          window.removeEventListener("message", messageListener);
-          set({ isLoading: false, loadingType: null });
-        }
-      }, 1000);
+      // 사용자가 팝업을 수동으로 닫은 경우를 대비한 타임아웃 (5분)
+      // COOP 정책으로 인해 popup.closed를 체크할 수 없으므로 타임아웃만 사용
+      timeoutId = setTimeout(() => {
+        window.removeEventListener("message", messageListener);
+        set({ isLoading: false, loadingType: null });
+      }, 5 * 60 * 1000); // 5분
       
     } catch (error: any) {
       console.error("Naver login error:", error);

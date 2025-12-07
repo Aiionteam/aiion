@@ -411,6 +411,22 @@ class DiaryEmotionService:
             # 키워드 기반 가중치 보정
             probabilities = self._apply_keyword_weights(text, probabilities, emotion_labels)
             
+            # 평가불가 확률 추가 감소: 다른 감정의 확률이 높으면 평가불가 확률을 더 낮춤
+            if len(probabilities) > 0:
+                # 평가불가(0번)를 제외한 다른 감정의 최대 확률
+                other_emotions_probs = probabilities[1:] if len(probabilities) > 1 else []
+                if len(other_emotions_probs) > 0:
+                    max_other_emotion_prob = float(np.max(other_emotions_probs))
+                    cannot_evaluate_prob = float(probabilities[0])
+                    
+                    # 다른 감정의 최대 확률이 평가불가 확률보다 높거나 비슷하면 평가불가 확률 감소
+                    if max_other_emotion_prob >= cannot_evaluate_prob * 0.8:
+                        # 평가불가 확률을 20% 감소
+                        probabilities[0] = probabilities[0] * 0.8
+                        # 정규화
+                        probabilities = probabilities / (probabilities.sum() + 1e-10)
+                        ic(f"다른 감정 확률이 높음 ({max_other_emotion_prob:.3f} vs {cannot_evaluate_prob:.3f}), 평가불가 확률 20% 감소")
+            
             # 최대 확률과 해당 클래스 찾기
             max_prob_idx = int(np.argmax(probabilities))
             max_prob = float(probabilities[max_prob_idx])
@@ -420,22 +436,46 @@ class DiaryEmotionService:
             
             # 확률 임계값 설정
             CONFIDENCE_THRESHOLD = 0.3
-            MIN_CONFIDENCE_FOR_EVALUATION = 0.1  # 평가 가능한 최소 확률 (10% 이상이면 평가 가능)
+            MIN_CONFIDENCE_FOR_EVALUATION = 0.15  # 평가 가능한 최소 확률 (15% 이상이면 평가 가능)
+            CANNOT_EVALUATE_THRESHOLD = 0.5  # 평가불가로 판단하는 최소 확률 (50% 이상이어야 평가불가로 판단)
             
-            # 1. 최대 확률이 평가불가(0)인 경우만 특별 처리
+            # 1. 최대 확률이 평가불가(0)인 경우 특별 처리
             if max_prob_idx == 0:
-                # 평가불가가 가장 높은 확률이면 평가불가로 판단
-                final_prediction = 0
-                final_label = '평가불가'
-                ic(f"평가불가가 최대 확률 ({max_prob:.3f}): 평가불가로 판단")
-            # 3. 최대 확률이 충분히 높으면 모델 예측 사용 (우선순위 높음)
+                # 평가불가가 가장 높은 확률이지만, 확률이 충분히 높아야만 평가불가로 판단
+                if max_prob >= CANNOT_EVALUATE_THRESHOLD:
+                    # 평가불가 확률이 50% 이상이면 평가불가로 판단
+                    final_prediction = 0
+                    final_label = '평가불가'
+                    ic(f"평가불가가 최대 확률 ({max_prob:.3f})이고 임계값({CANNOT_EVALUATE_THRESHOLD}) 이상: 평가불가로 판단")
+                else:
+                    # 평가불가 확률이 낮으면 두 번째로 높은 감정 확인
+                    sorted_indices = np.argsort(probabilities)[::-1]
+                    if len(sorted_indices) > 1 and len(probabilities) > 1:
+                        second_max_idx = int(sorted_indices[1])
+                        if 0 <= second_max_idx < len(probabilities):
+                            second_max_prob = float(probabilities[second_max_idx])
+                            # 두 번째 감정의 확률이 일정 수준 이상이면 그 감정 선택
+                            if second_max_prob >= MIN_CONFIDENCE_FOR_EVALUATION and second_max_idx != 0:
+                                final_prediction = second_max_idx
+                                final_label = emotion_labels.get(second_max_idx, f'클래스{second_max_idx}')
+                                ic(f"평가불가 확률 낮음 ({max_prob:.3f}), 두 번째 감정 선택: {final_label} ({second_max_prob:.3f})")
+                            else:
+                                # 두 번째 감정도 확률이 낮으면 평가불가
+                                final_prediction = 0
+                                final_label = '평가불가'
+                                ic(f"평가불가가 최대 확률이지만 낮음 ({max_prob:.3f}), 다른 감정도 낮음: 평가불가로 판단")
+                    else:
+                        final_prediction = 0
+                        final_label = '평가불가'
+                        ic(f"평가불가가 최대 확률 ({max_prob:.3f}): 평가불가로 판단")
+            # 2. 최대 확률이 충분히 높으면 모델 예측 사용 (우선순위 높음)
             elif max_prob >= CONFIDENCE_THRESHOLD:
                 final_prediction = max_prob_idx
                 final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
                 ic(f"최대 확률 충분 ({max_prob:.3f}): {final_label}로 판단")
             # 3. 최대 확률이 낮은 경우에도 모델 예측 사용 (모델이 학습 데이터로 판단)
             elif max_prob >= MIN_CONFIDENCE_FOR_EVALUATION:
-                # 모델 예측 사용 (최대 확률이 10% 이상이면)
+                # 모델 예측 사용 (최대 확률이 15% 이상이면)
                 final_prediction = max_prob_idx
                 final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
                 ic(f"모델 예측 사용: {final_label} ({max_prob:.3f})")
@@ -508,43 +548,26 @@ class DiaryEmotionService:
         
         # 감정별 키워드 및 가중치 정의
         keyword_weights = {
-            # 평가불가 (중립적 내용: 공문서, 메모, 단순 기록) - 가중치 +1
+            # 평가불가 (중립적 내용: 공문서, 메모, 단순 기록) - 매우 제한적으로만 적용
             0: {  # 평가불가
                 'keywords': [
-                    # 공문서/공무 관련
-                    '공문', '공무', '공무를', '공무를 봤다', '공무를 보았다', '공무를 본', '공무를 보고',
-                    '문서', '문서를', '문서 작성', '문서 작성했다', '문서를 작성',
-                    '보고', '보고했다', '보고하', '보고서', '보고를', '보고서를',
-                    '시행', '시달', '결재', '승인', '결재했다', '승인했다',
-                    '회의록', '회의', '회의를', '회의했다', '회의를 했다', '회의를 진행',
-                    '안건', '안건을', '안건 처리', '안건을 처리',
-                    '공문을 써', '공문을 보냈다', '공문을 작성',
+                    # 공문서/공무 관련 (구체적인 공식 용어만)
+                    '공문', '공무를', '공무를 봤다', '공무를 보았다', '공무를 본', '공무를 보고',
+                    '공문서', '공문을', '공문을 써', '공문을 보냈다', '공문을 작성',
                     '동헌에 나가', '동헌에서', '동헌에',
-                    # 메모/기록 관련
-                    '메모', '메모를', '메모했다', '메모를 했다', '메모를 작성',
-                    '기록', '기록했다', '기록을', '기록을 했다', '기록을 작성',
-                    '작성', '작성했다', '작성했다', '작성했다', '작성했다',
-                    '적었다', '적었다', '적었다', '적었다',
-                    # 단순 사실 기록 (감정 없음)
-                    '나갔다', '왔다', '갔다', '보았다', '봤다', '본', '보고',
-                    '점검', '점검했다', '점검을', '점검을 했다',
-                    '처리', '처리했다', '처리를', '처리를 했다',
-                    '확인', '확인했다', '확인을', '확인을 했다',
-                    # 날씨/상태 기록 (단순 사실)
-                    '맑다', '비가', '눈이', '날씨', '날씨가',
-                    # 중립적 행동
-                    '이야기했다', '이야기를', '이야기를 했다',
-                    '만났다', '만나', '만나서',
-                    '받았다', '받아', '받아서',
-                    '보냈다', '보내', '보내서',
+                    # 문서/보고서 관련 (공식적인 용어만)
+                    '문서 작성', '문서 작성했다', '문서를 작성',
+                    '보고서', '보고서를', '보고를 작성',
+                    '시행', '시달', '결재', '승인', '결재했다', '승인했다',
+                    '회의록', '회의를 진행', '회의를 했다',
+                    '안건', '안건을', '안건 처리', '안건을 처리',
+                    # 메모/기록 관련 (공식적인 용어만)
+                    '메모를 작성', '메모를 했다',
+                    '기록을 작성', '기록을 했다',
                     # 공식적/업무적 표현
-                    '부임', '부임했다', '부임하여',
-                    '인사', '인사하러', '인사를',
-                    '점검', '점검했다', '점검을',
-                    '보고', '보고했다', '보고를',
-                    '처리', '처리했다', '처리를'
+                    '부임', '부임했다', '부임하여'
                 ],
-                'weight': 1.0  # 중립적 가중치
+                'weight': 0.1  # 가중치 대폭 낮춤 (0.3 -> 0.1): 평가불가 판정을 최소화
             },
             # 긍정적 감정 (기쁨, 감사, 신뢰, 기대, 안도) - 가중치 +1
             1: {  # 기쁨
@@ -552,6 +575,8 @@ class DiaryEmotionService:
                     # 기본 긍정 표현
                     '행복', '즐거움', '기쁨', '신남', '설렘', '웃음', '웃었다', '웃고', '즐겁', '재미있', '재밌', 
                     '좋았', '좋다', '좋아', '만족', '기쁘', '신나', '즐거', '행복하', '행복한',
+                    '기분 좋', '기분 좋았', '기분 좋다', '기분 좋아', '기분이 좋', '기분이 좋았', '기분이 좋다',
+                    '맛있', '맛있어', '맛있었', '맛있다', '맛있네', '맛있고',
                     # 비속어/신조어 - 긍정 강조 표현
                     '개좋', '개쩐', '개재밌', '개신나', '개만족', '개행복', '개즐거', '개기쁨', '개웃김', '개웃겨',
                     '존나좋', '존나좋아', '존나좋다', '존맛', '존맛탱', '존재밌', '존신나', '존만족', '존행복',
@@ -586,6 +611,7 @@ class DiaryEmotionService:
                 'keywords': [
                     # 기본 슬픔 표현
                     '슬프', '슬픔', '눈물', '울었', '울고', '슬퍼', '슬펐', '슬프다', '슬퍼서', '눈물이', '눈물을', '우울', '우울하', '우울한', '슬프네', '슬프고',
+                    '아쉬', '아쉬워', '아쉬웠', '아쉬웠다', '아쉽', '아쉽다', '아쉬워서', '아쉬웠어',
                     # 비속어/신조어 - 슬픔 강조 표현
                     '개슬프', '개우울', '개눈물', '개슬퍼',
                     '존나슬프', '존나우울', '존나눈물',
@@ -680,16 +706,64 @@ class DiaryEmotionService:
             # 키워드 매칭 개수 계산
             match_count = sum(1 for keyword in keywords if keyword in text_lower)
             
+            # Word2Vec 유사도 기반 가중치 계산 (키워드 매칭이 없거나 적을 때 보완)
+            similarity_score = 0.0
+            if self.use_word2vec and self.model_obj.word2vec_model is not None:
+                try:
+                    # 텍스트를 단어 리스트로 변환
+                    text_words = simple_preprocess(text_lower, deacc=True, min_len=1)
+                    
+                    # 각 감정 키워드와 입력 텍스트 단어 간의 유사도 계산
+                    similarities = []
+                    for keyword in keywords:
+                        if keyword not in self.model_obj.word2vec_model.wv:
+                            continue
+                        for word in text_words:
+                            if word in self.model_obj.word2vec_model.wv:
+                                try:
+                                    sim = self.model_obj.word2vec_model.wv.similarity(keyword, word)
+                                    if sim > 0.3:  # 유사도 임계값 (0.3 이상만 사용)
+                                        similarities.append(sim)
+                                except KeyError:
+                                    continue
+                    
+                    if similarities:
+                        # 최대 유사도 사용 (또는 평균 유사도)
+                        similarity_score = max(similarities) * 0.5  # 유사도 가중치 (0.5배 적용)
+                        ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: Word2Vec 유사도 {similarity_score:.3f} (최대 {max(similarities):.3f})")
+                except Exception as e:
+                    ic(f"Word2Vec 유사도 계산 오류: {e}")
+            
+            # 키워드 매칭과 Word2Vec 유사도 결합
             if match_count > 0:
                 # 키워드가 발견되면 가중치 적용 (매칭 개수에 비례)
-                weight_scores[emotion_id] = match_count * weight
-                ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: {match_count}개 키워드 매칭, 가중치 {weight_scores[emotion_id]}")
+                weight_scores[emotion_id] = match_count * weight + similarity_score
+                ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: {match_count}개 키워드 매칭, 가중치 {weight_scores[emotion_id]:.3f}")
+            elif similarity_score > 0:
+                # 키워드 매칭은 없지만 Word2Vec 유사도가 있으면 가중치 적용
+                weight_scores[emotion_id] = similarity_score * weight
+                ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: 키워드 매칭 없음, Word2Vec 유사도만 적용, 가중치 {weight_scores[emotion_id]:.3f}")
         
         # 가중치를 확률에 적용 (소프트맥스 방식)
         if weight_scores.sum() > 0:
             # 가중치를 정규화하여 확률에 더함
-            normalized_weights = weight_scores / (weight_scores.sum() + 1e-10) * 0.15  # 최대 15% 보정
+            normalized_weights = weight_scores / (weight_scores.sum() + 1e-10) * 0.25  # 최대 25% 보정 (15% -> 25%로 증가)
             adjusted_probs = probabilities + normalized_weights
+            
+            # 평가불가 확률 추가 감소: 다른 감정 키워드가 발견되면 평가불가 확률을 더 낮춤
+            if len(probabilities) > 0:
+                # 평가불가(0번)를 제외한 다른 감정의 가중치 합 계산
+                other_emotions_weight = weight_scores[1:].sum() if len(weight_scores) > 1 else 0
+                
+                # 다른 감정 키워드가 발견되었고 평가불가 키워드가 없으면 평가불가 확률 감소
+                if other_emotions_weight > 0 and weight_scores[0] == 0:
+                    # 평가불가 확률을 30% 감소
+                    adjusted_probs[0] = adjusted_probs[0] * 0.7
+                    ic(f"다른 감정 키워드 발견 ({other_emotions_weight:.2f}), 평가불가 확률 30% 감소")
+                elif other_emotions_weight > weight_scores[0] * 2:
+                    # 다른 감정 키워드가 평가불가 키워드보다 2배 이상 많으면 평가불가 확률 20% 감소
+                    adjusted_probs[0] = adjusted_probs[0] * 0.8
+                    ic(f"다른 감정 키워드가 우세 ({other_emotions_weight:.2f} vs {weight_scores[0]:.2f}), 평가불가 확률 20% 감소")
             
             # 확률이 1을 넘지 않도록 정규화
             adjusted_probs = adjusted_probs / (adjusted_probs.sum() + 1e-10)

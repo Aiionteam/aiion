@@ -15,6 +15,7 @@ export default function DiariesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzedIds, setAnalyzedIds] = useState<Set<number>>(new Set());
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // 기본값: 내림차순 (최신순)
   const scrollRestored = useRef(false);
   const listContainerRef = useRef<HTMLDivElement>(null);
 
@@ -227,7 +228,14 @@ export default function DiariesPage() {
           };
         });
         
-        setDiaries(diariesWithEmotion);
+        // 날짜 기준으로 정렬 (기본값: 내림차순)
+        const sortedDiaries = [...diariesWithEmotion].sort((a, b) => {
+          const dateA = new Date(a.diaryDate).getTime();
+          const dateB = new Date(b.diaryDate).getTime();
+          return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+        });
+        
+        setDiaries(sortedDiaries);
 
         // 백엔드에서 감정 정보를 포함해서 반환하므로 프론트엔드에서 추가 분석 불필요
         // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
@@ -341,7 +349,14 @@ export default function DiariesPage() {
             };
           });
 
-          setDiaries((prev) => [...newDiariesWithEmotion, ...prev]);
+          // 새 일기 추가 후 정렬
+          const updatedDiaries = [...newDiariesWithEmotion, ...diaries];
+          const sortedUpdatedDiaries = updatedDiaries.sort((a, b) => {
+            const dateA = new Date(a.diaryDate).getTime();
+            const dateB = new Date(b.diaryDate).getTime();
+            return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+          });
+          setDiaries(sortedUpdatedDiaries);
 
           // 백엔드에서 감정 정보를 포함해서 반환하므로 프론트엔드에서 추가 분석 불필요
           // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
@@ -501,6 +516,20 @@ export default function DiariesPage() {
     return "";
   };
 
+  // 정렬 순서 토글
+  const toggleSortOrder = () => {
+    const newSortOrder = sortOrder === "desc" ? "asc" : "desc";
+    setSortOrder(newSortOrder);
+    
+    // 일기 리스트 재정렬
+    const sortedDiaries = [...diaries].sort((a, b) => {
+      const dateA = new Date(a.diaryDate).getTime();
+      const dateB = new Date(b.diaryDate).getTime();
+      return newSortOrder === "desc" ? dateB - dateA : dateA - dateB;
+    });
+    setDiaries(sortedDiaries);
+  };
+
   // 감정에 따른 이모티콘 반환 (1위만)
   const getEmotionEmoji = (diary: DiaryWithEmotion): string => {
     // DB에서 가져온 감정 정보 우선 사용
@@ -557,27 +586,66 @@ export default function DiariesPage() {
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors"
-            aria-label="뒤로가기"
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="뒤로가기"
             >
-              <path d="M19 12H5" />
-              <path d="M12 19l-7-7 7-7" />
-            </svg>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M19 12H5" />
+                <path d="M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h1 className="text-xl font-semibold text-gray-900">일기 리스트</h1>
+          </div>
+          {/* 정렬 버튼 */}
+          <button
+            onClick={toggleSortOrder}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm text-gray-700"
+            aria-label={sortOrder === "desc" ? "오름차순 정렬" : "내림차순 정렬"}
+          >
+            {sortOrder === "desc" ? (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M7 13l5 5 5-5" />
+                <path d="M7 6l5-5 5 5" />
+              </svg>
+            ) : (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M7 6l5 5 5-5" />
+                <path d="M7 13l5 5 5-5" />
+              </svg>
+            )}
+            <span>{sortOrder === "desc" ? "최신순" : "과거순"}</span>
           </button>
-          <h1 className="text-xl font-semibold text-gray-900">일기 리스트</h1>
         </div>
       </header>
 
