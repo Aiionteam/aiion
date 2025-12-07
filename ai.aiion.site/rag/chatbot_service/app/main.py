@@ -238,6 +238,52 @@ def is_weather_related(message: str, intent_result: dict = None) -> bool:
     
     return False
 
+# 가계부 관련 키워드 감지 함수 (날씨와 동일한 패턴)
+def is_account_related(message: str, intent_result: dict = None) -> bool:
+    """사용자 메시지가 가계부/결제 관련인지 확인 (키워드 우선 + NLP 폴백)
+    
+    Args:
+        message: 사용자 메시지
+        intent_result: 이미 분류된 의도 결과 (선택사항, 있으면 재사용)
+    
+    키워드 기반으로 먼저 빠르게 체크하고, 불명확한 경우에만 GPT를 사용합니다.
+    """
+    # 이미 분류된 의도 결과가 있으면 재사용
+    if intent_result and intent_result.get("intent") == "finance" and intent_result.get("confidence", 0) >= 0.5:
+        print(f"[가계부 감지] NLP 기반 (재사용): {message} → finance (confidence: {intent_result.get('confidence'):.2f})")
+        return True
+    
+    # 신뢰도가 낮거나 GPT 결과가 없으면 키워드 방식 폴백
+    message_lower = message.lower()
+    
+    # 기본 가계부 키워드
+    basic_account_keywords = [
+        '가계부', '지출', '수입', '결제', '구매', '내역', '주문',
+        '얼마', '썼어', '썼다', '쓴', '쓸', '쓰고', '쓰는',
+        '돈', '금액', '비용', '요금', '값', '가격',
+        '카드', '현금', '계좌이체', '이체'
+    ]
+    
+    # 명시적인 가계부 키워드
+    explicit_account_keywords = [
+        '가계부 조회', '가계부 알려줘', '가계부 보여줘',
+        '지출 내역', '결제 내역', '구매 내역', '주문 내역',
+        '이번 달 얼마', '이번달 얼마', '이번 달 지출', '이번달 지출',
+        '월별 지출', '카테고리별 지출', '식비 얼마', '교통비 얼마'
+    ]
+    
+    # 기본 키워드가 있으면 가계부 요청으로 인식
+    if any(keyword in message_lower for keyword in basic_account_keywords):
+        print(f"[가계부 감지] 키워드 기반: {message} → account")
+        return True
+    
+    # 명시적인 가계부 키워드가 있으면 가계부 요청으로 인식
+    if any(keyword in message_lower for keyword in explicit_account_keywords):
+        print(f"[가계부 감지] 키워드 기반: {message} → account")
+        return True
+    
+    return False
+
 # 지역 코드 매핑 (확장된 버전 - 더 많은 지역 지원)
 REGION_CODES = {
     '서울': {'stnId': '108', 'nx': 60, 'ny': 127},
@@ -576,6 +622,104 @@ def get_weather_info(region_info: dict, date_range: dict = None) -> str:
         import traceback
         traceback.print_exc()
         return "날씨 정보 조회 중 오류가 발생했습니다."
+
+# ========== 가계부 정보 조회 함수 ==========
+
+def get_account_info(user_id: int, date_range: dict = None) -> str:
+    """account-service에서 가계부 정보 조회
+    
+    Args:
+        user_id: 사용자 ID
+        date_range: 날짜 범위 정보 (선택사항)
+    
+    Returns:
+        가계부 정보를 읽기 쉬운 형식으로 변환한 문자열
+    """
+    try:
+        # account-service URL (Docker 네트워크 내부)
+        account_url = f"http://account-service:8089/accounts/user/{user_id}"
+        print(f"[챗봇] 💰 가계부 정보 조회 시작: {account_url}")
+        
+        response = requests.get(account_url, timeout=10)
+        print(f"[챗봇] 💰 가계부 API 응답 상태: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 200:
+                accounts = data.get("data", [])
+                if accounts:
+                    return format_account_info(accounts, date_range)
+                else:
+                    return "가계부 데이터가 없습니다."
+            else:
+                return f"가계부 조회 실패: {data.get('message', '알 수 없는 오류')}"
+        else:
+            return f"가계부 조회 실패: HTTP {response.status_code}"
+            
+    except requests.exceptions.Timeout:
+        print(f"[챗봇] 💰 Account API timeout")
+        return "가계부 정보 조회 중 시간이 초과되었습니다."
+    except requests.exceptions.RequestException as e:
+        print(f"[챗봇] 💰 Account API error: {e}")
+        return "가계부 정보 조회 중 오류가 발생했습니다."
+    except Exception as e:
+        print(f"[챗봇] 💰 Account integration error: {e}")
+        import traceback
+        traceback.print_exc()
+        return "가계부 정보 조회 중 오류가 발생했습니다."
+
+def format_account_info(accounts: list, date_range: dict = None) -> str:
+    """가계부 데이터를 읽기 쉬운 형식으로 변환"""
+    try:
+        if not accounts:
+            return "가계부 데이터가 없습니다."
+        
+        # 날짜 범위 필터링 (선택사항)
+        filtered_accounts = accounts
+        if date_range and date_range.get('has_date'):
+            # 날짜 범위 필터링 로직 추가 가능
+            pass
+        
+        # 통계 계산
+        total_expense = sum(acc.get('amount', 0) for acc in filtered_accounts if acc.get('type') == 'EXPENSE')
+        total_income = sum(acc.get('amount', 0) for acc in filtered_accounts if acc.get('type') == 'INCOME')
+        
+        # 카테고리별 집계
+        category_expense = {}
+        for acc in filtered_accounts:
+            if acc.get('type') == 'EXPENSE':
+                category = acc.get('category', '기타')
+                amount = acc.get('amount', 0)
+                category_expense[category] = category_expense.get(category, 0) + amount
+        
+        # 결과 포맷팅
+        result = []
+        result.append("=" * 50)
+        result.append("가계부 정보")
+        result.append("=" * 50)
+        result.append(f"총 지출: {total_expense:,}원")
+        result.append(f"총 수입: {total_income:,}원")
+        result.append(f"순수익: {total_income - total_expense:,}원")
+        result.append("")
+        
+        if category_expense:
+            result.append("카테고리별 지출:")
+            # 금액 순으로 정렬
+            sorted_categories = sorted(category_expense.items(), key=lambda x: x[1], reverse=True)
+            for category, amount in sorted_categories[:10]:  # 상위 10개만
+                result.append(f"  - {category}: {amount:,}원")
+        
+        result.append("")
+        result.append(f"총 거래 건수: {len(filtered_accounts)}건")
+        result.append("=" * 50)
+        
+        return "\n".join(result)
+        
+    except Exception as e:
+        print(f"Format account error: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"가계부 정보 처리 중 오류가 발생했습니다: {str(e)}"
 
 def format_mid_weather_response(weather_data: dict) -> str:
     """중기예보 데이터를 읽기 쉬운 형식으로 변환"""
@@ -1896,9 +2040,10 @@ def save_classified_data(classification: Dict[str, Any], user_id: Optional[int] 
             return False
         
         elif category == "가계":
-            # 가계 서비스 저장 (서비스 준비되면 추가)
-            print(f"[챗봇] 가계 데이터 저장 예정 (서비스 준비 대기 중)")
-            # TODO: finance-service 준비되면 추가
+            # 가계부 기록 저장은 백엔드에서 직접 처리 (보안 및 트랜잭션 무결성)
+            # 챗봇은 가계부 정보 조회만 수행 (읽기 전용)
+            # 저장/수정/결제는 payment-service 또는 account-service에서 직접 처리
+            print(f"[챗봇] 가계부 기록 저장은 백엔드에서 직접 처리해야 합니다. (payment-service 또는 account-service)")
             return False
         
         elif category == "문화":
@@ -2003,6 +2148,10 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         quick_weather_keywords = ['날씨', '예보', '기온', '온도', '몇도', '비', '눈', '맑음', '흐림']
         quick_is_weather = any(keyword in message_lower for keyword in quick_weather_keywords)
         
+        # 가계부 키워드 빠른 체크
+        quick_account_keywords = ['가계부', '지출', '수입', '결제', '구매', '내역', '얼마', '썼어', '썼다', '돈', '금액']
+        quick_is_account = any(keyword in message_lower for keyword in quick_account_keywords)
+        
         # 일기 검색 키워드 빠른 체크
         quick_diary_search_keywords = ['일기 검색', '일기 찾아', '일기에서', '일기 조회', '에 관한 일기', '에 대한 일기']
         quick_is_diary_search = any(keyword in message_lower for keyword in quick_diary_search_keywords)
@@ -2015,7 +2164,7 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         entities = {}
         
         # 키워드로 명확하지 않은 경우에만 의도 분류 수행
-        needs_intent_classification = not quick_is_weather and not quick_is_diary_search
+        needs_intent_classification = not quick_is_weather and not quick_is_account and not quick_is_diary_search
         
         if needs_intent_classification:
             intent_result = classify_intent(request.message)
@@ -2032,6 +2181,13 @@ def chat_post(request: ChatRequest, http_request: Request = None):
             is_weather = True
         else:
             is_weather = is_weather_related(request.message, intent_result)
+        
+        # 가계부 관련 질문인지 확인 (키워드 우선, 필요시 NLP)
+        if quick_is_account:
+            is_account = True
+        else:
+            is_account = is_account_related(request.message, intent_result)
+        
         # 일기 검색 요청인지 확인
         is_diary_search = is_diary_search_request(request.message)
         # 일기 상세 조회 요청인지 확인
@@ -2040,8 +2196,9 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         # ✅ 날씨 질문이 아니고, 일기 검색/상세 조회 요청이 아니고, "일기" 키워드가 없을 때만 분류 시도
         needs_classification = not is_weather and not is_diary_search and not is_diary_detail and '일기' not in request.message.lower() and should_classify_as_diary(request.message)
         
-        # 병렬 처리: 날씨 API, 일기 검색, 분류를 동시에 실행
+        # 병렬 처리: 날씨 API, 가계부 API, 일기 검색, 분류를 동시에 실행
         weather_context = ""
+        account_context = ""
         diary_search_context = ""
         classification = None
         classification_context = ""
@@ -2080,6 +2237,50 @@ def chat_post(request: ChatRequest, http_request: Request = None):
                     return ""
             except Exception as e:
                 print(f"[챗봇] ❌ Weather integration error: {e}")
+                import traceback
+                traceback.print_exc()
+            return ""
+        
+        def fetch_account():
+            """가계부 정보 조회 (별도 스레드)"""
+            if not is_account:
+                return ""
+            
+            # userId 또는 jwtToken이 없으면 조회 불가
+            if not request.userId and not jwt_token:
+                print(f"[챗봇] 가계부 요청이지만 userId와 jwtToken이 모두 없음")
+                return "\n\n[가계부 조회 안내]\n로그인이 필요합니다. 가계부 조회를 위해서는 사용자 인증이 필요합니다."
+            
+            try:
+                # userId 추출
+                user_id = request.userId
+                if not user_id and jwt_token:
+                    # JWT 토큰에서 userId 추출 (간단한 파싱, 실제로는 JWT 라이브러리 사용 권장)
+                    # 여기서는 request.userId를 사용하거나 별도 파싱 필요
+                    print(f"[챗봇] JWT 토큰은 있지만 userId 추출 로직 필요")
+                    return "\n\n[가계부 조회 안내]\n사용자 ID가 필요합니다."
+                
+                if not user_id:
+                    return "\n\n[가계부 조회 안내]\n사용자 ID가 필요합니다."
+                
+                print(f"[챗봇] 💰 가계부 관련 질문 감지: {request.message}")
+                print(f"[챗봇] 💰 사용자 ID: {user_id}")
+                
+                # 날짜 범위 추출 (선택사항)
+                date_range = extract_date_range(request.message, entities.get('date'))
+                print(f"[챗봇] 💰 추출된 날짜 범위: {date_range}")
+                
+                account_info = get_account_info(user_id, date_range)
+                print(f"[챗봇] 💰 가계부 정보 조회 결과 (길이: {len(account_info) if account_info else 0}): {account_info[:200] if account_info else 'None'}...")
+                
+                if account_info and "조회 실패" not in account_info and "오류" not in account_info and "안내" not in account_info:
+                    print(f"[챗봇] ✅ 가계부 정보 조회 성공")
+                    return f"\n\n[가계부 정보]\n{account_info}\n\n⚠️ 중요: 위 가계부 정보는 account-service에서 가져온 실제 데이터입니다. 이 정보를 반드시 사용해서 답변해주세요. 추측은 사용하지 마세요!"
+                else:
+                    print(f"[챗봇] ⚠️ 가계부 정보 조회 실패 또는 오류: {account_info}")
+                    return ""
+            except Exception as e:
+                print(f"[챗봇] ❌ Account integration error: {e}")
                 import traceback
                 traceback.print_exc()
             return ""
@@ -2181,6 +2382,8 @@ def chat_post(request: ChatRequest, http_request: Request = None):
             futures = {}
             if is_weather:
                 futures['weather'] = executor.submit(fetch_weather)
+            if is_account:
+                futures['account'] = executor.submit(fetch_account)
             if is_diary_search or is_diary_detail:
                 futures['diary_search'] = executor.submit(fetch_diary_search)
             if needs_classification:
@@ -2194,6 +2397,8 @@ def chat_post(request: ChatRequest, http_request: Request = None):
                     if isinstance(result, str):
                         if key == 'weather':
                             weather_context = result
+                        elif key == 'account':
+                            account_context = result
                         elif key == 'diary_search':
                             diary_search_context = result
                     elif isinstance(result, dict):
@@ -2324,11 +2529,17 @@ def chat_post(request: ChatRequest, http_request: Request = None):
                 system_content += "\n\n⚠️ 중요: 사용자가 날씨 질문을 했습니다. 제공된 날씨 정보(기상청 API 데이터)를 반드시 사용해서 답변해야 합니다. 일기 내용이나 다른 정보는 사용하지 마세요. 날씨 정보만 사용해서 정확하게 답변해주세요!"
             else:
                 system_content += "\n\n⚠️ 중요: 사용자가 날씨 질문을 했습니다. 날씨 정보를 조회하려고 시도했지만 정보를 가져올 수 없었습니다. 일기 내용이나 다른 추측은 사용하지 마세요. 날씨 정보가 없다고 정직하게 말해주세요."
+            
+            if account_context:
+                system_content += "\n\n💰 중요: 사용자가 가계부 질문을 했습니다. 제공된 가계부 정보(account-service 데이터)를 반드시 사용해서 답변해야 합니다. 추측은 사용하지 마세요. 가계부 정보만 사용해서 정확하게 답변해주세요!"
         else:
             # 일반 질문일 때는 기존 시스템 메시지 사용
             system_content = request.system_message
             if weather_context:
                 system_content += "\n\n날씨 정보도 제공할 수 있어! 날씨 관련 질문이 있으면 제공된 날씨 정보를 사용해서 답변해줘~"
+            
+            if account_context:
+                system_content += "\n\n가계부 정보도 제공할 수 있어! 가계부 관련 질문이 있으면 제공된 가계부 정보를 사용해서 답변해줘~"
             
             if diary_search_context:
                 system_content += "\n\n사용자의 일기를 검색하고 조회할 수 있어! 일기 검색 요청이 있으면 제공된 일기 정보를 사용해서 정확하게 답변해줘!"
@@ -2370,6 +2581,9 @@ def chat_post(request: ChatRequest, http_request: Request = None):
         if weather_context:
             # 날씨 질문일 때는 날씨 정보를 명확하게 강조
             user_message = f"{request.message}\n\n{weather_context}\n\n⚠️ 중요: 위 날씨 정보는 기상청 API에서 가져온 실제 데이터입니다. 이 정보를 반드시 사용해서 답변해주세요. 일기 내용이나 다른 추측은 사용하지 마세요!"
+        elif account_context:
+            # 가계부 질문일 때는 가계부 정보를 명확하게 강조
+            user_message = f"{request.message}\n\n{account_context}\n\n⚠️ 중요: 위 가계부 정보는 account-service에서 가져온 실제 데이터입니다. 이 정보를 반드시 사용해서 답변해주세요. 추측은 사용하지 마세요!"
         elif diary_search_context:
             user_message += diary_search_context
         elif classification_context:

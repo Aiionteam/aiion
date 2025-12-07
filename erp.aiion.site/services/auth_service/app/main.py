@@ -2,7 +2,7 @@
 인증 서비스 FastAPI 애플리케이션
 admin_user_service의 admin_users 테이블에서 사용자 인증 후 JWT 토큰 발급
 """
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
