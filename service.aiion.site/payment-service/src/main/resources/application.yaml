@@ -1,0 +1,75 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: payment-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aidb
+    username: aiion
+    password: aiion4man
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      connection-test-query: SELECT 1
+      validation-timeout: 3000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    generate-ddl: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# Toss Payments 설정
+toss:
+  payments:
+    secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}
+    client-key: ${TOSS_PAYMENTS_CLIENT_KEY:}
+    base-url: https://api.tosspayments.com
+    test-mode: ${TOSS_PAYMENTS_TEST_MODE:false}  # 테스트 모드: true일 때 API 호출 스킵
+
+# User Service 설정 (구독 상태 업데이트용)
+user:
+  service:
+    url: http://user-service:8082
+
+# JWT 설정
+jwt:
+  secret: ${JWT_SECRET:your-secret-key-change-this-in-production}
+
+# CSV 초기화 설정
+csv:
+  init:
+    enabled: ${CSV_INIT_ENABLED:true}  # 환경 변수로 제어 가능 (기본값: true)
+    min-count: ${CSV_INIT_MIN_COUNT:5}  # 최소 데이터 개수 기준 (이 개수 이상이면 중복으로 간주)
+
