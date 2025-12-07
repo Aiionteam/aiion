@@ -25,5 +25,9 @@ public class DiaryModel {
     private Integer emotion;
     private String emotionLabel;
     private Double emotionConfidence;
+    /**
+     * 감정별 확률 정보 (JSON 문자열: {"평가불가": 0.1, "기쁨": 0.8, ...})
+     */
+    private String emotionProbabilities;
 }
 

@@ -325,7 +325,10 @@ class DiaryEmotionService:
             ic(f"정확도: {accuracy:.4f}")
             
             # 분류 보고서
-            emotion_labels = {0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람'}
+            emotion_labels = {
+                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
+                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
+            }
             # 실제 데이터에 있는 클래스만 사용
             unique_classes = sorted(set(list(y_test) + list(y_pred)))
             target_names = [emotion_labels.get(i, f'클래스{i}') for i in unique_classes]
@@ -352,65 +355,6 @@ class DiaryEmotionService:
         except Exception as e:
             ic(f"평가 오류: {e}")
             raise
-    
-    def _keyword_based_emotion(self, text: str) -> Optional[int]:
-        """키워드 기반 감정 분석 (fallback용)"""
-        text_lower = text.lower()
-        
-        # 슬픔 키워드
-        sadness_keywords = ['힘들', '고달픈', '슬프', '슬퍼', '우울', '우울하', '힘듦', '힘들어', 
-                           '지치', '지쳐', '피곤', '피곤하', '아픈', '아프', '괴로', '괴롭',
-                           '외로', '외롭', '쓸쓸', '서러', '서럽', '안타깝', '안타까', '비참',
-                           '절망', '절망적', '실망', '실망하', '좌절', '좌절하', '답답', '답답하']
-        
-        # 분노 키워드
-        anger_keywords = ['화나', '화났', '화가', '짜증', '짜증나', '분노', '분노하', '열받', '열받았',
-                         '빡쳐', '빡쳤', '미워', '미웠', '싫어', '싫었', '증오', '증오하', '혐오',
-                         '욕하', '욕했', '욕설', '비난', '비난하', '원망', '원망하']
-        
-        # 두려움 키워드
-        fear_keywords = ['무서', '무섭', '두려', '두렵', '걱정', '걱정하', '불안', '불안하', '공포',
-                        '공포스', '겁나', '겁났', '조심', '조심하', '신중', '신중하', '우려', '우려하']
-        
-        # 기쁨 키워드
-        joy_keywords = ['기쁘', '기뻐', '행복', '행복하', '즐거', '즐겁', '신나', '신났', '좋아',
-                       '좋았', '만족', '만족하', '뿌듯', '뿌듯하', '설레', '설렜', '환상', '환상적',
-                       '기대', '기대하', '희망', '희망하', '긍정', '긍정적']
-        
-        # 놀람 키워드
-        surprise_keywords = ['놀라', '놀랐', '놀람', '깜짝', '깜짝 놀라', '충격', '충격적', '의외',
-                            '의외로', '예상', '예상치', '갑자기', '갑작스', '뜻밖', '뜻밖에']
-        
-        # 혐오 키워드
-        disgust_keywords = ['역겨', '역겹', '더러', '더럽', '싫어', '싫었', '혐오', '혐오하',
-                           '징그러', '징그럽', '구역질', '토할', '토했']
-        
-        # 키워드 매칭 점수 계산
-        sadness_score = sum(1 for keyword in sadness_keywords if keyword in text_lower)
-        anger_score = sum(1 for keyword in anger_keywords if keyword in text_lower)
-        fear_score = sum(1 for keyword in fear_keywords if keyword in text_lower)
-        joy_score = sum(1 for keyword in joy_keywords if keyword in text_lower)
-        surprise_score = sum(1 for keyword in surprise_keywords if keyword in text_lower)
-        disgust_score = sum(1 for keyword in disgust_keywords if keyword in text_lower)
-        
-        # 가장 높은 점수의 감정 반환
-        scores = {
-            2: sadness_score,  # 슬픔
-            3: anger_score,    # 분노
-            4: fear_score,     # 두려움
-            1: joy_score,      # 기쁨
-            6: surprise_score, # 놀람
-            5: disgust_score   # 혐오
-        }
-        
-        max_score = max(scores.values())
-        if max_score > 0:
-            # 가장 높은 점수의 감정 반환
-            for emotion, score in scores.items():
-                if score == max_score:
-                    return emotion
-        
-        return None  # 키워드 매칭 실패
     
     def predict(self, text: str) -> Dict[str, Any]:
         """텍스트 감정 예측"""
@@ -459,35 +403,45 @@ class DiaryEmotionService:
             prediction = self.model_obj.model.predict(X)[0]
             probabilities = self.model_obj.model.predict_proba(X)[0]
             
-            emotion_labels = {0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람'}
+            emotion_labels = {
+                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
+                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
+            }
             
             # 최대 확률과 해당 클래스 찾기
             max_prob_idx = int(np.argmax(probabilities))
             max_prob = float(probabilities[max_prob_idx])
             
-            # 확률 임계값 설정 (0.3 미만이면 키워드 기반 fallback 사용)
-            CONFIDENCE_THRESHOLD = 0.3
+            # 평가불가 확률 확인
+            cannot_evaluate_prob = float(probabilities[0]) if len(probabilities) > 0 else 0.0
             
-            # 확률이 낮은 경우 키워드 기반 감정 분석 시도
-            if max_prob < CONFIDENCE_THRESHOLD:
-                keyword_emotion = self._keyword_based_emotion(processed_text)
-                if keyword_emotion is not None:
-                    # 키워드 기반 감정이 있으면 사용
-                    final_prediction = keyword_emotion
-                    final_label = emotion_labels.get(final_prediction, '알 수 없음')
-                    ic(f"키워드 기반 감정 분석 사용: {final_label} (모델 확률: {max_prob:.3f})")
-                elif max_prob < 0.2:
-                    # 확률이 너무 낮고 키워드도 없으면 평가불가
-                    final_prediction = 0
-                    final_label = '평가불가'
-                else:
-                    # 확률이 낮지만 어느 정도 신뢰할 수 있으면 모델 예측 사용
-                    final_prediction = max_prob_idx
-                    final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
+            # 확률 임계값 설정
+            CONFIDENCE_THRESHOLD = 0.3
+            MIN_CONFIDENCE_FOR_EVALUATION = 0.1  # 평가 가능한 최소 확률 (10% 이상이면 평가 가능)
+            
+            # 1. 최대 확률이 평가불가(0)인 경우만 특별 처리
+            if max_prob_idx == 0:
+                # 평가불가가 가장 높은 확률이면 평가불가로 판단
+                final_prediction = 0
+                final_label = '평가불가'
+                ic(f"평가불가가 최대 확률 ({max_prob:.3f}): 평가불가로 판단")
+            # 3. 최대 확률이 충분히 높으면 모델 예측 사용 (우선순위 높음)
+            elif max_prob >= CONFIDENCE_THRESHOLD:
+                final_prediction = max_prob_idx
+                final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
+                ic(f"최대 확률 충분 ({max_prob:.3f}): {final_label}로 판단")
+            # 3. 최대 확률이 낮은 경우에도 모델 예측 사용 (모델이 학습 데이터로 판단)
+            elif max_prob >= MIN_CONFIDENCE_FOR_EVALUATION:
+                # 모델 예측 사용 (최대 확률이 10% 이상이면)
+                final_prediction = max_prob_idx
+                final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
+                ic(f"모델 예측 사용: {final_label} ({max_prob:.3f})")
+            # 4. 확률이 매우 낮으면 평가불가
             else:
-                # 확률이 충분히 높으면 모델 예측 사용
-                final_prediction = int(prediction)
-                final_label = emotion_labels.get(final_prediction, '알 수 없음')
+                # 확률이 매우 낮으면 평가불가
+                final_prediction = 0
+                final_label = '평가불가'
+                ic(f"확률 매우 낮음 ({max_prob:.3f}): 평가불가로 판단")
             
             # 확률 정보 구성
             prob_dict = {

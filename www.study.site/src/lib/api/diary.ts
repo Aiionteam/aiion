@@ -11,14 +11,10 @@ export interface Diary {
   title: string;
   content: string;
   userId: number;
-  emotion?: number; // 0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람
+  emotion?: number; // 0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람, 7: 신뢰, 8: 기대, 9: 불안, 10: 안도, 11: 후회, 12: 그리움, 13: 감사, 14: 외로움
   emotionLabel?: string;
   emotionConfidence?: number;
-}
-
-export interface NanjungDiariesResponse {
-  count: number;
-  diaries: Diary[];
+  emotionProbabilities?: string; // JSON 문자열: {"평가불가": 0.1, "기쁨": 0.8, ...}
 }
 
 // diary-service의 Messenger 응답 형식
@@ -26,21 +22,6 @@ export interface MessengerResponse {
   code: number;
   message: string;
   data: Diary[] | Diary; // DiaryModel 배열 또는 단일 DiaryModel
-}
-
-/**
- * 난중일기 목록 조회
- */
-export async function getNanjungDiaries(limit: number = 10): Promise<NanjungDiariesResponse> {
-  try {
-    const response = await apiClient.get<NanjungDiariesResponse>(
-      `/diary-emotion/nanjung?limit=${limit}`
-    );
-    return response.data;
-  } catch (error: any) {
-    console.error("[Diary API] 난중일기 조회 실패:", error);
-    throw error;
-  }
 }
 
 /**
@@ -94,7 +75,7 @@ export interface PredictEmotionRequest {
 }
 
 export interface PredictEmotionResponse {
-  emotion: number; // 0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람
+  emotion: number; // 0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람, 7: 신뢰, 8: 기대, 9: 불안, 10: 안도, 11: 후회, 12: 그리움, 13: 감사, 14: 외로움
   emotion_label: string;
   confidence?: number;
   probabilities?: Record<string, number>;

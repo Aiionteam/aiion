@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.RestClientException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,19 +30,28 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
 
     private final DiaryEmotionRepository diaryEmotionRepository;
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     
     // ML 서비스 URL (Docker 네트워크 내부에서 직접 접근)
     private static final String ML_SERVICE_URL = "http://aihoyun-ml-service:9005/diary-emotion/predict";
     
     // 감정 라벨 매핑
-    private static final Map<Integer, String> EMOTION_LABELS = Map.of(
-        0, "평가불가",
-        1, "기쁨",
-        2, "슬픔",
-        3, "분노",
-        4, "두려움",
-        5, "혐오",
-        6, "놀람"
+    private static final Map<Integer, String> EMOTION_LABELS = Map.ofEntries(
+        Map.entry(0, "평가불가"),
+        Map.entry(1, "기쁨"),
+        Map.entry(2, "슬픔"),
+        Map.entry(3, "분노"),
+        Map.entry(4, "두려움"),
+        Map.entry(5, "혐오"),
+        Map.entry(6, "놀람"),
+        Map.entry(7, "신뢰"),
+        Map.entry(8, "기대"),
+        Map.entry(9, "불안"),
+        Map.entry(10, "안도"),
+        Map.entry(11, "후회"),
+        Map.entry(12, "그리움"),
+        Map.entry(13, "감사"),
+        Map.entry(14, "외로움")
     );
 
     private DiaryEmotionModel entityToModel(DiaryEmotion entity) {
@@ -53,6 +64,7 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                 .emotion(entity.getEmotion())
                 .emotionLabel(entity.getEmotionLabel())
                 .confidence(entity.getConfidence())
+                .probabilities(entity.getProbabilities())
                 .analyzedAt(entity.getAnalyzedAt())
                 .build();
     }
@@ -64,6 +76,7 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                 .emotion(model.getEmotion())
                 .emotionLabel(model.getEmotionLabel())
                 .confidence(model.getConfidence())
+                .probabilities(model.getProbabilities())
                 .analyzedAt(model.getAnalyzedAt() != null ? model.getAnalyzedAt() : LocalDateTime.now())
                 .build();
     }
@@ -100,7 +113,8 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
         }
         
         List<DiaryEmotion> emotions = diaryEmotionRepository.findByDiaryIdIn(diaryIds);
-        return emotions.stream()
+        
+        Map<Long, DiaryEmotionModel> result = emotions.stream()
                 .map(this::entityToModel)
                 .filter(model -> model != null && model.getDiaryId() != null)
                 .collect(Collectors.toMap(
@@ -108,6 +122,8 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                     model -> model,
                     (existing, replacement) -> existing // 중복 키가 있으면 기존 값 유지
                 ));
+        
+        return result;
     }
 
     @Override
@@ -164,6 +180,16 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                         .orElse(0.0);
                 }
 
+                // probabilities를 JSON 문자열로 변환
+                String probabilitiesJson = null;
+                if (probabilities != null && !probabilities.isEmpty()) {
+                    try {
+                        probabilitiesJson = objectMapper.writeValueAsString(probabilities);
+                    } catch (JsonProcessingException e) {
+                        log.warn("일기 ID {} probabilities JSON 변환 실패: {}", diaryId, e.getMessage());
+                    }
+                }
+
                 // 감정 라벨이 없으면 코드로 매핑
                 if (emotionLabel == null && emotion != null) {
                     emotionLabel = EMOTION_LABELS.get(emotion);
@@ -179,6 +205,7 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                     existing.setEmotion(emotion);
                     existing.setEmotionLabel(emotionLabel);
                     existing.setConfidence(confidence);
+                    existing.setProbabilities(probabilitiesJson);
                     existing.setAnalyzedAt(LocalDateTime.now());
                     diaryEmotion = diaryEmotionRepository.save(existing);
                     log.info("일기 ID {} 감정 분석 결과 업데이트: {} ({})", diaryId, emotionLabel, emotion);
@@ -189,6 +216,7 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                         .emotion(emotion)
                         .emotionLabel(emotionLabel)
                         .confidence(confidence)
+                        .probabilities(probabilitiesJson)
                         .analyzedAt(LocalDateTime.now())
                         .build();
                     diaryEmotion = diaryEmotionRepository.save(diaryEmotion);

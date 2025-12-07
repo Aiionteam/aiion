@@ -16,6 +16,8 @@ interface MainLayoutProps {
   avatarMode: boolean;
   isListening: boolean;
   interactions: Interaction[];
+  aiResponse?: string; // AI 응답 (아바타 비디오 재생용)
+  isSpeaking?: boolean; // TTS 재생 중 여부
   
   // Prompt input props
   inputText: string;
@@ -40,6 +42,8 @@ export const MainLayout: React.FC<MainLayoutProps> = memo(({
   avatarMode,
   isListening,
   interactions,
+  aiResponse,
+  isSpeaking,
   inputText,
   setInputText,
   loading,
@@ -108,7 +112,7 @@ export const MainLayout: React.FC<MainLayoutProps> = memo(({
 
         {avatarMode ? (
           <>
-            <AvatarMode isListening={isListening} />
+            <AvatarMode isListening={isListening} aiResponse={aiResponse} isSpeaking={isSpeaking} />
             <PromptInput
               inputText={inputText}
               setInputText={setInputText}

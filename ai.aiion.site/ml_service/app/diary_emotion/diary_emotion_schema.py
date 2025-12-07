@@ -91,17 +91,17 @@ class DiaryEmotionSchema:
             raise ValueError("userId는 0 이상의 정수여야 합니다.")
         self._user_id = value
     
-    # emotion 프로퍼티 (라벨: 0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람)
+    # emotion 프로퍼티 (라벨: 0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람, 7=신뢰, 8=기대, 9=불안, 10=안도, 11=후회, 12=그리움, 13=감사, 14=외로움)
     @property
     def emotion(self) -> int:
-        """Emotion 게터 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)"""
+        """Emotion 게터 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람, 7: 신뢰, 8: 기대, 9: 불안, 10: 안도, 11: 후회, 12: 그리움, 13: 감사, 14: 외로움)"""
         return self._emotion
     
     @emotion.setter
     def emotion(self, value: int):
         """Emotion 세터"""
-        if value not in [0, 1, 2, 3, 4, 5, 6]:
-            raise ValueError("emotion은 0(평가불가), 1(기쁨), 2(슬픔), 3(분노), 4(두려움), 5(혐오), 6(놀람)이어야 합니다.")
+        if value not in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
+            raise ValueError("emotion은 0(평가불가), 1(기쁨), 2(슬픔), 3(분노), 4(두려움), 5(혐오), 6(놀람), 7(신뢰), 8(기대), 9(불안), 10(안도), 11(후회), 12(그리움), 13(감사), 14(외로움)이어야 합니다.")
         self._emotion = value
     
     def to_dict(self) -> dict:
