@@ -92,9 +92,10 @@ export default function DiariesPage() {
       // 제목과 내용을 결합하여 분석
       const text = `${diary.title || ""} ${diary.content || ""}`.trim();
       if (!text) {
+        console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}의 텍스트가 비어있어 분석을 건너뜁니다.`);
         setDiaries((prev) =>
-          prev.map((d, idx) =>
-            idx === index ? { ...d, emotionLoading: false } : d
+          prev.map((d) =>
+            d.id === diary.id ? { ...d, emotionLoading: false } : d
           )
         );
         setAnalyzedIds((prev) => new Set(prev).add(diary.id));
@@ -105,19 +106,26 @@ export default function DiariesPage() {
       const timeout = isFirstRequest ? 60000 : 20000; // 첫 번째: 60초, 나머지: 20초
       const emotion = await predictEmotion(text, timeout);
 
-            // 진행 상황 업데이트 (ID로 찾아서 업데이트 - 인덱스가 변경될 수 있음)
-            setDiaries((prev) =>
-              prev.map((d) =>
-                d.id === diary.id
-                  ? { ...d, emotionResponse: emotion, emotionLoading: false }
-                  : d
-              )
-            );
+      // 진행 상황 업데이트 (ID로 찾아서 업데이트 - 인덱스가 변경될 수 있음)
+      setDiaries((prev) =>
+        prev.map((d) =>
+          d.id === diary.id
+            ? { ...d, emotionResponse: emotion, emotionLoading: false }
+            : d
+        )
+      );
       
       // 분석 완료된 ID 추가
       setAnalyzedIds((prev) => new Set(prev).add(diary.id));
-    } catch (err) {
-      console.error(`일기 ${diary.id} 감정 분석 실패:`, err);
+    } catch (err: any) {
+      // 빈 텍스트나 모델 미학습 등의 에러는 조용히 처리
+      const errorMessage = err?.message || String(err);
+      if (errorMessage.includes("텍스트가 비어있습니다") || 
+          errorMessage.includes("모델이 학습되지 않았습니다")) {
+        console.warn(`일기 ${diary.id} 감정 분석 건너뜀:`, errorMessage);
+      } else {
+        console.error(`일기 ${diary.id} 감정 분석 실패:`, err);
+      }
 
       // 에러 발생 시에도 로딩 상태 해제
       setDiaries((prev) =>
@@ -225,11 +233,13 @@ export default function DiariesPage() {
         // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
         // emotion이 null이거나 undefined인 경우에만 분석 (0은 이미 분석된 것으로 간주)
         // 이미 analyzedIds에 포함된 일기는 제외
+        // 제목과 내용이 모두 비어있는 일기는 분석하지 않음
         const diariesToAnalyze = diariesWithEmotion.filter(
           (diary) => 
             (diary.emotion === null || diary.emotion === undefined) && 
             diary.emotionLoading &&
-            !analyzedIds.has(diary.id)
+            !analyzedIds.has(diary.id) &&
+            (diary.title || diary.content) // 제목이나 내용이 있어야 함
         );
 
         if (diariesToAnalyze.length > 0) {
@@ -337,23 +347,64 @@ export default function DiariesPage() {
           // 백엔드 분석이 실패한 경우에만 프론트엔드에서 분석 (fallback)
           // emotion이 null이거나 undefined인 경우에만 분석 (0은 이미 분석된 것으로 간주)
           // 이미 analyzedIds에 포함된 일기는 제외
+          // 제목과 내용이 모두 비어있는 일기는 분석하지 않음
+          // 백엔드에서 자동으로 분석하므로, 약간의 지연 후 다시 확인
           const diariesToAnalyze = newDiariesWithEmotion.filter(
             (diary) => 
               (diary.emotion === null || diary.emotion === undefined) && 
               diary.emotionLoading &&
-              !analyzedIds.has(diary.id)
+              !analyzedIds.has(diary.id) &&
+              (diary.title || diary.content) // 제목이나 내용이 있어야 함
           );
 
           if (diariesToAnalyze.length > 0) {
-            console.log("[DiariesPage] 새 일기 중 백엔드 분석 실패:", diariesToAnalyze.length, "개 - 프론트엔드에서 분석");
-            // 백엔드 분석 실패 시에만 프론트엔드에서 분석 (백그라운드 처리)
-            const emotionPromises = diariesToAnalyze.map(async (diary) => {
-              await analyzeDiaryEmotion(diary, 0, false);
-            });
-            
-            Promise.all(emotionPromises).catch((err) => {
-              console.error("새 일기 감정 분석 중 오류:", err);
-            });
+            // 백엔드에서 자동 분석을 수행하므로, 2초 대기 후 다시 확인
+            setTimeout(async () => {
+              try {
+                const updatedDiaries = await getUserDiaries();
+                const updatedMap = new Map(updatedDiaries.map(d => [d.id, d]));
+                
+                setDiaries((prev) =>
+                  prev.map((d) => {
+                    const updated = updatedMap.get(d.id);
+                    if (updated && updated.emotion !== null && updated.emotion !== undefined) {
+                      // 백엔드에서 분석 완료된 경우 업데이트
+                      return {
+                        ...d,
+                        emotion: updated.emotion,
+                        emotionLabel: updated.emotionLabel,
+                        emotionConfidence: updated.emotionConfidence,
+                        emotionProbabilities: updated.emotionProbabilities,
+                        emotionLoading: false,
+                      };
+                    }
+                    return d;
+                  })
+                );
+                
+                // 여전히 분석되지 않은 일기만 프론트엔드에서 분석
+                const stillNeedAnalysis = diariesToAnalyze.filter(
+                  (diary) => {
+                    const updated = updatedMap.get(diary.id);
+                    return !updated || (updated.emotion === null || updated.emotion === undefined);
+                  }
+                );
+                
+                if (stillNeedAnalysis.length > 0) {
+                  console.log("[DiariesPage] 새 일기 중 백엔드 분석 실패:", stillNeedAnalysis.length, "개 - 프론트엔드에서 분석");
+                  // 백엔드 분석 실패 시에만 프론트엔드에서 분석 (백그라운드 처리)
+                  const emotionPromises = stillNeedAnalysis.map(async (diary) => {
+                    await analyzeDiaryEmotion(diary, 0, false);
+                  });
+                  
+                  Promise.all(emotionPromises).catch((err) => {
+                    console.error("새 일기 감정 분석 중 오류:", err);
+                  });
+                }
+              } catch (err) {
+                console.error("새 일기 상태 확인 실패:", err);
+              }
+            }, 2000); // 2초 대기
           }
         }
       } catch (err) {
@@ -410,16 +461,56 @@ export default function DiariesPage() {
     return title.replace(/<[^>]*>/g, "").trim() || "제목 없음";
   };
 
-  // 감정에 따른 이모티콘 반환
+  // 감정 라벨을 "평범"으로 변환하는 함수
+  const normalizeEmotionLabel = (label: string | undefined): string => {
+    if (!label) return "";
+    return label === "평가불가" ? "평범" : label;
+  };
+
+  // 1위/2위 감정을 표시하는 함수
+  const getEmotionDisplay = (diary: DiaryWithEmotion): string => {
+    // probabilities가 있으면 1위/2위 표시
+    if (diary.emotionProbabilities) {
+      try {
+        const probabilities = JSON.parse(diary.emotionProbabilities);
+        const sorted = Object.entries(probabilities)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .slice(0, 2);
+        
+        if (sorted.length >= 2) {
+          const first = normalizeEmotionLabel(sorted[0][0]);
+          const second = normalizeEmotionLabel(sorted[1][0]);
+          return `${first}/${second}`;
+        } else if (sorted.length === 1) {
+          return normalizeEmotionLabel(sorted[0][0]);
+        }
+      } catch (e) {
+        // JSON 파싱 실패 시 기본 라벨 사용
+      }
+    }
+    
+    // probabilities가 없으면 기본 라벨 사용
+    if (diary.emotionLabel) {
+      return normalizeEmotionLabel(diary.emotionLabel);
+    }
+    
+    if (diary.emotionResponse?.emotion_label) {
+      return normalizeEmotionLabel(diary.emotionResponse.emotion_label);
+    }
+    
+    return "";
+  };
+
+  // 감정에 따른 이모티콘 반환 (1위만)
   const getEmotionEmoji = (diary: DiaryWithEmotion): string => {
     // DB에서 가져온 감정 정보 우선 사용
     // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
     if (diary.emotion !== null && diary.emotion !== undefined) {
       const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가
+        0: "😐", // 평가불가 -> 평범
         1: "😊", // 기쁨
         2: "😢", // 슬픔
-        3: "😡", // 분노 (빨간 얼굴)
+        3: "😠", // 분노
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
@@ -433,20 +524,16 @@ export default function DiariesPage() {
         14: "😞", // 외로움
       };
       const emoji = emotionMap[diary.emotion] || "😐";
-      // 디버깅: emotion 값과 매핑된 이모지 확인
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[getEmotionEmoji] 일기 ID ${diary.id}: emotion=${diary.emotion}, emoji=${emoji}, label=${diary.emotionLabel}`);
-      }
       return emoji;
     }
     
     // 캐시된 감정 분석 결과 사용
     if (diary.emotionResponse) {
       const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가
+        0: "😐", // 평가불가 -> 평범
         1: "😊", // 기쁨
         2: "😢", // 슬픔
-        3: "😡", // 분노 (빨간 얼굴)
+        3: "😠", // 분노
         4: "😨", // 두려움
         5: "🤢", // 혐오
         6: "😲", // 놀람
@@ -460,9 +547,6 @@ export default function DiariesPage() {
         14: "😞", // 외로움
       };
       const emoji = emotionMap[diary.emotionResponse.emotion] || "😐";
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[getEmotionEmoji] 일기 ID ${diary.id}: emotionResponse=${diary.emotionResponse.emotion}, emoji=${emoji}`);
-      }
       return emoji;
     }
     
@@ -534,12 +618,19 @@ export default function DiariesPage() {
                 >
                   {/* Left: Title with Emotion */}
                   <div className="flex-1 min-w-0 pr-4 flex items-center gap-3">
-                    <div className="text-sm text-gray-900">
-                      <span className="text-gray-600">제목:</span>{" "}
-                      <span className="font-medium">{title}</span>
+                    <div className="text-sm text-gray-900 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">제목:</span>
+                        <span className="font-medium truncate">{title}</span>
+                      </div>
+                      {!diary.emotionLoading && getEmotionDisplay(diary) && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {getEmotionDisplay(diary)}
+                        </div>
+                      )}
                     </div>
-                    {/* Emotion Emoji */}
-                    <div className="text-lg">
+                    {/* Emotion Emoji (1위만) */}
+                    <div className="text-lg flex-shrink-0">
                       {diary.emotionLoading ? (
                         <span className="text-gray-300 animate-pulse">⏳</span>
                       ) : (

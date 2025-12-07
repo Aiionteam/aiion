@@ -120,16 +120,25 @@ async def get_diary_by_id(diary_id: int):
 async def predict_emotion(request: PredictRequest):
     """텍스트 감정 예측"""
     try:
+        # 빈 텍스트 체크
+        if not request.text or not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="텍스트가 비어있습니다. 분석할 텍스트를 제공해주세요."
+            )
+        
         service = get_diary_emotion_service()
         
         # 모델이 없으면 자동 로드 시도
         if service.model_obj.model is None:
             loaded = service._try_load_model()
-            if not loaded:
-                # 모델 파일이 없거나 CSV가 업데이트된 경우 재학습 필요
+            if not loaded or service.model_obj.model is None:
+                # 모델 파일이 없거나 로드 실패한 경우
+                model_exists = service.model_file.exists()
+                vectorizer_exists = service.vectorizer_file.exists()
                 raise HTTPException(
                     status_code=400, 
-                    detail="모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
+                    detail=f"모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요. (모델 파일 존재: {model_exists}, 벡터라이저 파일 존재: {vectorizer_exists})"
                 )
         
         # 예측
