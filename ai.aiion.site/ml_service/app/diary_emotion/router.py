@@ -23,8 +23,6 @@ router = APIRouter(
 
 # CSV 파일 경로
 CSV_FILE_PATH = Path(__file__).parent / "diary.csv"
-# Nanjung CSV 파일 경로
-NANJUNG_CSV_FILE_PATH = Path(__file__).parent / "nanjung.csv"
 
 # 서비스 인스턴스
 _diary_emotion_service: Optional[DiaryEmotionService] = None
@@ -62,30 +60,6 @@ def load_diaries(limit: Optional[int] = None) -> List[Dict[str, any]]:
         return []
     except Exception as e:
         print(f"CSV 파일 읽기 오류: {e}")
-        return []
-    return diaries
-
-
-def load_nanjung_diaries(limit: Optional[int] = None) -> List[Dict[str, any]]:
-    """nanjung.csv에서 일기 데이터 로드"""
-    diaries = []
-    try:
-        with open(NANJUNG_CSV_FILE_PATH, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for i, row in enumerate(reader):
-                if limit and i >= limit:
-                    break
-                diaries.append({
-                    "id": row.get("id", ""),
-                    "localdate": row.get("localdate", ""),
-                    "title": row.get("title", ""),
-                    "content": row.get("content", ""),
-                    "userId": row.get("userId", row.get("userid", ""))
-                })
-    except FileNotFoundError:
-        return []
-    except Exception as e:
-        print(f"Nanjung CSV 파일 읽기 오류: {e}")
         return []
     return diaries
 
@@ -140,21 +114,6 @@ async def get_diary_by_id(diary_id: int):
         raise HTTPException(status_code=404, detail="일기 데이터 파일을 찾을 수 없습니다.")
     except ValueError:
         raise HTTPException(status_code=400, detail="잘못된 ID 형식입니다.")
-
-
-@router.get("/nanjung")
-async def get_nanjung_diaries(limit: int = 10):
-    """난중일기 목록 조회"""
-    diaries = load_nanjung_diaries(limit)
-    if not diaries:
-        raise HTTPException(
-            status_code=404,
-            detail="난중일기 데이터를 찾을 수 없습니다."
-        )
-    return {
-        "count": len(diaries),
-        "diaries": diaries
-    }
 
 
 @router.post("/predict")

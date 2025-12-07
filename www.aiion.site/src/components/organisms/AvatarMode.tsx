@@ -1,10 +1,49 @@
-import React, { memo } from 'react';
+import React, { memo, useRef, useEffect } from 'react';
+import { syncVideoWithAudio, estimateTTSDuration, playVideoWithTTSTiming } from '../../lib/utils/lipsync';
 
 interface AvatarModeProps {
   isListening: boolean;
+  aiResponse?: string; // AI 응답이 있을 때 비디오 재생
+  isSpeaking?: boolean; // TTS 재생 중인지 여부
 }
 
-export const AvatarMode: React.FC<AvatarModeProps> = memo(({ isListening }) => {
+export const AvatarMode: React.FC<AvatarModeProps> = memo(({ isListening, aiResponse, isSpeaking }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const syncCleanupRef = useRef<(() => void) | null>(null);
+
+  // AI 응답이 있거나 리스닝 중일 때 비디오 재생
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isListening) {
+      // 리스닝 중: 비디오 반복 재생
+      video.loop = true;
+      video.play().catch((error) => {
+        console.error('비디오 재생 실패:', error);
+      });
+    } else if (aiResponse && isSpeaking) {
+      // TTS 재생 중: 비디오를 TTS 시간에 맞춰 재생
+      const ttsDuration = estimateTTSDuration(aiResponse);
+      playVideoWithTTSTiming(video, ttsDuration).catch((error) => {
+        console.error('비디오 동기화 실패:', error);
+      });
+    } else if (aiResponse) {
+      // 응답이 있지만 TTS가 끝난 경우: 비디오 정지
+      video.pause();
+      video.currentTime = 0;
+    }
+  }, [isListening, aiResponse, isSpeaking]);
+
+  // 정리 함수
+  useEffect(() => {
+    return () => {
+      if (syncCleanupRef.current) {
+        syncCleanupRef.current();
+      }
+    };
+  }, []);
+
   return (
     <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-100 via-purple-50 to-pink-100 relative overflow-hidden">
       {/* Background Pattern */}
@@ -18,69 +57,37 @@ export const AvatarMode: React.FC<AvatarModeProps> = memo(({ isListening }) => {
         ></div>
       </div>
 
-      {/* 3D Robot Avatar */}
+      {/* Kling Avatar Video */}
       <div className="relative z-10 flex flex-col items-center">
-        {/* Robot Head */}
-        <div className="relative mb-4">
-          {/* Yellow Beanie */}
-          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 w-32 h-20 bg-yellow-400 rounded-t-full border-4 border-yellow-500">
-            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
-              <div
-                className="w-2 h-2 bg-gray-800 rounded-full animate-spin"
-                style={{ animationDuration: '2s' }}
-              ></div>
+        <div className="relative w-full max-w-2xl aspect-video flex items-center justify-center">
+          <video
+            ref={videoRef}
+            src="/kling_20251207_Build_Avatar_The_charac_3925_0.mp4"
+            className="w-full h-full object-contain rounded-lg shadow-2xl"
+            loop
+            muted={false}
+            playsInline
+            onEnded={() => {
+              // 비디오가 끝나면 다시 재생 (리스닝 중이거나 응답이 있을 때)
+              if (isListening || aiResponse) {
+                const video = videoRef.current;
+                if (video) {
+                  video.currentTime = 0;
+                  video.play().catch((error) => {
+                    console.error('비디오 재생 실패:', error);
+                  });
+                }
+              }
+            }}
+          />
+          
+          {/* Listening Indicator Overlay */}
+          {isListening && (
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-4 py-2 rounded-full">
+              <p className="text-sm font-semibold animate-pulse">듣고 있습니다...</p>
             </div>
-          </div>
-
-          {/* Head */}
-          <div className="w-40 h-40 bg-white rounded-full border-4 border-[#d4cdc0] shadow-2xl relative">
-            {/* Ears */}
-            <div className="absolute -left-8 top-8 w-16 h-16 bg-[#f5f1e8] rounded-full border-4 border-[#d4cdc0]"></div>
-            <div className="absolute -right-8 top-8 w-16 h-16 bg-[#f5f1e8] rounded-full border-4 border-[#d4cdc0]"></div>
-
-            {/* Face Screen */}
-            <div className="absolute inset-4 bg-black rounded-full flex items-center justify-center">
-              <div className="text-[#8B7355] text-4xl">{isListening ? '😊' : '😃'}</div>
-            </div>
-          </div>
+          )}
         </div>
-
-        {/* Robot Body */}
-        <div className="relative">
-          {/* Chest with A Logo */}
-          <div className="w-48 h-32 bg-white rounded-2xl border-4 border-[#d4cdc0] shadow-xl flex items-center justify-center relative">
-            <div className="text-6xl font-bold text-[#8B7355]">A</div>
-            {isListening && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-32 h-32 border-4 border-[#8B7355] rounded-full animate-ping"></div>
-              </div>
-            )}
-          </div>
-
-          {/* Arms */}
-          <div className="absolute -left-12 top-4 w-8 h-20 bg-white rounded-full border-2 border-[#d4cdc0]"></div>
-          <div className="absolute -right-12 top-4 w-8 h-20 bg-white rounded-full border-2 border-[#d4cdc0]">
-            {/* Cube in hand */}
-            <div className="absolute -right-4 top-12 w-6 h-6 bg-[#8B7355] rounded shadow-lg animate-pulse"></div>
-          </div>
-
-          {/* Backpack */}
-          <div className="absolute -right-16 top-8 w-12 h-16 bg-green-600 rounded-lg border-2 border-green-700">
-            <div className="absolute inset-2 bg-green-500 rounded opacity-50"></div>
-          </div>
-
-          {/* Treads */}
-          <div className="absolute -bottom-8 left-4 w-40 h-12 bg-gray-600 rounded-full border-2 border-gray-700 flex items-center">
-            <div className="w-full h-2 bg-gray-500 rounded-full mx-2"></div>
-          </div>
-        </div>
-
-        {/* Listening Indicator */}
-        {isListening && (
-          <div className="mt-8 text-center">
-            <p className="text-[#8B7355] font-semibold text-lg animate-pulse">듣고 있습니다...</p>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -3,7 +3,6 @@ export { LoginContainer } from "./LoginContainer";
 export { LoginBackground } from "./LoginBackground";
 export { OAuthProcessing } from "./OAuthProcessing";
 export { ChatInterface } from "./ChatInterface";
-export { NanjungDiaries } from "./NanjungDiaries";
 export { TitanicPassengers } from "./TitanicPassengers";
 export { WeatherForecast } from "./WeatherForecast";
 

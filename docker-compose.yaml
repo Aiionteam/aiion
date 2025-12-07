@@ -280,8 +280,6 @@ services:
       - "8090:8090"
     networks:
       - spring-network
-    volumes:
-      - ./api.aiion.site/nanjung.csv:/app/nanjung.csv:ro
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
@@ -436,7 +434,6 @@ services:
       - ./ai.aiion.site/ml_service/app/diary_emotion/models:/app/app/diary_emotion/models
       # CSV 파일 실시간 반영 (개발 중 데이터 추가 시 즉시 반영)
       - ./ai.aiion.site/ml_service/app/diary_emotion/diary.csv:/app/app/diary_emotion/diary.csv
-      - ./ai.aiion.site/ml_service/app/diary_emotion/nanjung.csv:/app/app/diary_emotion/nanjung.csv
     ports:
       - "9005:9005"
     networks:

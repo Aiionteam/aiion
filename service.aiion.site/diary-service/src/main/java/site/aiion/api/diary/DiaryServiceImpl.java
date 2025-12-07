@@ -58,7 +58,8 @@ public class DiaryServiceImpl implements DiaryService {
         if (emotion != null) {
             builder.emotion(emotion.getEmotion())
                    .emotionLabel(emotion.getEmotionLabel())
-                   .emotionConfidence(emotion.getConfidence());
+                   .emotionConfidence(emotion.getConfidence())
+                   .emotionProbabilities(emotion.getProbabilities());
         }
         
         return builder.build();
@@ -151,6 +152,7 @@ public class DiaryServiceImpl implements DiaryService {
         List<Long> diaryIds = entities.stream()
                 .map(Diary::getId)
                 .collect(Collectors.toList());
+        
         Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
             diaryEmotionService.findByDiaryIdIn(diaryIds);
         
@@ -158,6 +160,7 @@ public class DiaryServiceImpl implements DiaryService {
         List<DiaryModel> modelList = entities.stream()
                 .map(entity -> entityToModel(entity, emotionMap))
                 .collect(Collectors.toList());
+        
         return Messenger.builder()
                 .code(200)
                 .message("사용자별 조회 성공: " + modelList.size() + "개")
