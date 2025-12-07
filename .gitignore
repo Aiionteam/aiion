@@ -3,3 +3,7 @@
 
 # Cursor IDE assets (temporary image files)
 assets/
+
+# ML Service - Model files (large files, can be regenerated)
+ai.aiion.site/ml_service/app/diary_emotion/models/
+*.pkl
