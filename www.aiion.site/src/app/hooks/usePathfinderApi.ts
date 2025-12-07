@@ -5,11 +5,11 @@
 
 import { fetchJSONFromGateway } from '../../lib/api/client';
 import { Diary } from '../../components/types';
+import { fetchDiariesByUserId } from './useDiaryApi';
 
 // 백엔드 응답 형식
 interface Messenger {
-  Code?: number;
-  code?: number;
+  code: number;
   message: string;
   data?: any;
 }
@@ -87,7 +87,7 @@ export async function fetchRecommendations(userId: number): Promise<Comprehensiv
     }
 
     const messenger = response.data as Messenger;
-    const responseCode = messenger?.Code || messenger?.code;
+    const responseCode = messenger?.code;
     
     // 응답 코드가 200이 아니면 null 반환
     if (responseCode !== 200) {
@@ -135,7 +135,7 @@ export async function fetchSimpleRecommendations(userId: number): Promise<Learni
     }
 
     const messenger = response.data as Messenger;
-    const responseCode = messenger?.Code || messenger?.code;
+    const responseCode = messenger?.code;
     
     if (responseCode !== 200) {
       console.warn('[fetchSimpleRecommendations] 응답 코드가 200이 아님:', responseCode);
@@ -153,3 +153,19 @@ export async function fetchSimpleRecommendations(userId: number): Promise<Learni
   }
 }
 
+/**
+ * 사용자 일기 조회 (Pathfinder용)
+ * @param userId 사용자 ID
+ * @param skipAuth 테스트 모드: true이면 JWT 토큰 없이 호출 (기본값: false)
+ */
+export async function fetchDiariesForPathfinder(userId?: number, skipAuth: boolean = false): Promise<Diary[]> {
+  try {
+    console.log('[fetchDiariesForPathfinder] 일기 조회 시작, userId:', userId, skipAuth ? '(인증 스킵)' : '');
+    const diaries = await fetchDiariesByUserId(userId, skipAuth);
+    console.log('[fetchDiariesForPathfinder] 일기 조회 완료:', diaries.length, '개');
+    return diaries;
+  } catch (error) {
+    console.error('[fetchDiariesForPathfinder] 일기 조회 실패:', error);
+    return [];
+  }
+}

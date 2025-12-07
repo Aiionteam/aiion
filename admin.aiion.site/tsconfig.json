@@ -24,7 +24,25 @@
     ],
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
+      ],
+      "@/store": [
+        "./src/store"
+      ],
+      "@/containers/*": [
+        "./src/containers/*"
+      ],
+      "@/handlers/*": [
+        "./src/handlers/*"
+      ],
+      "@/store/*": [
+        "./src/store/*"
+      ],
+      "@/service/*": [
+        "./src/service/*"
+      ],
+      "@/components/*": [
+        "./src/components/*"
       ]
     }
   },

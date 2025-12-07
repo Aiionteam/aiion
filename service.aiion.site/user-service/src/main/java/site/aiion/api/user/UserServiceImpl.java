@@ -6,7 +6,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
@@ -56,7 +55,7 @@ public class UserServiceImpl implements UserService {
     public Messenger findById(UserModel userModel) {
         if (userModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -64,13 +63,13 @@ public class UserServiceImpl implements UserService {
         if (entity.isPresent()) {
             UserModel model = entityToModel(entity.get());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("조회 성공")
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("사용자를 찾을 수 없습니다.")
                     .build();
         }
@@ -80,13 +79,13 @@ public class UserServiceImpl implements UserService {
     public Messenger findByEmailAndProvider(String email, String provider) {
         if (email == null || email.trim().isEmpty()) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("이메일이 필요합니다.")
                     .build();
         }
         if (provider == null || provider.trim().isEmpty()) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("제공자 정보가 필요합니다.")
                     .build();
         }
@@ -95,13 +94,13 @@ public class UserServiceImpl implements UserService {
         if (entity.isPresent()) {
             UserModel model = entityToModel(entity.get());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("조회 성공")
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("사용자를 찾을 수 없습니다.")
                     .build();
         }
@@ -114,7 +113,7 @@ public class UserServiceImpl implements UserService {
                 .map(this::entityToModel)
                 .collect(Collectors.toList());
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("전체 조회 성공: " + modelList.size() + "개")
                 .data(modelList)
                 .build();
@@ -133,7 +132,7 @@ public class UserServiceImpl implements UserService {
                 // 이미 존재하는 사용자 - 기존 사용자 정보 반환
                 UserModel model = entityToModel(existingUser.get());
                 return Messenger.builder()
-                        .Code(200)
+                        .code(200)
                         .message("이미 존재하는 사용자: " + existingUser.get().getId())
                         .data(model)
                         .build();
@@ -146,7 +145,7 @@ public class UserServiceImpl implements UserService {
             User saved = userRepository.save(entity);
             UserModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("저장 성공: " + saved.getId())
                     .data(model)
                     .build();
@@ -161,7 +160,7 @@ public class UserServiceImpl implements UserService {
                 if (existingUser.isPresent()) {
                     UserModel model = entityToModel(existingUser.get());
                     return Messenger.builder()
-                            .Code(200)
+                            .code(200)
                             .message("이미 존재하는 사용자: " + existingUser.get().getId())
                             .data(model)
                             .build();
@@ -169,7 +168,7 @@ public class UserServiceImpl implements UserService {
             }
             // 조회 실패 시 에러 반환
             return Messenger.builder()
-                    .Code(409)
+                    .code(409)
                     .message("이미 존재하는 사용자입니다. 이메일: " + userModel.getEmail())
                     .build();
         }
@@ -184,7 +183,7 @@ public class UserServiceImpl implements UserService {
         
         List<User> saved = userRepository.saveAll(entities);
         return Messenger.builder()
-                .Code(200)
+                .code(200)
                 .message("일괄 저장 성공: " + saved.size() + "개")
                 .build();
     }
@@ -194,7 +193,7 @@ public class UserServiceImpl implements UserService {
     public Messenger update(UserModel userModel) {
         if (userModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -214,13 +213,13 @@ public class UserServiceImpl implements UserService {
             User saved = userRepository.save(updated);
             UserModel model = entityToModel(saved);
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("수정 성공: " + userModel.getId())
                     .data(model)
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("수정할 사용자를 찾을 수 없습니다.")
                     .build();
         }
@@ -231,7 +230,7 @@ public class UserServiceImpl implements UserService {
     public Messenger delete(UserModel userModel) {
         if (userModel.getId() == null) {
             return Messenger.builder()
-                    .Code(400)
+                    .code(400)
                     .message("ID가 필요합니다.")
                     .build();
         }
@@ -239,12 +238,12 @@ public class UserServiceImpl implements UserService {
         if (optionalEntity.isPresent()) {
             userRepository.deleteById(userModel.getId());
             return Messenger.builder()
-                    .Code(200)
+                    .code(200)
                     .message("삭제 성공: " + userModel.getId())
                     .build();
         } else {
             return Messenger.builder()
-                    .Code(404)
+                    .code(404)
                     .message("삭제할 사용자를 찾을 수 없습니다.")
                     .build();
         }

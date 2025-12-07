@@ -23,19 +23,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
       const gatewayPort = process.env.NEXT_PUBLIC_GATEWAY_PORT || '8080';
       const gatewayUrl = `http://${gatewayHost}:${gatewayPort}`;
       
-      // 백엔드에서 인증 URL 가져오기
-      const response = await fetch(`${gatewayUrl}/auth/${provider}/auth-url`);
+      // 현재 프론트엔드 URL (자신의 URL)
+      const frontendUrl = typeof window !== 'undefined' 
+        ? `${window.location.protocol}//${window.location.host}`
+        : 'http://localhost:3000';
+      
+      // 백엔드에서 인증 URL 가져오기 (프론트엔드 URL 파라미터 포함)
+      const response = await fetch(`${gatewayUrl}/auth/${provider}/auth-url?frontend_url=${encodeURIComponent(frontendUrl)}`);
+      
+      // 응답 상태 확인
+      if (!response.ok) {
+        console.error(`${provider} 로그인 URL 요청 실패:`, response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('에러 응답:', errorText);
+        alert(`${provider} 로그인 URL을 가져오는데 실패했습니다. (${response.status})`);
+        return;
+      }
+      
       const data = await response.json();
+      console.log(`${provider} 로그인 응답:`, data);
       
       if (data.success && data.auth_url) {
         // 인증 URL로 리다이렉트
         window.location.href = data.auth_url;
       } else {
+        console.error(`${provider} 로그인 응답 형식 오류:`, data);
         alert(`${provider} 로그인 URL을 가져오는데 실패했습니다.`);
       }
     } catch (error) {
       console.error(`${provider} 로그인 오류:`, error);
-      alert(`${provider} 로그인 중 오류가 발생했습니다.`);
+      alert(`${provider} 로그인 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     }
   };
 

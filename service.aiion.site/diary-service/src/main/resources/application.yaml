@@ -10,9 +10,14 @@ spring:
       import-check:
         enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/aidb
-    username: aiion
-    password: aiion4man
+    # 로컬 DB
+    # url: jdbc:postgresql://localhost:5432/aidb
+    # username: aiion
+    # password: aiion4man
+    # Neon DB (프로덕션)
+    url: jdbc:postgresql://ep-crimson-darkness-a1o2y4xd-pooler.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require
+    username: neondb_owner
+    password: npg_yKz6I1piqEBt
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 30000
@@ -31,9 +36,6 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-        # FK 제약조건 자동 생성 설정
-        hbm2ddl:
-          jdbc_metadata_extraction_strategy: individually
     generate-ddl: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false

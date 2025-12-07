@@ -21,6 +21,28 @@ interface DiaryModel {
   title: string;
   content: string;
   userId?: number;
+  // 감정 분석 결과 (백엔드에서 자동으로 포함)
+  emotion?: number; // 감정 코드 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)
+  emotionLabel?: string; // 감정 라벨
+  emotionConfidence?: number; // 신뢰도 (0.0 ~ 1.0)
+}
+
+/**
+ * 감정 코드를 이모지로 변환
+ */
+function emotionCodeToEmoji(emotionCode?: number): string {
+  const emotionMap: Record<number, string> = {
+    0: '😐', // 평가불가
+    1: '😊', // 기쁨
+    2: '😢', // 슬픔
+    3: '😠', // 분노
+    4: '😨', // 두려움
+    5: '🤢', // 혐오
+    6: '😲', // 놀람
+  };
+  return emotionCode !== undefined && emotionCode in emotionMap 
+    ? emotionMap[emotionCode] 
+    : '😊'; // 기본값
 }
 
 /**
@@ -28,15 +50,30 @@ interface DiaryModel {
  */
 function modelToDiary(model: DiaryModel): Diary {
   console.log('[modelToDiary] 변환 시작:', model);
+  
+  // 백엔드에서 감정 분석 결과가 있으면 사용, 없으면 기본값
+  const emotion = model.emotionLabel 
+    ? emotionCodeToEmoji(model.emotion) 
+    : '😊';
+  const emotionScore = model.emotionConfidence !== undefined 
+    ? Math.round(model.emotionConfidence * 10) // 0.0~1.0을 0~10으로 변환
+    : 5; // 기본값
+  
   const diary = {
     id: model.id?.toString() || Date.now().toString(),
     date: model.diaryDate || new Date().toISOString().split('T')[0],
     title: model.title || '',
     content: model.content || '',
-    emotion: '😊', // 기본값 (백엔드에 없음)
-    emotionScore: 5, // 기본값 (백엔드에 없음)
+    emotion: emotion,
+    emotionScore: emotionScore,
   };
-  console.log('[modelToDiary] 변환 완료:', diary);
+  console.log('[modelToDiary] 변환 완료:', diary, {
+    원본_감정코드: model.emotion,
+    원본_감정라벨: model.emotionLabel,
+    원본_신뢰도: model.emotionConfidence,
+    변환된_이모지: emotion,
+    변환된_점수: emotionScore
+  });
   return diary;
 }
 
@@ -105,20 +142,29 @@ function diaryToModel(diary: Diary, userId?: number): DiaryModel {
 /**
  * 사용자별 일기 조회
  */
-export async function fetchDiariesByUserId(userId?: number): Promise<Diary[]> {
+export async function fetchDiariesByUserId(userId?: number, skipAuth: boolean = false): Promise<Diary[]> {
   // Gateway 라우팅: /diary/** → diary-service
   // 백엔드 컨트롤러: @RequestMapping("/diaries")
   // JWT 토큰 기반 조회: /diary/diaries/user (토큰에서 userId 자동 추출)
   // 또는 기존 방식: /diary/diaries/user/{userId} (하위 호환성)
   const endpoint = userId ? `/diary/diaries/user/${userId}` : `/diary/diaries/user`;
-  console.log('[fetchDiariesByUserId] API 호출 시작:', endpoint, userId ? `(userId: ${userId})` : '(JWT 토큰 기반)');
+  console.log('[fetchDiariesByUserId] API 호출 시작:', endpoint, userId ? `(userId: ${userId})` : '(JWT 토큰 기반)', skipAuth ? '(인증 스킵)' : '');
   
   try {
+    // 테스트 모드: skipAuth가 true이면 Authorization 헤더 제거
+    const headers: HeadersInit = {};
+    if (skipAuth) {
+      // Authorization 헤더를 명시적으로 제거하기 위해 빈 값 설정
+      // 실제로는 fetchJSONFromGateway에서 토큰을 추가하지 않도록 해야 함
+      console.log('[fetchDiariesByUserId] 테스트 모드: 인증 헤더 제거');
+    }
+    
     const response = await fetchJSONFromGateway<Messenger>(
       endpoint,
       {},
       {
         method: 'GET',
+        headers: skipAuth ? { 'Authorization': '' } : undefined, // 빈 Authorization 헤더로 덮어쓰기
       }
     );
 
@@ -220,8 +266,8 @@ export async function fetchDiaries(): Promise<Diary[]> {
       return [];
     }
 
-    // 응답 구조 확인 (code 또는 Code 모두 처리)
-    // 백엔드 Messenger 형식: { Code: 200, message: "...", data: [...] } 또는 { code: 200, message: "...", data: [...] }
+    // 응답 구조 확인 (code로 통일)
+    // 백엔드 Messenger 형식: { code: 200, message: "...", data: [...] }
     console.log('[fetchDiaries] 원본 응답 데이터:', response.data);
     console.log('[fetchDiaries] 응답 데이터 타입:', typeof response.data);
     console.log('[fetchDiaries] 응답 데이터 키:', response.data ? Object.keys(response.data) : 'null');
@@ -267,7 +313,7 @@ export async function fetchDiaries(): Promise<Diary[]> {
     }
 
     // Messenger 형식인 경우 (messenger.data가 배열)
-    // 백엔드 응답 형식: { Code: 200, message: "...", data: [...] }
+    // 백엔드 응답 형식: { code: 200, message: "...", data: [...] }
     if (messenger && messenger.data) {
       if (Array.isArray(messenger.data)) {
         console.log('[fetchDiaries] Messenger 배열 데이터:', messenger.data.length, '개');
@@ -309,14 +355,19 @@ export async function fetchDiaries(): Promise<Diary[]> {
 export async function createDiary(diary: Diary, userId: number): Promise<Diary> {
   console.log('[createDiary] 일기 저장 시작:', { diary, userId });
   const diaryModel = diaryToModel(diary, userId);
-  console.log('[createDiary] 변환된 DiaryModel:', diaryModel);
+  
+  // 새 일기 생성 시 id를 제거 (백엔드에서 자동 생성)
+  const { id, ...diaryModelWithoutId } = diaryModel;
+  const cleanDiaryModel = diaryModelWithoutId as DiaryModel;
+  
+  console.log('[createDiary] 변환된 DiaryModel (id 제거):', cleanDiaryModel);
   console.log('[createDiary] 날짜 형식 확인:', {
-    diaryDate: diaryModel.diaryDate,
+    diaryDate: cleanDiaryModel.diaryDate,
     format: 'YYYY-MM-DD',
-    isValid: /^\d{4}-\d{2}-\d{2}$/.test(diaryModel.diaryDate || '')
+    isValid: /^\d{4}-\d{2}-\d{2}$/.test(cleanDiaryModel.diaryDate || '')
   });
   
-  const requestBody = JSON.stringify(diaryModel);
+  const requestBody = JSON.stringify(cleanDiaryModel);
   console.log('[createDiary] Gateway로 전송할 요청 본문:', requestBody);
   
   try {
@@ -362,7 +413,7 @@ export async function createDiary(diary: Diary, userId: number): Promise<Diary> 
       console.error('[createDiary] ⚠️ 백엔드 에러 응답 발생!');
       console.error('[createDiary] 에러 코드:', responseCode);
       console.error('[createDiary] 에러 메시지:', messenger.message);
-      console.error('[createDiary] 전송한 DiaryModel:', JSON.stringify(diaryModel, null, 2));
+      console.error('[createDiary] 전송한 DiaryModel:', JSON.stringify(cleanDiaryModel, null, 2));
       console.error('[createDiary] 전송한 요청 본문:', requestBody);
       
       // 구체적인 에러 메시지 제공
@@ -371,9 +422,9 @@ export async function createDiary(diary: Diary, userId: number): Promise<Diary> 
       // 백엔드 검증 에러 메시지에 따라 더 친절한 메시지 제공
       if (responseCode === 400) {
         if (messenger.message?.includes('일자 정보')) {
-          errorMessage = `날짜 정보가 올바르지 않습니다: ${diaryModel.diaryDate}`;
+          errorMessage = `날짜 정보가 올바르지 않습니다: ${cleanDiaryModel.diaryDate}`;
         } else if (messenger.message?.includes('사용자 ID')) {
-          errorMessage = `사용자 ID가 필요합니다. 현재 userId: ${diaryModel.userId}`;
+          errorMessage = `사용자 ID가 필요합니다. 현재 userId: ${cleanDiaryModel.userId}`;
         }
       }
       
@@ -421,8 +472,8 @@ export async function updateDiary(diary: Diary, userId: number): Promise<Diary> 
 
   const messenger = response.data as Messenger;
   
-  // Code 필드 확인 (대문자 또는 소문자)
-  const responseCode = messenger.code; // code는 소문자로 고정
+  // code 필드 확인 (소문자로 통일)
+  const responseCode = messenger.code;
   
   if (responseCode !== 200) {
     throw new Error(messenger.message || '일기를 수정하는데 실패했습니다.');
@@ -455,8 +506,8 @@ export async function deleteDiary(diary: Diary, userId: number): Promise<void> {
 
   const messenger = response.data as Messenger;
   
-  // Code 필드 확인 (대문자 또는 소문자)
-  const responseCode = messenger.code; // code는 소문자로 고정
+  // code 필드 확인 (소문자로 통일)
+  const responseCode = messenger.code;
   
   if (responseCode !== 200) {
     throw new Error(messenger.message || '일기를 삭제하는데 실패했습니다.');

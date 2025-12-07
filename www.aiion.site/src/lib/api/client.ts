@@ -265,15 +265,32 @@ export async function fetchFromGateway(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
+  // options의 headers와 병합
+  const mergedHeaders: HeadersInit = {
+    ...headers,
+    ...options.headers,
+  };
+  
+  // JWT 토큰 추가 로직
+  // options.headers에 Authorization이 명시적으로 설정되어 있으면 그대로 사용 (테스트 모드용)
+  // 그렇지 않으면 accessToken이 있으면 추가
+  if (!options.headers || !('Authorization' in options.headers)) {
+    if (accessToken) {
+      mergedHeaders['Authorization'] = `Bearer ${accessToken}`;
+    }
+  } else {
+    // options.headers에 Authorization이 있으면 그대로 사용 (빈 문자열이어도)
+    // 이 경우 토큰을 추가하지 않음 (테스트 모드)
+    if (options.headers['Authorization'] === '') {
+      delete mergedHeaders['Authorization'];
+    }
+  }
+
   return fetchWithRetry(url, {
     method: 'GET',
     cache: 'no-store', // Next.js에서 fetch 캐싱 비활성화
     ...options,
-    // options에 이미 headers가 있으면 병합 (JWT 토큰 우선)
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
+    headers: mergedHeaders,
   });
 }
 
@@ -351,8 +368,26 @@ export async function fetchJSONFromAIGateway<T = any>(
   options: FetchOptions = {}
 ): Promise<JSONResponse<T>> {
   try {
+    console.log('[fetchJSONFromAIGateway] 요청 시작:', endpoint);
     const response = await fetchFromAIGateway(endpoint, params, options);
-    return parseJSONResponse<T>(response);
+    
+    console.log('[fetchJSONFromAIGateway] 응답 받음:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('Content-Type'),
+      ok: response.ok
+    });
+    
+    const result = await parseJSONResponse<T>(response);
+    
+    console.log('[fetchJSONFromAIGateway] 파싱 완료:', {
+      hasError: !!result.error,
+      hasData: !!result.data,
+      dataType: typeof result.data,
+      status: result.status
+    });
+    
+    return result;
   } catch (error) {
     // 네트워크 에러 (연결 실패 등) 처리
     console.error('[fetchJSONFromAIGateway] 요청 실패:', error);
