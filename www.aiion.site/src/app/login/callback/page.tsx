@@ -62,10 +62,19 @@ function OAuthCallbackContent() {
         // JWT 토큰에서 사용자 정보 추출 (간단한 파싱)
         // 실제로는 백엔드에 /user 정보 요청을 보내야 할 수도 있음
         try {
-          // JWT 토큰 디코딩 (간단한 방법 - base64 디코딩)
+          // JWT 토큰 디코딩 (UTF-8 안전 디코딩)
           const tokenParts = token.split('.');
           if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
+            // base64 디코딩 후 UTF-8 디코딩
+            const base64Url = tokenParts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(
+              atob(base64)
+                .split('')
+                .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+            );
+            const payload = JSON.parse(jsonPayload);
             console.log('[OAuthCallback] JWT 페이로드:', payload);
 
             // 사용자 정보 추출
@@ -80,9 +89,12 @@ function OAuthCallbackContent() {
             if (login) {
               login({
                 id: parsedUserId,
-                name: nickname,
+                name: nickname || name,
                 email: email || `${provider}@example.com`,
               });
+              
+              // 상태가 반영될 때까지 대기
+              console.log('[OAuthCallback] 로그인 상태 업데이트 완료, 상태 반영 대기 중...');
             }
 
             console.log('[OAuthCallback] 로그인 완료:', { userId: parsedUserId, name, nickname, email });
@@ -94,10 +106,11 @@ function OAuthCallbackContent() {
               setShowNicknameModal(true);
             } else {
               // 이미 닉네임이 설정되어 있으면 홈으로 바로 이동
-              // 상태가 제대로 반영되도록 약간의 지연 후 이동
+              // window.location.href를 사용해 완전 새로고침으로 상태가 persist에서 로드되도록 함
               setTimeout(() => {
+                console.log('[OAuthCallback] 홈으로 리다이렉트 (완전 새로고침)');
                 window.location.href = '/';
-              }, 100);
+              }, 300);
             }
           } else {
             throw new Error('JWT 토큰 형식이 올바르지 않습니다.');
@@ -139,10 +152,10 @@ function OAuthCallbackContent() {
         });
       }
       setShowNicknameModal(false);
-      // 상태가 제대로 반영되도록 약간의 지연 후 이동
+      // 상태가 제대로 반영되도록 약간의 지연 후 완전 새로고침으로 이동
       setTimeout(() => {
         window.location.href = '/';
-      }, 100);
+      }, 300);
     } catch (error) {
       console.error('[OAuthCallback] 닉네임 저장 실패:', error);
       throw error;

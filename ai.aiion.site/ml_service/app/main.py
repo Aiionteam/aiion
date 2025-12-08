@@ -19,7 +19,7 @@ from app.config import (
     LOG_LEVEL,
     LOG_FORMAT
 )
-from app.titanic.router import router as titanic_router
+from app.titanic.titanic_router import router as titanic_router
 from app.diary_emotion.router import router as diary_emotion_router
 
 # 로깅 설정
