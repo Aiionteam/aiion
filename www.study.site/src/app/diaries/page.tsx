@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { getUserDiaries, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
 
 interface DiaryWithEmotion extends Diary {
@@ -11,6 +11,7 @@ interface DiaryWithEmotion extends Diary {
 
 export default function DiariesPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [diaries, setDiaries] = useState<DiaryWithEmotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +19,7 @@ export default function DiariesPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // 기본값: 내림차순 (최신순)
   const scrollRestored = useRef(false);
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const isNavigatingAway = useRef(false);
 
   // 로컬 스토리지 키
   const EMOTION_CACHE_KEY = "diary_emotions_cache";
@@ -156,20 +158,28 @@ export default function DiariesPage() {
       const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
       if (savedPosition) {
         const scrollY = parseInt(savedPosition, 10);
-        if (isNaN(scrollY) || scrollY < 0) return;
+        if (isNaN(scrollY) || scrollY < 0) {
+          scrollRestored.current = true;
+          return;
+        }
         
         // 여러 번 시도하여 확실히 복원
         const attemptRestore = (attempts = 0) => {
-          if (attempts > 20) {
+          if (attempts > 30) {
             // 최대 시도 횟수 초과 시 강제로 스크롤
             window.scrollTo({ top: scrollY, behavior: 'instant' });
             scrollRestored.current = true;
+            console.log(`[DiariesPage] 스크롤 위치 복원 (강제): ${scrollY}px`);
             return;
           }
           
           // DOM이 준비되었는지 확인
           const container = listContainerRef.current;
-          if (container && container.children.length > 0) {
+          const documentHeight = document.documentElement.scrollHeight;
+          const windowHeight = window.innerHeight;
+          
+          // 리스트가 렌더링되었고, 문서 높이가 충분한지 확인
+          if (container && container.children.length > 0 && documentHeight > windowHeight) {
             // 리스트가 렌더링되었으면 스크롤 복원
             window.scrollTo({ top: scrollY, behavior: 'instant' });
             scrollRestored.current = true;
@@ -181,6 +191,8 @@ export default function DiariesPage() {
         };
         
         attemptRestore();
+      } else {
+        scrollRestored.current = true;
       }
     } catch (err) {
       console.error("스크롤 위치 복원 실패:", err);
@@ -200,8 +212,11 @@ export default function DiariesPage() {
       try {
         setLoading(true);
         setError(null);
-        // 스크롤 복원 플래그 리셋 (새로 로드할 때마다)
-        scrollRestored.current = false;
+        // 스크롤 복원 플래그 리셋 (페이지가 다시 마운트될 때만)
+        // 뒤로가기로 돌아온 경우에는 복원해야 하므로 false로 설정
+        if (!isNavigatingAway.current) {
+          scrollRestored.current = false;
+        }
         
         // JWT 토큰에서 userId를 자동으로 추출하여 조회 (백엔드에서 처리)
         const diariesList = await getUserDiaries();
@@ -271,7 +286,7 @@ export default function DiariesPage() {
     };
 
     fetchDiaries();
-  }, []); // 초기 로드만
+  }, [pathname]); // pathname이 변경될 때마다 (뒤로가기 포함)
 
   // 스크롤 위치 저장 (스크롤 이벤트)
   useEffect(() => {
@@ -315,13 +330,38 @@ export default function DiariesPage() {
   useLayoutEffect(() => {
     if (!loading && diaries.length > 0 && !scrollRestored.current) {
       // requestAnimationFrame을 사용하여 브라우저 렌더링 사이클에 맞춤
-      requestAnimationFrame(() => {
+      // 여러 번 시도하여 확실히 복원
+      const restoreWithDelay = () => {
         requestAnimationFrame(() => {
-          restoreScrollPosition();
+          requestAnimationFrame(() => {
+            restoreScrollPosition();
+            // 추가로 약간의 지연 후 한 번 더 시도 (이미지 로딩 등으로 높이가 변경될 수 있음)
+            setTimeout(() => {
+              if (!scrollRestored.current) {
+                restoreScrollPosition();
+              }
+            }, 100);
+          });
         });
-      });
+      };
+      restoreWithDelay();
     }
   }, [loading, diaries.length]);
+
+  // 페이지가 다시 마운트될 때 (뒤로가기로 돌아올 때) 스크롤 복원 플래그 리셋
+  useEffect(() => {
+    // pathname이 /diaries이고, 이전에 다른 페이지로 이동했던 경우
+    if (pathname === '/diaries' && isNavigatingAway.current) {
+      isNavigatingAway.current = false;
+      scrollRestored.current = false;
+      // 데이터가 이미 로드되어 있으면 스크롤 복원 시도
+      if (!loading && diaries.length > 0) {
+        setTimeout(() => {
+          restoreScrollPosition();
+        }, 100);
+      }
+    }
+  }, [pathname, loading, diaries.length]);
 
   // 새 일기 추가 시 자동 감정 분석
   useEffect(() => {
@@ -530,56 +570,76 @@ export default function DiariesPage() {
     setDiaries(sortedDiaries);
   };
 
-  // 감정에 따른 이모티콘 반환 (1위만)
+  // 감정에 따른 이모티콘 반환 (1위만) - 확률이 가장 높은 감정 기준
   const getEmotionEmoji = (diary: DiaryWithEmotion): string => {
-    // DB에서 가져온 감정 정보 우선 사용
-    // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
+    const emotionMap: Record<number, string> = {
+      0: "😐", // 평가불가 -> 평범
+      1: "😊", // 기쁨
+      2: "😢", // 슬픔
+      3: "😠", // 분노
+      4: "😨", // 두려움
+      5: "🤢", // 혐오
+      6: "😲", // 놀람
+      7: "🤝", // 신뢰
+      8: "✨", // 기대
+      9: "😰", // 불안
+      10: "😌", // 안도
+      11: "😔", // 후회
+      12: "💭", // 그리움
+      13: "🙏", // 감사
+      14: "😞", // 외로움
+    };
+    
+    // 감정 라벨을 숫자로 변환하는 매핑
+    const labelToId: Record<string, number> = {
+      '평가불가': 0,
+      '평범': 0,
+      '기쁨': 1,
+      '슬픔': 2,
+      '분노': 3,
+      '두려움': 4,
+      '혐오': 5,
+      '놀람': 6,
+      '신뢰': 7,
+      '기대': 8,
+      '불안': 9,
+      '안도': 10,
+      '후회': 11,
+      '그리움': 12,
+      '감사': 13,
+      '외로움': 14,
+    };
+    
+    // probabilities에서 확률이 가장 높은 감정 찾기
+    if (diary.emotionProbabilities) {
+      try {
+        const probabilities = JSON.parse(diary.emotionProbabilities);
+        const sorted = Object.entries(probabilities)
+          .sort(([, a], [, b]) => (b as number) - (a as number));
+        
+        if (sorted.length > 0) {
+          const topEmotionLabel = normalizeEmotionLabel(sorted[0][0]);
+          const emotionId = labelToId[topEmotionLabel];
+          if (emotionId !== undefined) {
+            return emotionMap[emotionId] || "😐";
+          }
+        }
+      } catch (e) {
+        // JSON 파싱 실패 시 fallback 사용
+      }
+    }
+    
+    // DB에서 가져온 감정 정보 사용 (fallback)
     if (diary.emotion !== null && diary.emotion !== undefined) {
-      const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가 -> 평범
-        1: "😊", // 기쁨
-        2: "😢", // 슬픔
-        3: "😠", // 분노
-        4: "😨", // 두려움
-        5: "🤢", // 혐오
-        6: "😲", // 놀람
-        7: "🤝", // 신뢰
-        8: "✨", // 기대
-        9: "😰", // 불안
-        10: "😌", // 안도
-        11: "😔", // 후회
-        12: "💭", // 그리움
-        13: "🙏", // 감사
-        14: "😞", // 외로움
-      };
-      const emoji = emotionMap[diary.emotion] || "😐";
-      return emoji;
+      return emotionMap[diary.emotion] || "😐";
     }
     
-    // 캐시된 감정 분석 결과 사용
+    // 캐시된 감정 분석 결과 사용 (fallback)
     if (diary.emotionResponse) {
-      const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가 -> 평범
-        1: "😊", // 기쁨
-        2: "😢", // 슬픔
-        3: "😠", // 분노
-        4: "😨", // 두려움
-        5: "🤢", // 혐오
-        6: "😲", // 놀람
-        7: "🤝", // 신뢰
-        8: "✨", // 기대
-        9: "😰", // 불안
-        10: "😌", // 안도
-        11: "😔", // 후회
-        12: "💭", // 그리움
-        13: "🙏", // 감사
-        14: "😞", // 외로움
-      };
-      const emoji = emotionMap[diary.emotionResponse.emotion] || "😐";
-      return emoji;
+      return emotionMap[diary.emotionResponse.emotion] || "😐";
     }
     
-    return "";
+    return "😐";
   };
 
   return (
@@ -680,6 +740,7 @@ export default function DiariesPage() {
                   key={diary.id}
                   className="flex items-center justify-between py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors px-2 cursor-pointer"
                   onClick={() => {
+                    isNavigatingAway.current = true;
                     saveScrollPosition(); // 클릭 시 스크롤 위치 저장
                     router.push(`/diaries/${diary.id}`);
                   }}

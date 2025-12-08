@@ -474,41 +474,13 @@ class DiaryEmotionService:
                         probabilities = probabilities / (probabilities.sum() + 1e-10)
                         ic(f"슬픔 < 평범 순서 역전 방지 (미세 조정): 슬픔 {probabilities[2]:.3f}, 평범 {probabilities[0]:.3f}")
             
-            # 긍정 감정 확률 0.02씩 증가 (기쁨, 감사, 신뢰, 기대, 안도)
-            if len(probabilities) > 14:
-                # 기쁨 (1)
-                if probabilities[1] > 0:
-                    joy_prob_before = float(probabilities[1])
-                    probabilities[1] = probabilities[1] + 0.02
-                    ic(f"기쁨 확률 0.02 증가: {joy_prob_before:.3f} -> {probabilities[1]:.3f}")
-                
-                # 감사 (13)
-                if probabilities[13] > 0:
-                    gratitude_prob_before = float(probabilities[13])
-                    probabilities[13] = probabilities[13] + 0.02
-                    ic(f"감사 확률 0.02 증가: {gratitude_prob_before:.3f} -> {probabilities[13]:.3f}")
-                
-                # 신뢰 (7)
-                if probabilities[7] > 0:
-                    trust_prob_before = float(probabilities[7])
-                    probabilities[7] = probabilities[7] + 0.02
-                    ic(f"신뢰 확률 0.02 증가: {trust_prob_before:.3f} -> {probabilities[7]:.3f}")
-                
-                # 기대 (8)
-                if probabilities[8] > 0:
-                    expectation_prob_before = float(probabilities[8])
-                    probabilities[8] = probabilities[8] + 0.02
-                    ic(f"기대 확률 0.02 증가: {expectation_prob_before:.3f} -> {probabilities[8]:.3f}")
-                
-                # 안도 (10)
-                if probabilities[10] > 0:
-                    relief_prob_before = float(probabilities[10])
-                    probabilities[10] = probabilities[10] + 0.02
-                    ic(f"안도 확률 0.02 증가: {relief_prob_before:.3f} -> {probabilities[10]:.3f}")
-                
+            # 기쁨 확률 0.02 감소 (0.01 증가에서 0.03 하향 조정)
+            if len(probabilities) > 1:
+                joy_prob_before = float(probabilities[1])
+                probabilities[1] = max(0.0, probabilities[1] - 0.02)  # 최소 0으로 제한
                 # 정규화
                 probabilities = probabilities / (probabilities.sum() + 1e-10)
-                ic(f"긍정 감정 확률 보정 완료 및 정규화")
+                ic(f"기쁨 확률 0.02 감소: {joy_prob_before:.3f} -> {probabilities[1]:.3f}")
             
             # 최대 확률과 해당 클래스 찾기
             max_prob_idx = int(np.argmax(probabilities))

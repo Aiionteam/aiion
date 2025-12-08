@@ -41,43 +41,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // 로그아웃 헬퍼 함수 (함수가 없을 때 사용)
-  const performLogout = () => {
-    console.log('[SettingsView] performLogout 호출됨 - 강제 로그아웃 처리');
+  // 로그아웃 헬퍼 함수 (함수가 없을 때 사용) - 모든 캐시와 스토리지 삭제
+  const performLogout = async () => {
+    console.log('[SettingsView] performLogout 호출됨 - 모든 캐시와 스토리지 삭제');
     if (typeof window !== 'undefined') {
-      // 모든 상태 정리
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('auth_provider');
-      localStorage.removeItem('app-storage');
-      sessionStorage.clear();
-      
-      // 모든 쿠키 삭제
-      const cookies = document.cookie.split(';');
-      cookies.forEach(cookie => {
-        const eqPos = cookie.indexOf('=');
-        const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
-        // 모든 경로와 도메인에서 쿠키 삭제 시도
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`;
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=localhost`;
-      });
-      
-      // Zustand 상태도 초기화 (set 함수 사용)
-      const store = useStore.getState();
-      useStore.setState((state) => ({
-        user: {
-          ...state.user,
-          user: null,
-          isLoggedIn: false,
-        },
-      }));
-      
-      console.log('[SettingsView] 강제 로그아웃 완료 (쿠키 포함) - 페이지 이동');
-      setTimeout(() => {
-        window.location.replace('/');
-      }, 100);
+      try {
+        // 1. localStorage 전체 삭제
+        localStorage.clear();
+        console.log('[SettingsView] localStorage 전체 삭제 완료');
+        
+        // 2. sessionStorage 전체 삭제
+        sessionStorage.clear();
+        console.log('[SettingsView] sessionStorage 전체 삭제 완료');
+        
+        // 3. 모든 쿠키 삭제
+        const cookies = document.cookie.split(';');
+        cookies.forEach(cookie => {
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+          if (name) {
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=localhost`;
+          }
+        });
+        console.log('[SettingsView] 모든 쿠키 삭제 완료');
+        
+        // 4. IndexedDB 삭제
+        if ('indexedDB' in window) {
+          const databases = await indexedDB.databases();
+          await Promise.all(
+            databases.map(db => {
+              return new Promise<void>((resolve) => {
+                const deleteReq = indexedDB.deleteDatabase(db.name);
+                deleteReq.onsuccess = () => resolve();
+                deleteReq.onerror = () => resolve();
+                deleteReq.onblocked = () => resolve();
+              });
+            })
+          );
+          console.log('[SettingsView] 모든 IndexedDB 삭제 완료');
+        }
+        
+        // 5. Service Worker 캐시 삭제
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+          console.log('[SettingsView] 모든 Service Worker 캐시 삭제 완료');
+        }
+        
+        // 6. Service Worker 등록 해제
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(reg => reg.unregister()));
+          console.log('[SettingsView] 모든 Service Worker 등록 해제 완료');
+        }
+        
+        // Zustand 상태도 초기화
+        useStore.setState((state) => ({
+          user: {
+            ...state.user,
+            user: null,
+            isLoggedIn: false,
+          },
+        }));
+        
+        console.log('[SettingsView] 모든 캐시와 스토리지 삭제 완료 - 페이지 이동');
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 300);
+      } catch (error) {
+        console.error('[SettingsView] 로그아웃 처리 중 에러:', error);
+        // 에러가 발생해도 페이지 이동
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 300);
+      }
     }
   };
 
@@ -295,7 +335,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log('[SettingsView] 로그아웃 버튼 클릭됨');
@@ -312,16 +352,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       console.log('[SettingsView] logout 함수 호출 시작');
                       try {
                         // logout 함수 내에서 모든 상태 정리 및 랜딩 페이지로 리다이렉트 처리
-                        logoutFn();
+                        await logoutFn();
                       } catch (error) {
                         console.error('[SettingsView] logout 함수 실행 중 에러:', error);
                         // 에러 발생 시에도 강제로 로그아웃 처리
-                        performLogout();
+                        await performLogout();
                       }
                     } else {
                       console.warn('[SettingsView] logout 함수가 없거나 함수가 아닙니다. 강제 로그아웃 수행');
                       // 함수가 없어도 강제로 로그아웃 처리
-                      performLogout();
+                      await performLogout();
                     }
                   }}
                   className="w-full bg-red-600 hover:bg-red-700 text-white border-red-600 rounded-lg px-4 py-3 font-medium transition-colors active:scale-95 transition-transform"

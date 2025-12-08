@@ -7,6 +7,7 @@ import { getUserIdFromToken } from "@/lib/api/auth";
 import { WeatherForecast } from "./WeatherForecast";
 import { TitanicPassengers } from "./TitanicPassengers";
 import { useRouter } from "next/navigation";
+import { predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
 
 interface Message {
   role: "user" | "assistant";
@@ -92,10 +93,21 @@ export const ChatInterface: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 입력 필드 포커스
+  // 입력 필드 포커스 유지
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // 로딩 상태가 변경될 때마다 포커스 유지
+  useEffect(() => {
+    if (!isLoading && inputRef.current) {
+      // 약간의 지연 후 포커스 복원 (DOM 업데이트 후)
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   // 서버 상태 확인
   useEffect(() => {
@@ -117,14 +129,88 @@ export const ChatInterface: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 일기 내용 추출 함수
+  const extractDiaryContent = (messages: Message[]): string | null => {
+    // 최근 메시지들에서 일기 형식 찾기 ([날짜] 일기 제목 내용)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === "user" && msg.content.includes("일기")) {
+        const content = msg.content;
+        
+        // 일기 형식 1: [날짜] 일기 제목 내용
+        const diaryMatch1 = content.match(/\[.*?\]\s*일기\s+(.+?)(?:\n|$)/s);
+        if (diaryMatch1) {
+          const afterTitle = diaryMatch1[1];
+          // 제목 다음 줄부터 내용 추출
+          const lines = afterTitle.split('\n');
+          if (lines.length > 1) {
+            return lines.slice(1).join('\n').trim();
+          }
+          return afterTitle.trim();
+        }
+        
+        // 일기 형식 2: 일기 제목이 있는 경우
+        const lines = content.split('\n');
+        const diaryIndex = lines.findIndex(line => line.includes('일기'));
+        if (diaryIndex >= 0) {
+          // 일기 라인 다음부터 내용 추출
+          const afterDiaryLine = lines.slice(diaryIndex + 1).join('\n').trim();
+          if (afterDiaryLine) {
+            return afterDiaryLine;
+          }
+        }
+        
+        // 일기 형식 3: 일기 키워드가 포함된 전체 내용
+        if (content.length > 10) {
+          return content;
+        }
+      }
+    }
+    return null;
+  };
+
+  // 기분 관련 질문 감지
+  const isMoodQuestion = (message: string): boolean => {
+    const moodKeywords = ['기분', '감정', '느낌', '어떤 기분', '어떤 감정', '어떤 느낌'];
+    return moodKeywords.some(keyword => message.includes(keyword));
+  };
+
+  // 감정 라벨을 한글로 변환
+  const getEmotionLabelKorean = (label: string): string => {
+    const labelMap: Record<string, string> = {
+      '평가불가': '평범',
+      '기쁨': '기쁨',
+      '슬픔': '슬픔',
+      '분노': '분노',
+      '두려움': '두려움',
+      '혐오': '혐오',
+      '놀람': '놀람',
+      '신뢰': '신뢰',
+      '기대': '기대',
+      '불안': '불안',
+      '안도': '안도',
+      '후회': '후회',
+      '그리움': '그리움',
+      '감사': '감사',
+      '외로움': '외로움',
+    };
+    return labelMap[label] || label;
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    e?.stopPropagation();
     
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
     setInput("");
     setError(null);
+    
+    // 포커스를 즉시 유지
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
 
     // 사용자 메시지 추가
     const newUserMessage: Message = {
@@ -137,6 +223,29 @@ export const ChatInterface: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // 기분 관련 질문이고 일기 내용이 있는 경우 감정 분석 수행
+      let emotionAnalysis: string = "";
+      if (isMoodQuestion(userMessage)) {
+        const diaryContent = extractDiaryContent([...messages, newUserMessage]);
+        if (diaryContent) {
+          try {
+            const emotionResult = await predictEmotion(diaryContent, 20000);
+            const topEmotions = emotionResult.probabilities 
+              ? Object.entries(emotionResult.probabilities)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 2)
+                  .map(([label, prob]) => `${getEmotionLabelKorean(label)} (${(prob * 100).toFixed(1)}%)`)
+                  .join(', ')
+              : `${getEmotionLabelKorean(emotionResult.emotion_label)} (${emotionResult.confidence ? (emotionResult.confidence * 100).toFixed(1) : 'N/A'}%)`;
+            
+            emotionAnalysis = `\n\n📊 감정 분석 결과:\n주요 감정: ${topEmotions}`;
+          } catch (emotionError: any) {
+            console.error("감정 분석 실패:", emotionError);
+            emotionAnalysis = `\n\n⚠️ 감정 분석을 수행할 수 없습니다: ${emotionError.message || '알 수 없는 오류'}`;
+          }
+        }
+      }
+
       // 대화 히스토리 생성 (백엔드 API 형식에 맞춤)
       const conversationHistory = messages.map((msg) => ({
         role: msg.role as "user" | "assistant",
@@ -150,10 +259,14 @@ export const ChatInterface: React.FC = () => {
         conversation_history: conversationHistory,
       });
 
+      // 응답 메시지에 감정 분석 결과 추가
+      const responseContent = response.message || response.response || "응답을 받을 수 없었습니다.";
+      const finalContent = emotionAnalysis ? responseContent + emotionAnalysis : responseContent;
+
       // 응답 메시지 추가
       const assistantMessage: Message = {
         role: "assistant",
-        content: response.message || response.response || "응답을 받을 수 없었습니다.",
+        content: finalContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -206,13 +319,17 @@ export const ChatInterface: React.FC = () => {
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
-      inputRef.current?.focus();
+      // 포커스 복원을 다음 이벤트 루프에서 수행하여 확실히 적용
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation();
       handleSend();
     }
   };
@@ -435,7 +552,13 @@ export const ChatInterface: React.FC = () => {
           </div>
 
           {/* Input Field */}
-          <form onSubmit={handleSend} className="relative">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend(e);
+            }} 
+            className="relative"
+          >
             <div className="flex items-center gap-3 bg-white border-2 border-gray-300 rounded-2xl px-4 py-3 focus-within:border-gray-900 transition-colors">
               {/* Paperclip Icon */}
               <button
@@ -454,10 +577,11 @@ export const ChatInterface: React.FC = () => {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder="무엇을 알고 싶으세요?"
                 className="flex-1 outline-none text-gray-900 placeholder-gray-400 bg-transparent"
-                disabled={isLoading}
+                readOnly={isLoading}
+                autoFocus
               />
 
               {/* Auto Dropdown & Mic Button */}

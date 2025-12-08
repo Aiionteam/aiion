@@ -233,54 +233,71 @@ export default function DiaryDetailPage() {
     return "";
   };
 
-  // 감정에 따른 이모티콘 반환 (1위만)
+  // 감정에 따른 이모티콘 반환 (1위만) - 확률이 가장 높은 감정 기준
   const getEmotionEmoji = (): string => {
-    // DB에서 가져온 감정 정보 우선 사용
-    // emotion이 null이 아니고 undefined도 아니면 이미 분석된 것으로 간주 (0 포함)
+    const emotionMap: Record<number, string> = {
+      0: "😐", // 평가불가 -> 평범
+      1: "😊", // 기쁨
+      2: "😢", // 슬픔
+      3: "😠", // 분노
+      4: "😨", // 두려움
+      5: "🤢", // 혐오
+      6: "😲", // 놀람
+      7: "🤝", // 신뢰
+      8: "✨", // 기대
+      9: "😰", // 불안
+      10: "😌", // 안도
+      11: "😔", // 후회
+      12: "💭", // 그리움
+      13: "🙏", // 감사
+      14: "😞", // 외로움
+    };
+    
+    // 감정 라벨을 숫자로 변환하는 매핑
+    const labelToId: Record<string, number> = {
+      '평가불가': 0,
+      '평범': 0,
+      '기쁨': 1,
+      '슬픔': 2,
+      '분노': 3,
+      '두려움': 4,
+      '혐오': 5,
+      '놀람': 6,
+      '신뢰': 7,
+      '기대': 8,
+      '불안': 9,
+      '안도': 10,
+      '후회': 11,
+      '그리움': 12,
+      '감사': 13,
+      '외로움': 14,
+    };
+    
+    // probabilities에서 확률이 가장 높은 감정 찾기
+    if (emotion?.probabilities && Object.keys(emotion.probabilities).length > 0) {
+      const sorted = Object.entries(emotion.probabilities)
+        .sort(([, a], [, b]) => b - a);
+      
+      if (sorted.length > 0) {
+        const topEmotionLabel = normalizeEmotionLabel(sorted[0][0]);
+        const emotionId = labelToId[topEmotionLabel];
+        if (emotionId !== undefined) {
+          return emotionMap[emotionId] || "😐";
+        }
+      }
+    }
+    
+    // DB에서 가져온 감정 정보 사용 (fallback)
     if (diary?.emotion !== null && diary?.emotion !== undefined) {
-      const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가 -> 평범
-        1: "😊", // 기쁨
-        2: "😢", // 슬픔
-        3: "😠", // 분노
-        4: "😨", // 두려움
-        5: "🤢", // 혐오
-        6: "😲", // 놀람
-        7: "🤝", // 신뢰
-        8: "✨", // 기대
-        9: "😰", // 불안
-        10: "😌", // 안도
-        11: "😔", // 후회
-        12: "💭", // 그리움
-        13: "🙏", // 감사
-        14: "😞", // 외로움
-      };
       return emotionMap[diary.emotion] || "😐";
     }
     
-    // 캐시된 감정 분석 결과 사용
+    // 캐시된 감정 분석 결과 사용 (fallback)
     if (emotion) {
-      const emotionMap: Record<number, string> = {
-        0: "😐", // 평가불가 -> 평범
-        1: "😊", // 기쁨
-        2: "😢", // 슬픔
-        3: "😠", // 분노
-        4: "😨", // 두려움
-        5: "🤢", // 혐오
-        6: "😲", // 놀람
-        7: "🤝", // 신뢰
-        8: "✨", // 기대
-        9: "😰", // 불안
-        10: "😌", // 안도
-        11: "😔", // 후회
-        12: "💭", // 그리움
-        13: "🙏", // 감사
-        14: "😞", // 외로움
-      };
       return emotionMap[emotion.emotion] || "😐";
     }
     
-    return "";
+    return "😐";
   };
 
   if (loading) {
@@ -297,7 +314,14 @@ export default function DiaryDetailPage() {
         <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
           <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => {
+                // 목록 페이지의 스크롤 위치를 저장 (목록 페이지에서 이미 저장되지만 확실히 하기 위해)
+                if (typeof window !== "undefined") {
+                  const scrollY = window.scrollY || document.documentElement.scrollTop;
+                  sessionStorage.setItem("diaries_scroll_position", scrollY.toString());
+                }
+                router.back();
+              }}
               className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors"
               aria-label="뒤로가기"
             >
@@ -391,7 +415,8 @@ export default function DiaryDetailPage() {
               .sort(([, a], [, b]) => b - a); // 확률이 높은 순으로 정렬
             const mainEmotion = sortedProbabilities[0];
             const otherEmotions = sortedProbabilities.slice(1);
-            const mainEmotionLabel = normalizeEmotionLabel(diary.emotionLabel || emotion?.emotion_label);
+            // 확률이 가장 높은 감정을 메인 감정으로 설정
+            const mainEmotionLabel = normalizeEmotionLabel(mainEmotion[0]);
             
             return (
               <div className="mt-4 pt-4 border-t border-gray-200">
