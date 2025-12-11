@@ -22,5 +22,16 @@ public interface DiaryService {
      * 일기 테이블의 모든 일기를 분석합니다
      */
     public Messenger reanalyzeAllEmotions();
+    
+    /**
+     * 특정 사용자의 모든 일기 MBTI 분석 재실행
+     */
+    public Messenger reanalyzeMbtiForUser(Long userId);
+    
+    /**
+     * 모든 일기 MBTI 분석 (수동 실행용)
+     * 일기 테이블의 모든 일기를 분석합니다
+     */
+    public Messenger reanalyzeAllMbti();
 }
 

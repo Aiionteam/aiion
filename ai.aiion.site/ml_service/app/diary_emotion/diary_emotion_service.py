@@ -40,9 +40,10 @@ except ImportError:
 # 공통 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.diary_emotion.diary_emotion_dataset import DiaryEmotionDataSet
-from app.diary_emotion.diary_emotion_model import DiaryEmotionModel
-from app.diary_emotion.diary_emotion_schema import DiaryEmotionSchema
+from app.diary_emotion.save.diary_emotion_dataset import DiaryEmotionDataSet
+from app.diary_emotion.save.diary_emotion_model import DiaryEmotionModel
+from app.diary_emotion.save.diary_emotion_method import DiaryEmotionMethod
+from app.diary_emotion.save.diary_emotion_schema import DiaryEmotionSchema
 
 
 class DiaryEmotionService:
@@ -52,10 +53,12 @@ class DiaryEmotionService:
         """초기화"""
         self.dataset = DiaryEmotionDataSet()
         self.model_obj = DiaryEmotionModel()
-        self.csv_file_path = csv_file_path or (Path(__file__).parent / "diary.csv")
+        self.method = DiaryEmotionMethod()  # 전처리 메서드 클래스
+        # CSV 파일 경로 (data/ 폴더에 있음)
+        self.csv_file_path = csv_file_path or (Path(__file__).parent.parent / "data" / "diary.csv")
         self.df: Optional[pd.DataFrame] = None
-        # 모델 저장 경로
-        self.model_dir = Path(__file__).parent / "models"
+        # 모델 저장 경로 (diary_emotion/models/ 폴더)
+        self.model_dir = Path(__file__).parent.parent / "models"
         self.model_dir.mkdir(exist_ok=True)
         self.model_file = self.model_dir / "diary_emotion_model.pkl"
         self.vectorizer_file = self.model_dir / "diary_emotion_vectorizer.pkl"
@@ -72,9 +75,8 @@ class DiaryEmotionService:
         ic("😎😎 전처리 시작")
         
         try:
-            # CSV 파일 로드
-            self.df = self.dataset.load_csv(self.csv_file_path)
-            ic(f"데이터 로드 완료: {len(self.df)} 개 행")
+            # CSV 파일 로드 (method 사용)
+            self.df = self.method.load_csv(self.csv_file_path)
             ic(f"CSV 파일 경로: {self.csv_file_path}")
             ic(f"CSV 파일 존재 여부: {self.csv_file_path.exists()}")
             
@@ -82,40 +84,16 @@ class DiaryEmotionService:
             ic(f"컬럼: {list(self.df.columns)}")
             ic(f"데이터 타입: {self.df.dtypes.to_dict()}")
             
-            # 결측치 처리 전 행 수
-            before_dropna = len(self.df)
-            ic(f"결측치 처리 전 행 수: {before_dropna}")
+            # 결측치 처리 (method 사용)
+            self.df = self.method.handle_missing_values(self.df, ['content', 'emotion'])
             
-            # 결측치 처리
-            self.df = self.df.dropna(subset=['content', 'emotion'])
+            # 감정 분포 확인
+            emotion_dist = self.method.get_label_distribution(self.df, 'emotion')
+            if emotion_dist:
+                ic(f"감정 분포: {emotion_dist}")
             
-            # 결측치 처리 후 행 수
-            after_dropna = len(self.df)
-            ic(f"결측치 처리 후 행 수: {after_dropna}")
-            ic(f"제거된 행 수: {before_dropna - after_dropna}")
-            
-            if 'emotion' in self.df.columns:
-                ic(f"감정 분포: {self.df['emotion'].value_counts().to_dict()}")
-            
-            # 텍스트 전처리 (제목과 내용 결합)
-            # 줄바꿈 문자를 공백으로 변환하고, 연속된 공백을 하나로 통합
-            title_text = self.df['title'].fillna('').astype(str)
-            content_text = self.df['content'].fillna('').astype(str)
-            
-            # 줄바꿈(\n, \r\n)을 공백으로 변환
-            title_text = title_text.str.replace(r'\r?\n', ' ', regex=True)
-            content_text = content_text.str.replace(r'\r?\n', ' ', regex=True)
-            
-            # 탭 문자도 공백으로 변환
-            title_text = title_text.str.replace('\t', ' ', regex=False)
-            content_text = content_text.str.replace('\t', ' ', regex=False)
-            
-            # 연속된 공백을 하나로 통합
-            title_text = title_text.str.replace(r'\s+', ' ', regex=True).str.strip()
-            content_text = content_text.str.replace(r'\s+', ' ', regex=True).str.strip()
-            
-            # 제목과 내용 결합
-            self.df['text'] = (title_text + ' ' + content_text).str.strip()
+            # 텍스트 전처리 (method 사용)
+            self.df = self.method.preprocess_text(self.df)
             
             # 감정 라벨 확인 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)
             ic(f"감정 라벨: 0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람")

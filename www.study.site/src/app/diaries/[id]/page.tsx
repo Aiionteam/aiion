@@ -409,6 +409,35 @@ export default function DiaryDetailPage() {
             )}
           </div>
           
+          {/* MBTI Info */}
+          {diary.mbtiType && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">MBTI 분석 결과</h3>
+                {diary.mbtiConfidence && (
+                  <span className="text-xs text-gray-500">
+                    신뢰도: {(diary.mbtiConfidence * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                  <span className="text-2xl font-bold text-purple-600">{diary.mbtiType}</span>
+                </div>
+                {diary.mbtiConfidence && (
+                  <div className="flex-1">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full bg-purple-500 transition-all"
+                        style={{ width: `${diary.mbtiConfidence * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
           {/* Emotion Probabilities */}
           {emotion?.probabilities && Object.keys(emotion.probabilities).length > 0 && (() => {
             const sortedProbabilities = Object.entries(emotion.probabilities)

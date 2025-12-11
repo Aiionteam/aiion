@@ -757,6 +757,16 @@ export default function DiariesPage() {
                           {getEmotionDisplay(diary)}
                         </div>
                       )}
+                      {diary.mbtiType && (
+                        <div className="text-xs text-purple-600 mt-1 font-medium">
+                          MBTI: {diary.mbtiType}
+                          {diary.mbtiConfidence && (
+                            <span className="text-gray-500 ml-1">
+                              ({(diary.mbtiConfidence * 100).toFixed(0)}%)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {/* Emotion Emoji (1위만) */}
                     <div className="text-lg flex-shrink-0">

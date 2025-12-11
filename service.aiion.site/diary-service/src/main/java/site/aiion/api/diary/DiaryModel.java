@@ -29,5 +29,9 @@ public class DiaryModel {
      * 감정별 확률 정보 (JSON 문자열: {"평가불가": 0.1, "기쁨": 0.8, ...})
      */
     private String emotionProbabilities;
+    
+    // MBTI 분석 결과 (선택적)
+    private String mbtiType;
+    private Double mbtiConfidence;
 }
 

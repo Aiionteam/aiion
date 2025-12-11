@@ -20,7 +20,9 @@ from app.config import (
     LOG_FORMAT
 )
 from app.titanic.titanic_router import router as titanic_router
-from app.diary_emotion.router import router as diary_emotion_router
+from app.diary_emotion.save.diary_emotion_router import router as diary_emotion_router
+from app.diary_mbti.save.router import router as diary_mbti_router
+from app.seoul_crime.seoul_router import router as seoul_crime_router
 
 # 로깅 설정
 logger = setup_logging(SERVICE_NAME, LOG_LEVEL, LOG_FORMAT)
@@ -28,7 +30,7 @@ logger = setup_logging(SERVICE_NAME, LOG_LEVEL, LOG_FORMAT)
 # FastAPI 앱 생성
 app = FastAPI(
     title="ML Service API",
-    description="머신러닝 서비스 API 문서 (타이타닉 데이터, 일기 감정 분류)",
+    description="머신러닝 서비스 API 문서 (타이타닉 데이터, 일기 감정 분류, 일기 MBTI 분류, 서울 범죄 데이터)",
     version=SERVICE_VERSION,
     docs_url="/docs",  # Swagger UI 경로 명시
     redoc_url="/redoc",  # ReDoc 경로 명시
@@ -45,6 +47,8 @@ app.add_middleware(LoggingMiddleware)
 # 라우터 포함
 app.include_router(titanic_router)
 app.include_router(diary_emotion_router)
+app.include_router(diary_mbti_router)
+app.include_router(seoul_crime_router)
 
 # /passengers 엔드포인트 (라우터의 빈 경로가 작동하지 않아 직접 추가)
 @app.get("/passengers")

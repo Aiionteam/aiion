@@ -430,16 +430,27 @@ services:
       dockerfile: ml_service/Dockerfile
     container_name: aihoyun-ml-service
     volumes:
-      # 모델 파일 영구 저장 (컨테이너 재시작 시에도 유지)
+      # 코드 파일 실시간 반영 (개발 중 코드 수정 시 즉시 반영)
+      - ./ai.aiion.site/ml_service/app:/app/app
+      # 각 ML 프로젝트별 모델 폴더 영구 저장
       - ./ai.aiion.site/ml_service/app/diary_emotion/models:/app/app/diary_emotion/models
+      - ./ai.aiion.site/ml_service/app/diary_mbti/models:/app/app/diary_mbti/models
+      - ./ai.aiion.site/ml_service/app/titanic/models:/app/app/titanic/models
       # CSV 파일 실시간 반영 (개발 중 데이터 추가 시 즉시 반영)
-      - ./ai.aiion.site/ml_service/app/diary_emotion/diary.csv:/app/app/diary_emotion/diary.csv
+      - ./ai.aiion.site/ml_service/app/diary_emotion/data/diary.csv:/app/app/diary_emotion/data/diary.csv
+      - ./ai.aiion.site/ml_service/app/diary_mbti/data/diary_mbti.csv:/app/app/diary_mbti/data/diary_mbti.csv
+      - ./ai.aiion.site/ml_service/app/titanic/train.csv:/app/app/titanic/train.csv
+      - ./ai.aiion.site/ml_service/app/titanic/test.csv:/app/app/titanic/test.csv
+      # 서울 범죄 데이터 실시간 반영
+      - ./ai.aiion.site/ml_service/app/seoul_crime/data:/app/app/seoul_crime/data
     ports:
       - "9005:9005"
     networks:
       - spring-network
     environment:
       - PORT=9005
+      - KAKAO_MAP_REST_API_KEY=${KAKAO_MAP_REST_API_KEY:-}
+      - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY:-}
     restart: unless-stopped
 
   inventory-service:

@@ -15,6 +15,8 @@ export interface Diary {
   emotionLabel?: string;
   emotionConfidence?: number;
   emotionProbabilities?: string; // JSON 문자열: {"평가불가": 0.1, "기쁨": 0.8, ...}
+  mbtiType?: string; // MBTI 타입 (예: "ENFP", "평가불가")
+  mbtiConfidence?: number; // MBTI 신뢰도 (0.0 ~ 1.0)
 }
 
 // diary-service의 Messenger 응답 형식
@@ -148,13 +150,26 @@ export async function createDiary(diaryData: CreateDiaryRequest | Diary): Promis
     throw new Error(`${errorMessage} (코드: ${errorCode})`);
   } catch (error: any) {
     console.error("[createDiary] 예외 발생:", error);
+    console.error("[createDiary] 에러 상세:", {
+      message: error.message,
+      response: error.response,
+      responseData: error.response?.data,
+      status: error.response?.status,
+      statusText: error.response?.statusText
+    });
+    
     // 에러 메시지에서 코드 추출
     if (error.response?.data) {
       const errorData = error.response.data;
-      const errorMessage = errorData.message || "저장 실패";
-      const errorCode = errorData.code;
+      const errorMessage = errorData.message || errorData.error || "저장 실패";
+      const errorCode = errorData.code || error.response.status;
+      console.error(`[createDiary] 저장 실패: ${errorMessage} (코드: ${errorCode})`);
       throw new Error(`${errorMessage} (코드: ${errorCode})`);
     }
-    throw error;
+    
+    // 네트워크 에러나 기타 에러
+    const errorMessage = error.message || "일기 저장 중 오류가 발생했습니다.";
+    console.error(`[createDiary] 저장 실패: ${errorMessage}`);
+    throw new Error(errorMessage);
   }
 }

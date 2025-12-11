@@ -9,11 +9,16 @@ uvicorn[standard]==0.24.0     # ASGI 서버 - FastAPI 애플리케이션 실행 
 # ===================
 pandas>=2.2.0,<2.3.0          # 데이터프레임 처리 - CSV 데이터 분석 및 조작 (권장: 2.2.x)
 numpy>=1.26.0,<2.1.0          # 수치 계산 라이브러리 - 머신러닝 데이터 전처리 및 연산 (권장: 1.26.x 또는 2.0.x, scikit-learn 호환)
+geopandas>=0.14.0             # 지리공간 데이터 처리 - shapefile 읽기 및 지도 시각화
+matplotlib>=3.8.0             # 시각화 라이브러리 - 히트맵 및 그래프 생성
 
 # ===================
 # 머신러닝 (Machine Learning)
 # ===================
 scikit-learn>=1.4.0,<1.5.0    # 머신러닝 라이브러리 - 모델 학습, 평가, 데이터셋 (권장: 1.4.x)
+lightgbm>=4.0.0               # LightGBM - 그래디언트 부스팅 모델 (타이타닉 생존 예측)
+xgboost>=2.0.0                # XGBoost - 그래디언트 부스팅 모델 (MBTI 앙상블 모델)
+optuna>=3.0.0                 # Optuna - 하이퍼파라미터 최적화 (MBTI 모델 튜닝)
 datasets>=2.14.0              # Hugging Face 데이터셋 - 외부 데이터셋 로드 및 관리
 gensim>=4.3.0                 # Word2Vec, FastText - 문맥 기반 단어 임베딩 (문맥 이해)
 

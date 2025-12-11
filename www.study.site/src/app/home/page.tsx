@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChatInterface } from "@/components/organisms/ChatInterface";
+import { Button } from "@/components/atoms/Button";
 import { useLoginStore } from "@/store";
 import { getToken } from "@/lib/api/auth";
 
@@ -42,6 +44,21 @@ export default function HomePage() {
     return null;
   }
 
-  return <ChatInterface />;
+  return (
+    <div className="relative min-h-screen">
+      {/* 카카오 지도 버튼 - 상단 고정 */}
+      <div className="fixed top-4 right-4 z-50">
+        <Link href="/map">
+          <Button 
+            variant="primary" 
+            className="w-auto px-6 py-3 shadow-lg hover:shadow-xl transition-shadow"
+          >
+            🗺️ 카카오 지도
+          </Button>
+        </Link>
+      </div>
+      <ChatInterface />
+    </div>
+  );
 }
 

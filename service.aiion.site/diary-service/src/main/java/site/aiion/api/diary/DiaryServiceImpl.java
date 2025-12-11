@@ -20,6 +20,7 @@ public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
     private final site.aiion.api.diary.emotion.DiaryEmotionService diaryEmotionService;
+    private final site.aiion.api.diary.mbti.DiaryMbtiService diaryMbtiService;
     private final JdbcTemplate jdbcTemplate;
 
     private DiaryModel entityToModel(Diary entity) {
@@ -46,6 +47,13 @@ public class DiaryServiceImpl implements DiaryService {
     }
 
     private DiaryModel entityToModel(Diary entity, Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap) {
+        return entityToModel(entity, emotionMap, Map.of());
+    }
+    
+    private DiaryModel entityToModel(
+            Diary entity, 
+            Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap,
+            Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap) {
         DiaryModel.DiaryModelBuilder builder = DiaryModel.builder()
                 .id(entity.getId())
                 .diaryDate(entity.getDiaryDate())
@@ -60,6 +68,13 @@ public class DiaryServiceImpl implements DiaryService {
                    .emotionLabel(emotion.getEmotionLabel())
                    .emotionConfidence(emotion.getConfidence())
                    .emotionProbabilities(emotion.getProbabilities());
+        }
+        
+        // MBTI 분석 결과가 있으면 추가
+        site.aiion.api.diary.mbti.DiaryMbtiModel mbti = mbtiMap.get(entity.getId());
+        if (mbti != null) {
+            builder.mbtiType(mbti.getMbtiType())
+                   .mbtiConfidence(mbti.getConfidence());
         }
         
         return builder.build();
@@ -103,7 +118,13 @@ public class DiaryServiceImpl implements DiaryService {
             List<Long> diaryIds = List.of(diary.getId());
             Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
                 diaryEmotionService.findByDiaryIdIn(diaryIds);
-            DiaryModel model = entityToModel(diary, emotionMap);
+            Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap = Map.of();
+            try {
+                mbtiMap = diaryMbtiService.findByDiaryIdIn(diaryIds);
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " MBTI 조회 실패: " + e.getMessage());
+            }
+            DiaryModel model = entityToModel(diary, emotionMap, mbtiMap);
             return Messenger.builder()
                     .code(200)
                     .message("조회 성공")
@@ -127,9 +148,17 @@ public class DiaryServiceImpl implements DiaryService {
                 .collect(Collectors.toList());
         Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
             diaryEmotionService.findByDiaryIdIn(diaryIds);
+        Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap;
+        try {
+            mbtiMap = diaryMbtiService.findByDiaryIdIn(diaryIds);
+        } catch (Exception e) {
+            System.err.println("[DiaryServiceImpl] 전체 조회 시 MBTI 일괄 조회 실패: " + e.getMessage());
+            mbtiMap = Map.of();
+        }
+        final Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> finalMbtiMap = mbtiMap;
         
         List<DiaryModel> modelList = entities.stream()
-                .map(entity -> entityToModel(entity, emotionMap))
+                .map(entity -> entityToModel(entity, emotionMap, finalMbtiMap))
                 .collect(Collectors.toList());
         return Messenger.builder()
                 .code(200)
@@ -155,10 +184,18 @@ public class DiaryServiceImpl implements DiaryService {
         
         Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
             diaryEmotionService.findByDiaryIdIn(diaryIds);
+        Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap;
+        try {
+            mbtiMap = diaryMbtiService.findByDiaryIdIn(diaryIds);
+        } catch (Exception e) {
+            System.err.println("[DiaryServiceImpl] MBTI 일괄 조회 실패: " + e.getMessage());
+            mbtiMap = Map.of();
+        }
+        final Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> finalMbtiMap = mbtiMap;
         
-        // 감정 분석 결과를 포함하여 모델 변환
+        // 감정 분석 및 MBTI 분석 결과를 포함하여 모델 변환
         List<DiaryModel> modelList = entities.stream()
-                .map(entity -> entityToModel(entity, emotionMap))
+                .map(entity -> entityToModel(entity, emotionMap, finalMbtiMap))
                 .collect(Collectors.toList());
         
         return Messenger.builder()
@@ -232,12 +269,34 @@ public class DiaryServiceImpl implements DiaryService {
             // 감정 분석 실패해도 일기 저장은 성공으로 처리
             System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
         }
+        
+        // MBTI 분석 파이프라인 실행
+        try {
+            site.aiion.api.diary.common.domain.Messenger result =
+                diaryMbtiService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
+            if (result.getCode() != 200) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + result.getMessage());
+            }
+        } catch (Exception e) {
+            // MBTI 분석 실패해도 일기 저장은 성공으로 처리
+            System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + e.getMessage());
+        }
 
         // 일괄 조회 방식 사용 (N+1 문제 해결)
         List<Long> diaryIds = List.of(saved.getId());
         Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap =
             diaryEmotionService.findByDiaryIdIn(diaryIds);
-        DiaryModel model = entityToModel(saved, emotionMap);
+        
+        // MBTI 조회는 예외가 발생해도 일기 저장은 성공으로 처리
+        Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap = Map.of();
+        try {
+            mbtiMap = diaryMbtiService.findByDiaryIdIn(diaryIds);
+        } catch (Exception e) {
+            System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 조회 실패: " + e.getMessage());
+            // MBTI 조회 실패해도 일기 저장은 성공으로 처리
+        }
+        
+        DiaryModel model = entityToModel(saved, emotionMap, mbtiMap);
         return Messenger.builder()
                 .code(200)
                 .message("저장 성공: " + saved.getId())
@@ -272,8 +331,9 @@ public class DiaryServiceImpl implements DiaryService {
         
         List<Diary> saved = diaryRepository.saveAll(entities);
         
-        // 일괄 저장된 일기들에 대해 감정 분석 수행 (비동기로 처리)
+        // 일괄 저장된 일기들에 대해 감정 분석 및 MBTI 분석 수행 (비동기로 처리)
         for (Diary diary : saved) {
+            // 감정 분석
             try {
                 site.aiion.api.diary.common.domain.Messenger result = 
                     diaryEmotionService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
@@ -282,6 +342,17 @@ public class DiaryServiceImpl implements DiaryService {
                 }
             } catch (Exception e) {
                 System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " 감정 분석 실패: " + e.getMessage());
+            }
+            
+            // MBTI 분석
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryMbtiService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " MBTI 분석 실패: " + result.getMessage());
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " MBTI 분석 실패: " + e.getMessage());
             }
         }
         
@@ -340,11 +411,29 @@ public class DiaryServiceImpl implements DiaryService {
                 System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
             }
             
+            // 일기 수정 시 MBTI 분석 재실행
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryMbtiService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + result.getMessage());
+                }
+            } catch (Exception e) {
+                // MBTI 분석 실패해도 일기 수정은 성공으로 처리
+                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + e.getMessage());
+            }
+            
             // 일괄 조회 방식 사용 (N+1 문제 해결)
             List<Long> diaryIds = List.of(saved.getId());
             Map<Long, site.aiion.api.diary.emotion.DiaryEmotionModel> emotionMap = 
                 diaryEmotionService.findByDiaryIdIn(diaryIds);
-            DiaryModel model = entityToModel(saved, emotionMap);
+            Map<Long, site.aiion.api.diary.mbti.DiaryMbtiModel> mbtiMap = Map.of();
+            try {
+                mbtiMap = diaryMbtiService.findByDiaryIdIn(diaryIds);
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 조회 실패 (수정): " + e.getMessage());
+            }
+            DiaryModel model = entityToModel(saved, emotionMap, mbtiMap);
             return Messenger.builder()
                     .code(200)
                     .message("수정 성공: " + diaryModel.getId())
@@ -361,16 +450,44 @@ public class DiaryServiceImpl implements DiaryService {
     @Override
     @Transactional
     public Messenger delete(DiaryModel diaryModel) {
-        // 일기 삭제 전에 감정 분석 결과도 함께 삭제
+        // 일기 삭제 전에 감정 분석 및 MBTI 분석 결과도 함께 삭제
         if (diaryModel.getId() != null) {
+            boolean emotionDeleteSuccess = true;
+            boolean mbtiDeleteSuccess = true;
+            
+            // 감정 분석 결과 삭제
             try {
                 site.aiion.api.diary.common.domain.Messenger result = 
                     diaryEmotionService.deleteByDiaryId(diaryModel.getId());
                 if (result.getCode() != 200) {
                     System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " 감정 분석 결과 삭제 실패: " + result.getMessage());
+                    emotionDeleteSuccess = false;
+                } else {
+                    System.out.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " 감정 분석 결과 삭제 성공");
                 }
             } catch (Exception e) {
                 System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " 감정 분석 결과 삭제 실패: " + e.getMessage());
+                emotionDeleteSuccess = false;
+            }
+            
+            // MBTI 분석 결과 삭제
+            try {
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryMbtiService.deleteByDiaryId(diaryModel.getId());
+                if (result.getCode() != 200) {
+                    System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " MBTI 분석 결과 삭제 실패: " + result.getMessage());
+                    mbtiDeleteSuccess = false;
+                } else {
+                    System.out.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " MBTI 분석 결과 삭제 성공");
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diaryModel.getId() + " MBTI 분석 결과 삭제 실패: " + e.getMessage());
+                mbtiDeleteSuccess = false;
+            }
+            
+            // 삭제 실패 시 경고 로그 (일기 삭제는 계속 진행)
+            if (!emotionDeleteSuccess || !mbtiDeleteSuccess) {
+                System.err.println("[DiaryServiceImpl] ⚠️ 일기 ID " + diaryModel.getId() + " 삭제 시 관련 데이터 삭제 실패 - 일기는 삭제되지만 고아 레코드가 남을 수 있습니다.");
             }
         }
         if (diaryModel.getId() == null) {
@@ -495,6 +612,95 @@ public class DiaryServiceImpl implements DiaryService {
         return Messenger.builder()
                 .code(200)
                 .message("전체 일기 감정 분석 완료: 성공 " + successCount + "개, 실패 " + failCount + "개")
+                .data(Map.of("success", successCount, "fail", failCount, "total", allDiaries.size()))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public Messenger reanalyzeMbtiForUser(Long userId) {
+        if (userId == null) {
+            return Messenger.builder()
+                    .code(400)
+                    .message("사용자 ID가 필요합니다.")
+                    .build();
+        }
+        
+        // 해당 사용자의 모든 일기 조회
+        List<Diary> diaries = diaryRepository.findByUserId(userId);
+        
+        if (diaries.isEmpty()) {
+            return Messenger.builder()
+                    .code(200)
+                    .message("재분석할 일기가 없습니다.")
+                    .data(0)
+                    .build();
+        }
+        
+        int successCount = 0;
+        int failCount = 0;
+        
+        // 각 일기에 대해 MBTI 분석 재수행 (기존 결과 업데이트)
+        for (Diary diary : diaries) {
+            try {
+                // MBTI 분석 수행 (기존 결과가 있으면 자동으로 업데이트됨)
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryMbtiService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() == 200) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " MBTI 분석 재실행 실패: " + e.getMessage());
+                failCount++;
+            }
+        }
+        
+        return Messenger.builder()
+                .code(200)
+                .message("MBTI 분석 재실행 완료: 성공 " + successCount + "개, 실패 " + failCount + "개")
+                .data(Map.of("success", successCount, "fail", failCount, "total", diaries.size()))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public Messenger reanalyzeAllMbti() {
+        // 모든 일기 조회
+        List<Diary> allDiaries = diaryRepository.findAll();
+        
+        if (allDiaries.isEmpty()) {
+            return Messenger.builder()
+                    .code(200)
+                    .message("분석할 일기가 없습니다.")
+                    .data(0)
+                    .build();
+        }
+        
+        int successCount = 0;
+        int failCount = 0;
+        
+        // 각 일기에 대해 MBTI 분석 수행
+        for (Diary diary : allDiaries) {
+            try {
+                // MBTI 분석 수행 (기존 결과가 있으면 자동으로 업데이트됨)
+                site.aiion.api.diary.common.domain.Messenger result = 
+                    diaryMbtiService.analyzeAndSave(diary.getId(), diary.getTitle(), diary.getContent());
+                if (result.getCode() == 200) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (Exception e) {
+                System.err.println("[DiaryServiceImpl] 일기 ID " + diary.getId() + " MBTI 분석 실패: " + e.getMessage());
+                failCount++;
+            }
+        }
+        
+        return Messenger.builder()
+                .code(200)
+                .message("전체 일기 MBTI 분석 완료: 성공 " + successCount + "개, 실패 " + failCount + "개")
                 .data(Map.of("success", successCount, "fail", failCount, "total", allDiaries.size()))
                 .build();
     }

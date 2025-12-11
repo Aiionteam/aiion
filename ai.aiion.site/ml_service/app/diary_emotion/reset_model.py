@@ -9,8 +9,8 @@ import sys
 
 def reset_model():
     """모델 파일들을 삭제하여 초기화"""
-    # 모델 디렉토리 경로
-    model_dir = Path(__file__).parent / "ai.aiion.site" / "ml_service" / "app" / "diary_emotion" / "models"
+    # 모델 디렉토리 경로 (diary_emotion/models/ 폴더)
+    model_dir = Path(__file__).parent.parent / "models"
     
     print("=" * 60)
     print("모델 초기화 시작")
