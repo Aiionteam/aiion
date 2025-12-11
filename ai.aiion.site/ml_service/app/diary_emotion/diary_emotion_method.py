@@ -1,19 +1,83 @@
 """
 Diary Emotion Method
-일기 감정 분류 전처리 메서드
+일기 감정 분류 전처리 및 학습 메서드
 """
 
-from typing import Optional
+from typing import Optional, Tuple, Dict, Any
 import pandas as pd
 from icecream import ic
 from pathlib import Path
+import numpy as np
+
+# PyTorch 및 관련 라이브러리
+try:
+    import torch
+    from torch.utils.data import Dataset, DataLoader
+    from torch import nn
+    from torch.optim import AdamW
+    from transformers import get_linear_schedule_with_warmup
+    from tqdm import tqdm
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    ic("경고: torch 관련 라이브러리가 설치되지 않았습니다.")
+
+
+class EmotionDataset(Dataset):
+    """감정 분류 데이터셋 (PyTorch)"""
+    
+    def __init__(
+        self,
+        texts: list,
+        labels: list,
+        tokenizer,
+        max_length: int = 512
+    ):
+        """
+        초기화
+        
+        Args:
+            texts: 텍스트 리스트
+            labels: 라벨 리스트
+            tokenizer: HuggingFace 토크나이저
+            max_length: 최대 토큰 길이
+        """
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+    
+    def __len__(self):
+        return len(self.texts)
+    
+    def __getitem__(self, idx):
+        text = str(self.texts[idx])
+        label = self.labels[idx]
+        
+        # 토크나이징
+        encoding = self.tokenizer(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt'
+        )
+        
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(label, dtype=torch.long)
+        }
 
 
 class DiaryEmotionMethod:
-    """일기 감정 분류 전처리 메서드 클래스"""
+    """일기 감정 분류 전처리 및 학습 메서드 클래스"""
     
     def __init__(self):
-        pass
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if TORCH_AVAILABLE else None
+        ic(f"Device: {self.device}")
     
     def load_csv(self, csv_file_path: Path) -> pd.DataFrame:
         """CSV 파일 로드"""

@@ -2,7 +2,39 @@ from fastapi import FastAPI, APIRouter  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 import uvicorn  # type: ignore
 
-app = FastAPI(title="Crawler Service API")
+# root_path 설정: API Gateway를 통한 접근 시 경로 인식
+import os
+root_path = os.getenv("ROOT_PATH", "")
+
+app = FastAPI(
+    title="Crawler Service API",
+    root_path=root_path,  # API Gateway 경로 설정
+    docs_url="/docs",  # Swagger UI 경로 명시
+    redoc_url="/redoc",  # ReDoc 경로 명시
+    openapi_url=f"{root_path}/openapi.json" if root_path else "/openapi.json"  # OpenAPI JSON 경로 (절대 경로)
+)
+
+# API Gateway를 통한 접근 시 서버 URL 설정
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version if hasattr(app, 'version') else "1.0.0",
+        description=app.description if hasattr(app, 'description') else "Crawler Service API",
+        routes=app.routes,
+    )
+    # 서버 URL 설정 (API Gateway 경로 포함)
+    if root_path:
+        openapi_schema["servers"] = [
+            {"url": root_path, "description": "API Gateway"},
+            {"url": "", "description": "Direct access"}
+        ]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # CORS 설정 - 게이트웨이만 허용 (프론트엔드는 게이트웨이를 통해 접근)
 # Spring Cloud Gateway가 이미 CORS를 처리하므로, 여기서는 게이트웨이만 허용
@@ -91,4 +123,4 @@ def netflix():
 app.include_router(crawler_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9003)
+    uvicorn.run(app, host="0.0.0.0", port=9003, root_path=root_path)

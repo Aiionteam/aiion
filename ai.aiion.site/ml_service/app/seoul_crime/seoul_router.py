@@ -4,15 +4,24 @@ Seoul Crime Router - FastAPI 라우터
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, HTMLResponse
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 import base64
+import logging
 
 from app.seoul_crime.seoul_data import SeoulCrimeData
 from app.seoul_crime.seoul_method import SeoulCrimeMethod
 from app.seoul_crime.seoul_service import SeoulCrimeService
 from app.seoul_crime.seoul_heatmap_service import SeoulHeatmapService
+from app.seoul_crime.seoul_folium_service import SeoulFoliumService
+
+# 로거 설정
+try:
+    from common.utils import setup_logging
+    logger = setup_logging("seoul_crime_router")
+except ImportError:
+    logger = logging.getLogger("seoul_crime_router")
 
 # 라우터 생성
 router = APIRouter(
@@ -26,6 +35,7 @@ _seoul_crime_data: Optional[SeoulCrimeData] = None
 _seoul_crime_method: Optional[SeoulCrimeMethod] = None
 _seoul_crime_service: Optional[SeoulCrimeService] = None
 _seoul_heatmap_service: Optional[SeoulHeatmapService] = None
+_seoul_folium_service: Optional[SeoulFoliumService] = None
 
 
 @router.post("/preprocess")
@@ -128,6 +138,14 @@ def get_seoul_heatmap_service() -> SeoulHeatmapService:
     if _seoul_heatmap_service is None:
         _seoul_heatmap_service = SeoulHeatmapService()
     return _seoul_heatmap_service
+
+
+def get_seoul_folium_service() -> SeoulFoliumService:
+    """Folium 서비스 인스턴스 싱글톤 패턴"""
+    global _seoul_folium_service
+    if _seoul_folium_service is None:
+        _seoul_folium_service = SeoulFoliumService()
+    return _seoul_folium_service
 
 
 @router.get("/")
@@ -398,6 +416,223 @@ async def get_heatmap_image(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"히트맵 이미지 생성 중 오류 발생: {str(e)}")
+
+
+@router.get("/heatmap/crime-rate")
+async def get_crime_rate_heatmap():
+    """
+    범죄율 히트맵 이미지 파일 직접 반환 (PNG)
+    """
+    try:
+        from pathlib import Path
+        save_dir = Path(__file__).parent / "save"
+        image_path = save_dir / "crime_rate_heatmap.png"
+        
+        # 이미지가 없으면 생성 시도
+        if not image_path.exists():
+            logger.warning(f"범죄율 히트맵 이미지가 없습니다. 생성 시도: {image_path}")
+            try:
+                from app.seoul_crime.create_crime_heatmap import create_crime_heatmap
+                create_crime_heatmap()
+            except Exception as gen_error:
+                logger.error(f"히트맵 생성 실패: {gen_error}")
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"범죄율 히트맵 이미지를 찾을 수 없고 생성에도 실패했습니다. 경로: {image_path}"
+                )
+        
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        
+        logger.info(f"범죄율 히트맵 이미지 반환: {image_path} ({len(image_bytes)} bytes)")
+        return Response(content=image_bytes, media_type="image/png")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"히트맵 이미지 로드 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"히트맵 이미지 로드 중 오류 발생: {str(e)}")
+
+
+@router.get("/heatmap/arrest-rate")
+async def get_arrest_rate_heatmap():
+    """
+    검거율 히트맵 이미지 파일 직접 반환 (PNG)
+    """
+    try:
+        from pathlib import Path
+        save_dir = Path(__file__).parent / "save"
+        image_path = save_dir / "arrest_rate_heatmap.png"
+        
+        # 이미지가 없으면 생성 시도
+        if not image_path.exists():
+            logger.warning(f"검거율 히트맵 이미지가 없습니다. 생성 시도: {image_path}")
+            try:
+                from app.seoul_crime.create_crime_heatmap import create_arrest_rate_heatmap
+                create_arrest_rate_heatmap()
+            except Exception as gen_error:
+                logger.error(f"히트맵 생성 실패: {gen_error}")
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"검거율 히트맵 이미지를 찾을 수 없고 생성에도 실패했습니다. 경로: {image_path}"
+                )
+        
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        
+        logger.info(f"검거율 히트맵 이미지 반환: {image_path} ({len(image_bytes)} bytes)")
+        return Response(content=image_bytes, media_type="image/png")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"히트맵 이미지 로드 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"히트맵 이미지 로드 중 오류 발생: {str(e)}")
+
+
+# ==================== Folium 지도 엔드포인트 ====================
+
+@router.get("/map")
+@router.post("/map")
+async def create_crime_map(
+    location_lat: float = Query(37.5665, description="지도 중심 위도"),
+    location_lon: float = Query(126.9780, description="지도 중심 경도"),
+    zoom_start: int = Query(11, description="초기 줌 레벨"),
+    fill_color: str = Query("Reds", description="컬러맵 (Reds, YlOrRd, OrRd 등)"),
+    fill_opacity: float = Query(0.7, description="채우기 투명도 (0.0 ~ 1.0)"),
+    line_opacity: float = Query(0.8, description="경계선 투명도 (0.0 ~ 1.0)"),
+    save_file: bool = Query(True, description="HTML 파일로 저장 여부")
+):
+    """
+    서울시 범죄율 히트맵 지도 생성 (Folium)
+    
+    Args:
+        location_lat: 지도 중심 위도
+        location_lon: 지도 중심 경도
+        zoom_start: 초기 줌 레벨
+        fill_color: 컬러맵
+        fill_opacity: 채우기 투명도
+        line_opacity: 경계선 투명도
+        save_file: HTML 파일로 저장 여부
+    
+    Returns:
+        지도 생성 결과 및 통계 정보
+    """
+    try:
+        service = get_seoul_folium_service()
+        
+        # 지도 생성
+        service.create_map(
+            location=[location_lat, location_lon],
+            zoom_start=zoom_start,
+            fill_color=fill_color,
+            fill_opacity=fill_opacity,
+            line_opacity=line_opacity
+        )
+        
+        # 파일 저장
+        file_path = None
+        if save_file:
+            file_path = service.save_map()
+        
+        # 통계 정보
+        statistics = service.get_statistics()
+        
+        return {
+            "status": "success",
+            "message": "서울시 범죄율 히트맵 지도가 생성되었습니다.",
+            "file_path": str(file_path) if file_path else None,
+            "statistics": statistics,
+            "map_config": {
+                "location": [location_lat, location_lon],
+                "zoom_start": zoom_start,
+                "fill_color": fill_color,
+                "fill_opacity": fill_opacity,
+                "line_opacity": line_opacity
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"지도 생성 중 오류 발생: {str(e)}")
+
+
+@router.get("/map/html")
+async def get_crime_map_html(
+    location_lat: float = Query(37.5665, description="지도 중심 위도"),
+    location_lon: float = Query(126.9780, description="지도 중심 경도"),
+    zoom_start: int = Query(11, description="초기 줌 레벨"),
+    fill_color: str = Query("Reds", description="컬러맵"),
+    fill_opacity: float = Query(0.7, description="채우기 투명도"),
+    line_opacity: float = Query(0.8, description="경계선 투명도"),
+    save_file: bool = Query(True, description="HTML 파일로 저장 여부")
+):
+    """
+    서울시 범죄율 히트맵 지도를 HTML로 직접 반환 (save 폴더에 자동 저장)
+    
+    Returns:
+        HTML 문자열
+    """
+    try:
+        service = get_seoul_folium_service()
+        
+        # 지도 생성
+        service.create_map(
+            location=[location_lat, location_lon],
+            zoom_start=zoom_start,
+            fill_color=fill_color,
+            fill_opacity=fill_opacity,
+            line_opacity=line_opacity
+        )
+        
+        # save 폴더에 자동 저장
+        if save_file:
+            file_path = service.save_map()
+            logger.info(f"지도 HTML 파일 저장 완료: {file_path}")
+        
+        # HTML 반환
+        html = service.get_map_html()
+        
+        return HTMLResponse(content=html)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"지도 HTML 생성 중 오류 발생: {str(e)}")
+
+
+@router.get("/map/statistics")
+async def get_crime_map_statistics():
+    """
+    서울시 범죄율 통계 정보 조회
+    
+    Returns:
+        범죄율 통계 정보
+    """
+    try:
+        service = get_seoul_folium_service()
+        statistics = service.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": statistics
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"통계 정보 조회 중 오류 발생: {str(e)}")
 
 
 

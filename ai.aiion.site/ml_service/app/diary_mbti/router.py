@@ -11,8 +11,8 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel
 
-from app.diary_mbti.save.diary_mbti_service import DiaryMbtiService
-from app.diary_mbti.save.diary_mbti_schema import DiaryMbtiSchema
+from app.diary_mbti.diary_mbti_service import DiaryMbtiService
+from app.diary_mbti.diary_mbti_schema import DiaryMbtiSchema
 
 # 라우터 생성
 router = APIRouter(
@@ -21,8 +21,8 @@ router = APIRouter(
     responses={404: {"description": "Not found"}}
 )
 
-# CSV 파일 경로 (data/ 폴더에 있음)
-CSV_FILE_PATH = Path(__file__).parent.parent / "data" / "diary_mbti.csv"
+# CSV 파일 경로 (diary_mbti/data/ 폴더에 있음)
+CSV_FILE_PATH = Path(__file__).parent / "data" / "diary_mbti.csv"
 
 # 서비스 인스턴스
 _diary_mbti_service: Optional[DiaryMbtiService] = None
@@ -31,8 +31,8 @@ _diary_mbti_service: Optional[DiaryMbtiService] = None
 def get_diary_mbti_service() -> DiaryMbtiService:
     """서비스 인스턴스 싱글톤 패턴"""
     global _diary_mbti_service
-    # CSV 파일 경로를 명시적으로 전달 (data/diary_mbti.csv)
-    csv_path = Path(__file__).parent.parent / "data" / "diary_mbti.csv"
+    # CSV 파일 경로를 명시적으로 전달 (diary_mbti/data/diary_mbti.csv)
+    csv_path = Path(__file__).parent / "data" / "diary_mbti.csv"
     # 매번 새로 생성하거나 경로가 변경되었으면 재생성
     if _diary_mbti_service is None or _diary_mbti_service.csv_file_path != csv_path:
         _diary_mbti_service = DiaryMbtiService(csv_path)
@@ -168,9 +168,21 @@ async def predict_mbti(request: PredictRequest):
 
 @router.post("/train")
 async def train_model(request: Optional[TrainRequest] = None):
-    """모델 학습 실행"""
+    """
+    모델 학습 실행
+    
+    단계적 학습 모드 (기본값):
+    - 1단계: 앙상블 모델로 학습 및 오버피팅 체크
+    - 2단계: 오버피팅 발견 시 하이퍼파라미터 튜닝으로 재학습
+    
+    기존 모드 (staged_training=False):
+    - use_hyperparameter_tuning, use_ensemble 파라미터로 직접 제어
+    """
     try:
         service = get_diary_mbti_service()
+        
+        # 단계적 학습 모드 확인
+        is_staged = service.staged_training
         
         # 요청 파라미터 설정
         use_hyperparameter_tuning = True
@@ -182,13 +194,19 @@ async def train_model(request: Optional[TrainRequest] = None):
             use_ensemble = request.use_ensemble
             n_trials = request.n_trials
         
-        # 서비스 옵션 설정
-        service.use_hyperparameter_tuning = use_hyperparameter_tuning
-        service.use_ensemble = use_ensemble
-        service.n_trials = n_trials
-        
-        print(f"하이퍼파라미터 최적화: {use_hyperparameter_tuning}")
-        print(f"앙상블 모델: {use_ensemble}")
+        # 단계적 학습 모드가 아닐 때만 파라미터 적용
+        if not is_staged:
+            service.use_hyperparameter_tuning = use_hyperparameter_tuning
+            service.use_ensemble = use_ensemble
+            service.n_trials = n_trials
+            print(f"하이퍼파라미터 최적화: {use_hyperparameter_tuning}")
+            print(f"앙상블 모델: {use_ensemble}")
+        else:
+            # 단계적 학습 모드에서는 n_trials만 설정 (하이퍼파라미터 튜닝 시 사용)
+            service.n_trials = n_trials
+            print(f"📊 단계적 학습 모드 활성화")
+            print(f"  - 1단계: 앙상블 모델로 학습 및 오버피팅 체크")
+            print(f"  - 2단계: 오버피팅 발견 시 하이퍼파라미터 튜닝 (n_trials={n_trials})")
         
         # 전처리
         service.preprocess()
@@ -205,17 +223,51 @@ async def train_model(request: Optional[TrainRequest] = None):
         # 모델 저장
         service.save_model()
         
-        return {
+        # 단계적 학습 결과 포함
+        overall_accuracy = accuracy.get('overall_accuracy', 0) if isinstance(accuracy, dict) else 0
+        target_met = overall_accuracy >= service.target_accuracy if is_staged else False
+        
+        response = {
             "message": "모델 학습이 완료되었습니다.",
             "status": "success",
-            "options": {
-                "hyperparameter_tuning": use_hyperparameter_tuning,
-                "ensemble": use_ensemble
-            },
+            "staged_training": is_staged,
+            "target_accuracy": service.target_accuracy if is_staged else None,
+            "target_met": target_met,
             "accuracy": accuracy,
             "model_saved": True,
             "model_path": str(service.model_dir)
         }
+        
+        if is_staged:
+            # 단계적 학습 결과 요약
+            staged_results = {}
+            if hasattr(service, 'ensemble_results') and service.ensemble_results:
+                for label, result in service.ensemble_results.items():
+                    staged_results[label] = {
+                        "overfitting_detected": result.get('is_overfitting', False),
+                        "train_score": result.get('train_score', 0),
+                        "val_score": result.get('val_score', 0),
+                        "score_diff": result.get('score_diff', 0),
+                        "final_model": "hyperparameter_tuned" if result.get('is_overfitting', False) else "ensemble"
+                    }
+                    if result.get('tuned_test_score'):
+                        staged_results[label]["tuned_test_score"] = result.get('tuned_test_score', 0)
+                        staged_results[label]["tuned_score_diff"] = result.get('tuned_score_diff', 0)
+            
+            response["staged_results"] = staged_results
+            response["options"] = {
+                "mode": "staged_training",
+                "overfitting_threshold": service.overfitting_threshold,
+                "n_trials": n_trials
+            }
+        else:
+            response["options"] = {
+                "hyperparameter_tuning": use_hyperparameter_tuning,
+                "ensemble": use_ensemble,
+                "n_trials": n_trials
+            }
+        
+        return response
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"학습 중 오류 발생: {str(e)}")

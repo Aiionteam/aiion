@@ -22,11 +22,41 @@ KMA_SHORT_KEY = os.getenv("KMA_SHORT_KEY", "")
 if not KMA_SHORT_KEY:
     print("Warning: KMA_SHORT_KEY not set. Short-term forecast API functionality will be limited.")
 
+# root_path 설정: API Gateway를 통한 접근 시 경로 인식
+import os
+root_path = os.getenv("ROOT_PATH", "")
+
 app = FastAPI(
     title="Weather Service API",
     version="1.0.0",
-    description="기상청 API 서비스"
+    description="기상청 API 서비스",
+    root_path=root_path,  # API Gateway 경로 설정
+    docs_url="/docs",  # Swagger UI 경로 명시
+    redoc_url="/redoc",  # ReDoc 경로 명시
+    openapi_url=f"{root_path}/openapi.json" if root_path else "/openapi.json"  # OpenAPI JSON 경로 (절대 경로)
 )
+
+# API Gateway를 통한 접근 시 서버 URL 설정
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    # 서버 URL 설정 (API Gateway 경로 포함)
+    if root_path:
+        openapi_schema["servers"] = [
+            {"url": root_path, "description": "API Gateway"},
+            {"url": "", "description": "Direct access"}
+        ]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # CORS 설정 제거 - 게이트웨이가 모든 CORS를 처리하므로 백엔드 서비스에서는 제거
 # 프록시/파사드 패턴: 프론트엔드 -> 게이트웨이 -> 백엔드 서비스
@@ -498,5 +528,5 @@ def health_check():
 app.include_router(weather_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9004)
+    uvicorn.run(app, host="0.0.0.0", port=9004, root_path=root_path)
 

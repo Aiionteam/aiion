@@ -49,11 +49,41 @@ else:
 DEFAULT_CLASSIFICATION_MODEL = os.getenv("OPENAI_CLASSIFICATION_MODEL", "gpt-4-turbo")
 DEFAULT_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4-turbo")
 
+# root_path 설정: API Gateway를 통한 접근 시 경로 인식
+import os
+root_path = os.getenv("ROOT_PATH", "")
+
 app = FastAPI(
     title="Chatbot Service API",
     version="1.0.0",
-    description="챗봇 서비스 API"
+    description="챗봇 서비스 API",
+    root_path=root_path,  # API Gateway 경로 설정
+    docs_url="/docs",  # Swagger UI 경로 명시
+    redoc_url="/redoc",  # ReDoc 경로 명시
+    openapi_url=f"{root_path}/openapi.json" if root_path else "/openapi.json"  # OpenAPI JSON 경로 (절대 경로)
 )
+
+# API Gateway를 통한 접근 시 서버 URL 설정
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    # 서버 URL 설정 (API Gateway 경로 포함)
+    if root_path:
+        openapi_schema["servers"] = [
+            {"url": root_path, "description": "API Gateway"},
+            {"url": "", "description": "Direct access"}
+        ]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # UTF-8 인코딩 강제 설정
 import sys
@@ -2469,4 +2499,4 @@ def classify_text(request: ClassifyRequest):
 app.include_router(chatbot_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9002)
+    uvicorn.run(app, host="0.0.0.0", port=9002, root_path=root_path)

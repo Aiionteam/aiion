@@ -9,5 +9,5 @@ COPY rag/chatbot_service/app/main.py .
 
 EXPOSE 9002
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9002"]
+CMD sh -c "uvicorn main:app --host 0.0.0.0 --port 9002 --root-path ${ROOT_PATH}"
 

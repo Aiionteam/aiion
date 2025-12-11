@@ -65,9 +65,9 @@ except ImportError:
 # 공통 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.diary_mbti.save.diary_mbti_dataset import DiaryMbtiDataSet
-from app.diary_mbti.save.diary_mbti_model import DiaryMbtiModel
-from app.diary_mbti.save.diary_mbti_method import DiaryMbtiMethod
+from app.diary_mbti.diary_mbti_dataset import DiaryMbtiDataSet
+from app.diary_mbti.diary_mbti_model import DiaryMbtiModel
+from app.diary_mbti.diary_mbti_method import DiaryMbtiMethod
 
 
 class DiaryMbtiService:
@@ -79,25 +79,24 @@ class DiaryMbtiService:
         self.model_obj = DiaryMbtiModel()
         self.mbti_labels = ['E_I', 'S_N', 'T_F', 'J_P']  # MBTI 차원들
         self.method = DiaryMbtiMethod(self.mbti_labels)  # 전처리 메서드 클래스
-        # CSV 파일 경로 (data/ 폴더에 있음)
-        self.csv_file_path = csv_file_path or (Path(__file__).parent.parent / "data" / "diary_mbti.csv")
+        # CSV 파일 경로 (diary_mbti/data/ 폴더에 있음)
+        self.csv_file_path = csv_file_path or (Path(__file__).parent / "data" / "diary_mbti.csv")
         
         # CSV 파일 경로 검증 (폴더가 아닌 파일인지 확인)
         if self.csv_file_path.exists() and self.csv_file_path.is_dir():
             raise ValueError(f"오류: {self.csv_file_path}는 폴더입니다. 파일이어야 합니다. 폴더를 삭제해주세요.")
         
         # 오타로 인한 폴더가 있는지 확인하고 경고
-        typo_folder = Path(__file__).parent.parent / "dirary_mbti.csv"
+        typo_folder = Path(__file__).parent / "dirary_mbti.csv"
         if typo_folder.exists() and typo_folder.is_dir():
             ic(f"⚠️  경고: 오타로 인한 폴더 발견: {typo_folder}")
             ic(f"   → 이 폴더는 삭제해야 합니다: Remove-Item -Path '{typo_folder}' -Recurse -Force")
         
         self.df: Optional[pd.DataFrame] = None
         # 모델 저장 경로 - diary_mbti/models/ 폴더 사용
-        # Path(__file__) = save/diary_mbti_service.py
-        # Path(__file__).parent = save/
-        # Path(__file__).parent.parent = diary_mbti/
-        self.model_dir = Path(__file__).parent.parent / "models"
+        # Path(__file__) = diary_mbti/diary_mbti_service.py
+        # Path(__file__).parent = diary_mbti/
+        self.model_dir = Path(__file__).parent / "models"
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.model_files = {
             'E_I': self.model_dir / "diary_mbti_e_i_model.pkl",
@@ -114,6 +113,11 @@ class DiaryMbtiService:
         self.use_hyperparameter_tuning = False  # 하이퍼파라미터 최적화 사용 여부
         self.n_trials = 50  # 하이퍼파라미터 최적화 시행 횟수
         self.best_params = {}  # 최적화된 하이퍼파라미터 저장
+        self.staged_training = True  # 단계적 학습 활성화 (앙상블 → 오버피팅 체크 → 하이퍼파라미터 튜닝)
+        self.overfitting_threshold = 0.05  # 오버피팅 판단 기준 (train - validation 차이)
+        self.min_val_score_threshold = 0.75  # 최소 Validation Score 기준 (이보다 낮으면 튜닝)
+        self.target_accuracy = 0.85  # 목표 정확도 (85%)
+        self.ensemble_results = {}  # 앙상블 학습 결과 저장
         self.single_class_values = {}  # 클래스가 1개만 있는 차원의 값 저장 (예측용)
         
         # 모델 저장 경로 로그 출력
@@ -251,8 +255,20 @@ class DiaryMbtiService:
             raise
     
     def learning(self):
-        """모델 학습 (4개 MBTI 차원별로 각각 학습)"""
+        """
+        모델 학습 (4개 MBTI 차원별로 각각 학습)
+        단계적 학습 프로세스:
+        1. 앙상블 모델로 먼저 학습하여 오버피팅 체크
+        2. 오버피팅이 확인되면 하이퍼파라미터 튜닝으로 재학습
+        """
         ic("😎😎 학습 시작")
+        
+        # 단계적 학습 모드인 경우
+        if self.staged_training:
+            ic("📊 단계적 학습 모드 활성화")
+            ic("  1단계: 앙상블 모델로 학습 및 오버피팅 체크")
+            ic("  2단계: 오버피팅 발견 시 하이퍼파라미터 튜닝으로 재학습")
+            return self._staged_learning()
         
         try:
             if self.df is None:
@@ -530,6 +546,359 @@ class DiaryMbtiService:
         except Exception as e:
             ic(f"학습 오류: {e}")
             raise
+    
+    def _staged_learning(self):
+        """
+        단계적 학습 프로세스:
+        1단계: 앙상블 모델로 학습하여 오버피팅 체크
+        2단계: 오버피팅이 확인되면 하이퍼파라미터 튜닝으로 재학습
+        """
+        ic("=" * 60)
+        ic("📊 1단계: 앙상블 모델로 학습 및 오버피팅 체크")
+        ic("=" * 60)
+        
+        # 1단계: 앙상블 모델로 학습
+        original_use_ensemble = self.use_ensemble
+        original_use_hyperparameter_tuning = self.use_hyperparameter_tuning
+        
+        # 앙상블 활성화, 하이퍼파라미터 튜닝 비활성화
+        self.use_ensemble = True
+        self.use_hyperparameter_tuning = False
+        
+        try:
+            # 기존 learning() 로직을 재사용하되, 오버피팅 체크를 위해 train/validation 분리
+            if self.df is None:
+                raise ValueError("데이터가 없습니다. preprocess()를 먼저 실행하세요.")
+            if not self.model_obj.models:
+                raise ValueError("모델이 없습니다. modeling()을 먼저 실행하세요.")
+            
+            # 텍스트 벡터화
+            X_text = self.df['text'].values.copy()
+            X_tfidf = self.model_obj.vectorizer.fit_transform(X_text)
+            
+            # Word2Vec 임베딩 생성
+            if self.use_word2vec and self.model_obj.word2vec_model is not None:
+                ic("Word2Vec 모델 학습 중...")
+                sentences = [simple_preprocess(text, deacc=True, min_len=1) for text in X_text]
+                self.model_obj.word2vec_model.build_vocab(sentences)
+                self.model_obj.word2vec_model.train(
+                    sentences,
+                    total_examples=len(sentences),
+                    epochs=5
+                )
+                
+                def text_to_embedding(text):
+                    words = simple_preprocess(text, deacc=True, min_len=1)
+                    if len(words) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    word_vectors = [
+                        self.model_obj.word2vec_model.wv[word]
+                        for word in words
+                        if word in self.model_obj.word2vec_model.wv
+                    ]
+                    if len(word_vectors) == 0:
+                        return np.zeros(self.model_obj.word2vec_model.vector_size)
+                    return np.average(word_vectors, axis=0)
+                
+                X_word2vec = np.array([text_to_embedding(text) for text in X_text])
+                from scipy.sparse import csr_matrix
+                X_word2vec_sparse = csr_matrix(X_word2vec)
+                X = hstack([X_tfidf, X_word2vec_sparse])
+            else:
+                X = X_tfidf
+            
+            ic(f"특징 준비 완료: {X.shape[1]}개 특징")
+            
+            # 각 MBTI 차원별로 앙상블 학습 및 오버피팅 체크
+            train_indices_list = {}
+            test_indices_list = {}
+            overfitting_detected = {}
+            
+            for label in self.mbti_labels:
+                ic(f"\n{label} 차원 - 1단계: 앙상블 학습")
+                
+                y = self.df[label].values.copy()
+                from collections import Counter
+                class_counts = Counter(y)
+                
+                if len(class_counts) < 2:
+                    single_class = int(list(class_counts.keys())[0])
+                    ic(f"⚠️  {label} 경고: 클래스가 1개만 존재하여 학습을 건너뜁니다.")
+                    indices = list(range(len(y)))
+                    train_indices, test_indices = train_test_split(
+                        indices, test_size=0.2, random_state=42
+                    )
+                    train_indices_list[label] = train_indices
+                    test_indices_list[label] = test_indices
+                    if not hasattr(self, 'single_class_values'):
+                        self.single_class_values = {}
+                    self.single_class_values[label] = single_class
+                    overfitting_detected[label] = False
+                    continue
+                
+                # 학습/검증/테스트 분할 (60/20/20)
+                indices = list(range(len(y)))
+                min_class_count = min(class_counts.values()) if class_counts else 0
+                can_stratify = min_class_count >= 2
+                
+                if can_stratify:
+                    train_indices, temp_indices = train_test_split(
+                        indices, test_size=0.4, random_state=42, stratify=y
+                    )
+                    val_indices, test_indices = train_test_split(
+                        temp_indices, test_size=0.5, random_state=42, stratify=y[temp_indices]
+                    )
+                else:
+                    train_indices, temp_indices = train_test_split(
+                        indices, test_size=0.4, random_state=42
+                    )
+                    val_indices, test_indices = train_test_split(
+                        temp_indices, test_size=0.5, random_state=42
+                    )
+                
+                train_indices_list[label] = train_indices
+                test_indices_list[label] = test_indices
+                
+                X_train = X[train_indices]
+                X_val = X[val_indices]
+                y_train = y[train_indices].copy()
+                y_val = y[val_indices].copy()
+                
+                # 앙상블 모델 생성 및 학습
+                ic(f"{label} 앙상블 모델 생성 중...")
+                ensemble_model = self._create_ensemble_model(label)
+                ensemble_model.fit(X_train, y_train)
+                
+                # Train/Validation 성능 비교
+                train_score = ensemble_model.score(X_train, y_train)
+                val_score = ensemble_model.score(X_val, y_val)
+                score_diff = train_score - val_score
+                
+                ic(f"{label} 앙상블 학습 완료")
+                ic(f"  Train Score: {train_score:.4f}")
+                ic(f"  Validation Score: {val_score:.4f}")
+                ic(f"  차이: {score_diff:.4f}")
+                
+                # 오버피팅 및 낮은 성능 판단
+                is_overfitting = score_diff > self.overfitting_threshold
+                is_low_performance = val_score < self.min_val_score_threshold
+                needs_tuning = is_overfitting or is_low_performance
+                overfitting_detected[label] = needs_tuning
+                
+                if needs_tuning:
+                    if is_overfitting:
+                        ic(f"⚠️  {label} 오버피팅 감지! (차이 > {self.overfitting_threshold})")
+                    if is_low_performance:
+                        ic(f"⚠️  {label} 낮은 성능 감지! (Validation Score: {val_score:.4f} < {self.min_val_score_threshold})")
+                    ic(f"   → 2단계에서 하이퍼파라미터 튜닝으로 재학습합니다.")
+                else:
+                    ic(f"✓ {label} 성능 양호 (차이: {score_diff:.4f}, Validation: {val_score:.4f})")
+                    ic(f"   → 앙상블 모델을 최종 모델로 사용합니다.")
+                
+                # 결과 저장 (y도 저장하여 2단계에서 사용)
+                self.ensemble_results[label] = {
+                    'model': ensemble_model,
+                    'train_score': train_score,
+                    'val_score': val_score,
+                    'score_diff': score_diff,
+                    'is_overfitting': is_overfitting,
+                    'train_indices': train_indices,
+                    'val_indices': val_indices,
+                    'test_indices': test_indices,
+                    'y': y  # 2단계에서 사용하기 위해 저장
+                }
+                
+                # 오버피팅이 없으면 앙상블 모델을 최종 모델로 사용
+                if not is_overfitting:
+                    self.model_obj.models[label] = ensemble_model
+            
+            # 2단계: 오버피팅 또는 낮은 성능이 있는 차원에 대해 하이퍼파라미터 튜닝
+            needs_retraining = any(overfitting_detected.values())
+            
+            # J_P 차원은 항상 튜닝 (특별 처리) - 낮은 성능 문제 해결
+            if 'J_P' in self.mbti_labels:
+                if 'J_P' not in overfitting_detected:
+                    # ensemble_results에 없으면 새로 생성
+                    if 'J_P' not in self.ensemble_results:
+                        ic(f"\n⚠️  J_P 차원 특별 처리: 앙상블 학습부터 시작")
+                        # J_P 차원 재학습
+                        y_jp = self.df['J_P'].values.copy()
+                        from collections import Counter
+                        class_counts = Counter(y_jp)
+                        if len(class_counts) >= 2:
+                            indices = list(range(len(y_jp)))
+                            min_class_count = min(class_counts.values())
+                            can_stratify = min_class_count >= 2
+                            if can_stratify:
+                                train_indices, temp_indices = train_test_split(
+                                    indices, test_size=0.4, random_state=42, stratify=y_jp
+                                )
+                                val_indices, test_indices = train_test_split(
+                                    temp_indices, test_size=0.5, random_state=42, stratify=y_jp[temp_indices]
+                                )
+                            else:
+                                train_indices, temp_indices = train_test_split(
+                                    indices, test_size=0.4, random_state=42
+                                )
+                                val_indices, test_indices = train_test_split(
+                                    temp_indices, test_size=0.5, random_state=42
+                                )
+                            
+                            X_train_jp = X[train_indices]
+                            X_val_jp = X[val_indices]
+                            y_train_jp = y_jp[train_indices].copy()
+                            y_val_jp = y_jp[val_indices].copy()
+                            
+                            ensemble_model_jp = self._create_ensemble_model('J_P')
+                            ensemble_model_jp.fit(X_train_jp, y_train_jp)
+                            
+                            train_score_jp = ensemble_model_jp.score(X_train_jp, y_train_jp)
+                            val_score_jp = ensemble_model_jp.score(X_val_jp, y_val_jp)
+                            score_diff_jp = train_score_jp - val_score_jp
+                            
+                            self.ensemble_results['J_P'] = {
+                                'model': ensemble_model_jp,
+                                'train_score': train_score_jp,
+                                'val_score': val_score_jp,
+                                'score_diff': score_diff_jp,
+                                'is_overfitting': True,  # 항상 튜닝
+                                'train_indices': train_indices,
+                                'val_indices': val_indices,
+                                'test_indices': test_indices,
+                                'y': y_jp
+                            }
+                            train_indices_list['J_P'] = train_indices
+                            test_indices_list['J_P'] = test_indices
+                    else:
+                        # 이미 있으면 강제로 튜닝
+                        self.ensemble_results['J_P']['is_overfitting'] = True
+                
+                overfitting_detected['J_P'] = True
+                needs_retraining = True
+                ic(f"\n⚠️  J_P 차원 특별 처리: 항상 하이퍼파라미터 튜닝 실행 (낮은 성능 개선)")
+            
+            if needs_retraining:
+                ic("\n" + "=" * 60)
+                ic("🔧 2단계: 하이퍼파라미터 튜닝으로 재학습")
+                ic("=" * 60)
+                
+                # 하이퍼파라미터 튜닝 활성화
+                self.use_ensemble = False
+                self.use_hyperparameter_tuning = True
+                
+                for label in self.mbti_labels:
+                    if not overfitting_detected.get(label, False):
+                        continue
+                    
+                    ic(f"\n{label} 차원 - 2단계: 하이퍼파라미터 튜닝")
+                    
+                    result = self.ensemble_results[label]
+                    train_indices = result['train_indices']
+                    val_indices = result['val_indices']
+                    y = result['y']  # 저장된 y 사용
+                    
+                    # Train + Validation을 합쳐서 학습 (더 많은 데이터)
+                    combined_indices = train_indices + val_indices
+                    X_train_combined = X[combined_indices]
+                    y_train_combined = y[combined_indices].copy()
+                    
+                    # 하이퍼파라미터 최적화 (J_P는 더 많은 시행 횟수)
+                    n_trials_for_label = self.n_trials * 2 if label == 'J_P' else self.n_trials
+                    if label == 'J_P':
+                        ic(f"{label} 하이퍼파라미터 최적화 시작... (시행 횟수: {n_trials_for_label}, 특별 처리)")
+                    else:
+                        ic(f"{label} 하이퍼파라미터 최적화 시작... (시행 횟수: {n_trials_for_label})")
+                    best_params = self._optimize_hyperparameters(
+                        X_train_combined, y_train_combined, label, n_trials_for_label
+                    )
+                    
+                    # 최적화된 파라미터로 모델 재생성
+                    best_params_clean = best_params.copy()
+                    class_weight_value = best_params_clean.pop('class_weight', 'balanced')
+                    
+                    tuned_model = RandomForestClassifier(
+                        **best_params_clean,
+                        random_state=42,
+                        n_jobs=1,
+                        class_weight=class_weight_value
+                    )
+                    
+                    tuned_model.fit(X_train_combined, y_train_combined)
+                    
+                    # 재학습 후 성능 확인
+                    test_indices = result['test_indices']
+                    X_test = X[test_indices]
+                    y_test = y[test_indices].copy()
+                    
+                    test_score = tuned_model.score(X_test, y_test)
+                    train_score_tuned = tuned_model.score(X_train_combined, y_train_combined)
+                    score_diff_tuned = train_score_tuned - test_score
+                    
+                    ic(f"{label} 하이퍼파라미터 튜닝 완료")
+                    ic(f"  최적 파라미터: {best_params}")
+                    ic(f"  Train Score: {train_score_tuned:.4f}")
+                    ic(f"  Test Score: {test_score:.4f}")
+                    ic(f"  차이: {score_diff_tuned:.4f}")
+                    
+                    if score_diff_tuned <= self.overfitting_threshold:
+                        ic(f"✓ {label} 오버피팅 해결됨!")
+                    else:
+                        ic(f"⚠️  {label} 여전히 오버피팅 가능성 있음 (차이: {score_diff_tuned:.4f})")
+                    
+                    # 최종 모델로 저장
+                    self.model_obj.models[label] = tuned_model
+                    self.best_params[label] = best_params
+                    
+                    # 결과 업데이트
+                    self.ensemble_results[label]['tuned_model'] = tuned_model
+                    self.ensemble_results[label]['tuned_train_score'] = train_score_tuned
+                    self.ensemble_results[label]['tuned_test_score'] = test_score
+                    self.ensemble_results[label]['tuned_score_diff'] = score_diff_tuned
+            
+            # 학습 데이터셋 저장
+            first_label = None
+            for label in self.mbti_labels:
+                if label in train_indices_list:
+                    first_label = label
+                    break
+            
+            if first_label is None:
+                raise ValueError("학습 가능한 차원이 없습니다.")
+            
+            self.dataset.train = pd.DataFrame({
+                'text': self.df['text'].iloc[train_indices_list[first_label]].values.copy(),
+                **{label: self.df[label].iloc[train_indices_list[first_label]].values.copy()
+                   for label in self.mbti_labels if label in train_indices_list}
+            })
+            self.dataset.test = pd.DataFrame({
+                'text': self.df['text'].iloc[test_indices_list[first_label]].values.copy(),
+                **{label: self.df[label].iloc[test_indices_list[first_label]].values.copy()
+                   for label in self.mbti_labels if label in test_indices_list}
+            })
+            self.test_indices = test_indices_list[first_label]
+            
+            ic("\n" + "=" * 60)
+            ic("✅ 단계적 학습 완료!")
+            ic("=" * 60)
+            ic(f"학습 데이터: {len(train_indices_list[first_label])} 개")
+            ic(f"테스트 데이터: {len(test_indices_list[first_label])} 개")
+            
+            # 최종 요약
+            ic("\n📊 최종 결과 요약:")
+            for label in self.mbti_labels:
+                if label in self.ensemble_results:
+                    result = self.ensemble_results[label]
+                    if result.get('is_overfitting', False):
+                        ic(f"  {label}: 앙상블 → 하이퍼파라미터 튜닝 (오버피팅 해결)")
+                        ic(f"    최종 Test Score: {result.get('tuned_test_score', 0):.4f}")
+                    else:
+                        ic(f"  {label}: 앙상블 모델 사용 (오버피팅 없음)")
+                        ic(f"    Validation Score: {result.get('val_score', 0):.4f}")
+            
+        finally:
+            # 원래 설정 복원
+            self.use_ensemble = original_use_ensemble
+            self.use_hyperparameter_tuning = original_use_hyperparameter_tuning
     
     def predict(self, text: str) -> Dict[str, Any]:
         """텍스트 MBTI 예측 (4개 차원 모두 예측)"""
@@ -1014,15 +1383,16 @@ class DiaryMbtiService:
         def objective(trial):
             # 축별 특성에 맞는 파라미터 범위 설정
             if label == 'E_I':
-                # 불균형 데이터 (3:1) → 오버피팅 방지 강화
+                # 불균형 데이터 (외향 E: 2457, 내향 I: 3880) → 외향 예측 개선 필요
+                # recall 개선을 위해 더 많은 트리와 깊이 조정
                 params = {
-                    'n_estimators': trial.suggest_int('n_estimators', 50, 150),  # 200-500 → 50-150
-                    'max_depth': trial.suggest_int('max_depth', 5, 12),  # 10-25 → 5-12
-                    'min_samples_split': trial.suggest_int('min_samples_split', 10, 30),  # 2-15 → 10-30
-                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 5, 15),  # 1-8 → 5-15
-                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2']),  # 0.5, 0.7 제거
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 300),  # 더 많은 트리로 다양성 확보
+                    'max_depth': trial.suggest_int('max_depth', 8, 20),  # 깊이 증가로 외향 패턴 학습
+                    'min_samples_split': trial.suggest_int('min_samples_split', 5, 20),  # 적당한 정규화
+                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 2, 10),  # 적당한 정규화
+                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', 0.5, 0.7]),  # 특징 다양화
                     'class_weight': trial.suggest_categorical('class_weight', 
-                        ['balanced', 'balanced_subsample'])
+                        ['balanced', 'balanced_subsample', {0: 1.0, 1: 1.5, 2: 1.0}])  # 외향(1) 가중치 증가
                 }
             elif label == 'S_N':
                 # 평가불가 비율 높음 → 오버피팅 방지 강화
@@ -1045,14 +1415,15 @@ class DiaryMbtiService:
                     'class_weight': trial.suggest_categorical('class_weight', [None, 'balanced'])
                 }
             else:  # J_P
-                # 특수 케이스 (J 클래스 없음) → 매우 보수적 파라미터
+                # 특수 케이스: 클래스 불균형 심각 (0: 769, 1: 994, 2: 6030)
+                # 클래스 2가 과다 → 더 강한 정규화 및 클래스 가중치 조정
                 params = {
-                    'n_estimators': trial.suggest_int('n_estimators', 20, 80),  # 100-300 → 20-80
-                    'max_depth': trial.suggest_int('max_depth', 3, 8),  # 5-15 → 3-8
-                    'min_samples_split': trial.suggest_int('min_samples_split', 20, 50),  # 5-20 → 20-50
-                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 10, 25),  # 3-10 → 10-25
-                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2']),
-                    'class_weight': 'balanced'
+                    'n_estimators': trial.suggest_int('n_estimators', 50, 200),  # 더 많은 트리로 다양성 확보
+                    'max_depth': trial.suggest_int('max_depth', 5, 15),  # 깊이 조정
+                    'min_samples_split': trial.suggest_int('min_samples_split', 30, 100),  # 매우 강한 정규화
+                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 15, 50),  # 매우 강한 정규화
+                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', 0.3, 0.5]),  # 더 적은 특징
+                    'class_weight': trial.suggest_categorical('class_weight', ['balanced', 'balanced_subsample'])  # 가중치 최적화
                 }
             
             model = RandomForestClassifier(**params, random_state=42, n_jobs=1)  # WRITEBACKIFCOPY 오류 방지

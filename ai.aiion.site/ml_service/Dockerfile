@@ -20,5 +20,6 @@ COPY ml_service/app/ ./app/
 EXPOSE 9005
 
 ENV PORT=9005
+ENV ROOT_PATH=""
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9005"]
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --root-path ${ROOT_PATH}"

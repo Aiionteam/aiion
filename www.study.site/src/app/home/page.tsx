@@ -46,14 +46,22 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-screen">
-      {/* 카카오 지도 버튼 - 상단 고정 */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* 지도 버튼들 - 상단 고정 */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
         <Link href="/map">
           <Button 
             variant="primary" 
             className="w-auto px-6 py-3 shadow-lg hover:shadow-xl transition-shadow"
           >
             🗺️ 카카오 지도
+          </Button>
+        </Link>
+        <Link href="/seoul-crime">
+          <Button 
+            variant="primary" 
+            className="w-auto px-6 py-3 shadow-lg hover:shadow-xl transition-shadow bg-red-500 hover:bg-red-600"
+          >
+            📊 범죄율 지도
           </Button>
         </Link>
       </div>

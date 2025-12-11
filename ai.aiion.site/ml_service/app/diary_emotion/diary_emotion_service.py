@@ -17,7 +17,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from scipy.sparse import hstack
+# hstack 제거됨 (Word2Vec 제거로 불필요)
 
 # ic 먼저 정의
 try:
@@ -28,47 +28,108 @@ except ImportError:
             print(*args, **kwargs)
         return args[0] if args else None
 
-# gensim import (ic 정의 후)
-try:
-    from gensim.models import Word2Vec, FastText
-    from gensim.utils import simple_preprocess
-    GENSIM_AVAILABLE = True
-except ImportError:
-    GENSIM_AVAILABLE = False
-    ic("경고: gensim이 설치되지 않았습니다. Word2Vec 기능을 사용할 수 없습니다.")
+# Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해를 제공하므로 불필요
 
 # 공통 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.diary_emotion.save.diary_emotion_dataset import DiaryEmotionDataSet
-from app.diary_emotion.save.diary_emotion_model import DiaryEmotionModel
-from app.diary_emotion.save.diary_emotion_method import DiaryEmotionMethod
-from app.diary_emotion.save.diary_emotion_schema import DiaryEmotionSchema
+from app.diary_emotion.diary_emotion_dataset import DiaryEmotionDataSet
+from app.diary_emotion.diary_emotion_model import DiaryEmotionModel
+from app.diary_emotion.diary_emotion_method import DiaryEmotionMethod
+from app.diary_emotion.diary_emotion_schema import DiaryEmotionSchema
+
+# 딥러닝 모델 및 트레이너 (옵션)
+try:
+    from app.diary_emotion.diary_emotion_model import DiaryEmotionDLModel, TORCH_AVAILABLE
+    from app.diary_emotion.diary_emotion_dl_trainer import DiaryEmotionDLTrainer
+    DL_AVAILABLE = TORCH_AVAILABLE
+except ImportError:
+    DL_AVAILABLE = False
+    ic("경고: 딥러닝 모델을 사용할 수 없습니다.")
 
 
 class DiaryEmotionService:
-    """일기 감정 분류 데이터 처리 및 머신러닝 서비스"""
+    """일기 감정 분류 데이터 처리 및 머신러닝/딥러닝 서비스"""
     
-    def __init__(self, csv_file_path: Optional[Path] = None):
-        """초기화"""
+    def __init__(
+        self,
+        csv_file_path: Optional[Path] = None,
+        model_type: str = "ml",  # "ml" 또는 "dl"
+        dl_model_name: str = "klue/bert-base"
+    ):
+        """
+        초기화
+        
+        Args:
+            csv_file_path: CSV 파일 경로
+            model_type: 모델 타입 ("ml": 머신러닝, "dl": 딥러닝)
+            dl_model_name: 딥러닝 모델 이름 (BERT 계열)
+        """
         self.dataset = DiaryEmotionDataSet()
         self.model_obj = DiaryEmotionModel()
         self.method = DiaryEmotionMethod()  # 전처리 메서드 클래스
-        # CSV 파일 경로 (data/ 폴더에 있음)
-        self.csv_file_path = csv_file_path or (Path(__file__).parent.parent / "data" / "diary.csv")
+        
+        # 모델 타입 설정
+        self.model_type = model_type
+        self.dl_model_name = dl_model_name
+        
+        # CSV 파일 경로 (diary_emotion/data/ 폴더에 있음)
+        self.csv_file_path = csv_file_path or (Path(__file__).parent / "data" / "diary.csv")
         self.df: Optional[pd.DataFrame] = None
+        
         # 모델 저장 경로 (diary_emotion/models/ 폴더)
-        self.model_dir = Path(__file__).parent.parent / "models"
+        self.model_dir = Path(__file__).parent / "models"
         self.model_dir.mkdir(exist_ok=True)
+        
+        # ML 모델 파일
         self.model_file = self.model_dir / "diary_emotion_model.pkl"
         self.vectorizer_file = self.model_dir / "diary_emotion_vectorizer.pkl"
-        self.word2vec_file = self.model_dir / "diary_emotion_word2vec.pkl"
         self.metadata_file = self.model_dir / "diary_emotion_metadata.pkl"
-        self.use_word2vec = GENSIM_AVAILABLE  # Word2Vec 사용 여부
-        ic("DiaryEmotionService 초기화")
+        
+        # DL 모델 파일
+        self.dl_model_file = self.model_dir / "diary_emotion_dl_model.pt"
+        self.dl_metadata_file = self.model_dir / "diary_emotion_dl_metadata.pkl"
+        
+        # 딥러닝 모델 및 트레이너
+        self.dl_model_obj: Optional[DiaryEmotionDLModel] = None
+        self.dl_trainer: Optional[DiaryEmotionDLTrainer] = None
+        
+        ic(f"DiaryEmotionService 초기화: model_type={model_type}")
+        
+        # 딥러닝 모델 초기화 (선택된 경우)
+        if self.model_type == "dl" and DL_AVAILABLE:
+            self._init_dl_model()
         
         # 서비스 시작 시 모델 자동 로드 시도
         self._try_load_model()
+    
+    def _init_dl_model(self):
+        """딥러닝 모델 초기화"""
+        if not DL_AVAILABLE:
+            ic("⚠️ 딥러닝 라이브러리가 설치되지 않았습니다. ML 모델로 폴백합니다.")
+            self.model_type = "ml"
+            return
+        
+        try:
+            # 감정 클래스 수 동적 계산 (데이터 로드 후)
+            if self.df is not None and 'emotion' in self.df.columns:
+                unique_emotions = self.df['emotion'].unique()
+                num_labels = len(unique_emotions)
+                ic(f"감정 클래스 수: {num_labels} (감정 값: {sorted(unique_emotions)})")
+            else:
+                num_labels = 15  # 기본값 (로그에서 확인된 클래스 수)
+                ic(f"데이터 미로드, 기본 감정 클래스 수 사용: {num_labels}")
+            
+            self.dl_model_obj = DiaryEmotionDLModel(
+                model_name=self.dl_model_name,
+                num_labels=num_labels,  # 동적으로 계산된 감정 클래스 수
+                max_length=512
+            )
+            ic(f"✅ DL 모델 초기화 완료: {self.dl_model_name}")
+        except Exception as e:
+            ic(f"⚠️ DL 모델 초기화 실패: {e}")
+            ic("ML 모델로 폴백합니다.")
+            self.model_type = "ml"
     
     def preprocess(self):
         """데이터 전처리"""
@@ -95,8 +156,9 @@ class DiaryEmotionService:
             # 텍스트 전처리 (method 사용)
             self.df = self.method.preprocess_text(self.df)
             
-            # 감정 라벨 확인 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)
-            ic(f"감정 라벨: 0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람")
+            # 감정 라벨 확인 (15개 클래스)
+            emotion_labels_str = "0=평가불가, 1=기쁨, 2=슬픔, 3=분노, 4=두려움, 5=혐오, 6=놀람, 7=신뢰, 8=기대, 9=불안, 10=안도, 11=후회, 12=그리움, 13=감사, 14=외로움"
+            ic(f"감정 라벨: {emotion_labels_str}")
             
             ic("😎😎 전처리 완료")
             
@@ -122,17 +184,7 @@ class DiaryEmotionService:
                 sublinear_tf=True  # 로그 스케일링으로 정확도 향상
             )
             
-            # Word2Vec 모델 초기화 (문맥 기반 임베딩)
-            if self.use_word2vec:
-                ic("Word2Vec 모델 초기화 (문맥 이해)")
-                self.model_obj.word2vec_model = Word2Vec(
-                    vector_size=100,      # 임베딩 차원
-                    window=5,              # 문맥 윈도우 크기 (앞뒤 5개 단어)
-                    min_count=2,           # 최소 등장 횟수
-                    workers=4,             # 병렬 처리
-                    sg=0                  # CBOW 사용 (0: CBOW, 1: Skip-gram)
-                )
-            
+            # Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해를 제공
             # 모델 초기화 (Random Forest) - 정확도 향상을 위해 하이퍼파라미터 튜닝
             self.model_obj.model = RandomForestClassifier(
                 n_estimators=200,  # 100 -> 200으로 증가 (더 많은 트리)
@@ -151,9 +203,19 @@ class DiaryEmotionService:
             ic(f"모델링 오류: {e}")
             raise
     
-    def learning(self):
-        """모델 학습"""
-        ic("😎😎 학습 시작")
+    def learning(self, epochs: int = 3, batch_size: int = 8, freeze_bert_layers: int = 8):
+        """모델 학습 (ML 또는 DL)"""
+        ic(f"😎😎 학습 시작: model_type={self.model_type}")
+        
+        # 모델 타입에 따라 분기
+        if self.model_type == "dl":
+            return self._learning_dl(epochs=epochs, batch_size=batch_size, freeze_bert_layers=freeze_bert_layers)
+        else:
+            return self._learning_ml()
+    
+    def _learning_ml(self):
+        """머신러닝 모델 학습 (기존)"""
+        ic("😎😎 ML 학습 시작")
         
         try:
             if self.df is None:
@@ -164,48 +226,9 @@ class DiaryEmotionService:
             # 텍스트 벡터화
             X_text = self.df['text'].values
             
-            # TF-IDF 벡터화
-            X_tfidf = self.model_obj.vectorizer.fit_transform(X_text)
-            
-            # Word2Vec 임베딩 생성 (문맥 정보 포함)
-            if self.use_word2vec and self.model_obj.word2vec_model is not None:
-                ic("Word2Vec 모델 학습 중...")
-                # 텍스트를 단어 리스트로 변환
-                sentences = [simple_preprocess(text, deacc=True, min_len=1) for text in X_text]
-                # Word2Vec 모델 학습
-                self.model_obj.word2vec_model.build_vocab(sentences)
-                self.model_obj.word2vec_model.train(
-                    sentences, 
-                    total_examples=len(sentences), 
-                    epochs=10
-                )
-                
-                # 각 텍스트를 Word2Vec 임베딩 벡터로 변환 (평균 벡터)
-                def text_to_embedding(text):
-                    words = simple_preprocess(text, deacc=True, min_len=1)
-                    if len(words) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    # 문장의 모든 단어 임베딩의 평균
-                    word_vectors = [
-                        self.model_obj.word2vec_model.wv[word] 
-                        for word in words 
-                        if word in self.model_obj.word2vec_model.wv
-                    ]
-                    if len(word_vectors) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    return np.mean(word_vectors, axis=0)
-                
-                X_word2vec = np.array([text_to_embedding(text) for text in X_text])
-                
-                # TF-IDF와 Word2Vec 결합 (문맥 정보 포함)
-                from scipy.sparse import csr_matrix
-                X_word2vec_sparse = csr_matrix(X_word2vec)
-                X = hstack([X_tfidf, X_word2vec_sparse])
-                ic(f"TF-IDF + Word2Vec 결합 완료 (TF-IDF: {X_tfidf.shape}, Word2Vec: {X_word2vec.shape})")
-            else:
-                # Word2Vec 없이 TF-IDF만 사용
-                X = X_tfidf
-                ic("TF-IDF만 사용 (Word2Vec 없음)")
+            # TF-IDF 벡터화 (Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해 제공)
+            X = self.model_obj.vectorizer.fit_transform(X_text)
+            ic(f"TF-IDF 벡터화 완료: {X.shape}")
             
             # 라벨 추출 (emotion)
             y = self.df['emotion'].values
@@ -252,10 +275,82 @@ class DiaryEmotionService:
             
             ic(f"학습 데이터: {X_train.shape[0]} 개")
             ic(f"테스트 데이터: {X_test.shape[0]} 개")
-            ic("😎😎 학습 완료")
+            ic("😎😎 ML 학습 완료")
             
         except Exception as e:
-            ic(f"학습 오류: {e}")
+            ic(f"ML 학습 오류: {e}")
+            raise
+    
+    def _learning_dl(self, epochs: int = 3, batch_size: int = 8, freeze_bert_layers: int = 8):
+        """딥러닝 모델 학습"""
+        ic("😎😎 DL 학습 시작")
+        
+        try:
+            if not DL_AVAILABLE:
+                raise ImportError("딥러닝 라이브러리가 설치되지 않았습니다.")
+            
+            if self.df is None:
+                raise ValueError("데이터가 없습니다. preprocess()를 먼저 실행하세요.")
+            
+            # 모델 생성
+            if self.dl_model_obj is None:
+                self._init_dl_model()
+            
+            self.dl_model_obj.create_model(
+                dropout_rate=0.3,
+                hidden_size=256  # 중간 레이어 추가
+            )
+            
+            # 트레이너 생성
+            self.dl_trainer = DiaryEmotionDLTrainer(
+                model=self.dl_model_obj.model,
+                tokenizer=self.dl_model_obj.tokenizer,
+                device=self.dl_model_obj.device
+            )
+            
+            # 데이터 준비
+            texts = self.df['text'].tolist()
+            labels = self.df['emotion'].tolist()
+            
+            # 학습/검증 분할
+            from sklearn.model_selection import train_test_split
+            train_texts, val_texts, train_labels, val_labels = train_test_split(
+                texts, labels, test_size=0.2, random_state=42, stratify=labels
+            )
+            
+            ic(f"학습 데이터: {len(train_texts)}개, 검증 데이터: {len(val_texts)}개")
+            
+            # 학습 (파라미터 전달)
+            history = self.dl_trainer.train(
+                train_texts=train_texts,
+                train_labels=train_labels,
+                val_texts=val_texts,
+                val_labels=val_labels,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=2e-5,
+                max_length=256,  # 512 -> 256으로 감소 (메모리 절약)
+                freeze_bert_layers=freeze_bert_layers,
+                early_stopping_patience=2
+            )
+            
+            # 학습 데이터셋 저장
+            self.dataset.train = pd.DataFrame({
+                'text': train_texts,
+                'emotion': train_labels
+            })
+            self.dataset.test = pd.DataFrame({
+                'text': val_texts,
+                'emotion': val_labels
+            })
+            
+            ic(f"최종 검증 정확도: {history['final_val_accuracy']:.4f}")
+            ic("😎😎 DL 학습 완료")
+            
+            return history
+            
+        except Exception as e:
+            ic(f"DL 학습 오류: {e}")
             raise
     
     def evaluate(self):
@@ -272,27 +367,8 @@ class DiaryEmotionService:
             X_test_text = self.dataset.test['text'].values
             X_test_tfidf = self.model_obj.vectorizer.transform(X_test_text)
             
-            # Word2Vec 임베딩 생성 (있는 경우)
-            if self.use_word2vec and self.model_obj.word2vec_model is not None:
-                def text_to_embedding(text):
-                    words = simple_preprocess(text, deacc=True, min_len=1)
-                    if len(words) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    word_vectors = [
-                        self.model_obj.word2vec_model.wv[word] 
-                        for word in words 
-                        if word in self.model_obj.word2vec_model.wv
-                    ]
-                    if len(word_vectors) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    return np.mean(word_vectors, axis=0)
-                
-                X_test_word2vec = np.array([text_to_embedding(text) for text in X_test_text])
-                from scipy.sparse import csr_matrix
-                X_test_word2vec_sparse = csr_matrix(X_test_word2vec)
-                X_test = hstack([X_test_tfidf, X_test_word2vec_sparse])
-            else:
-                X_test = X_test_tfidf
+            # TF-IDF만 사용 (Word2Vec 제거됨)
+            X_test = X_test_tfidf
             y_test = self.dataset.test['emotion'].values
             
             # 예측
@@ -335,10 +411,18 @@ class DiaryEmotionService:
             raise
     
     def predict(self, text: str) -> Dict[str, Any]:
-        """텍스트 감정 예측"""
+        """텍스트 감정 예측 (ML 또는 DL)"""
+        # 모델 타입에 따라 분기
+        if self.model_type == "dl":
+            return self._predict_dl(text)
+        else:
+            return self._predict_ml(text)
+    
+    def _predict_ml(self, text: str) -> Dict[str, Any]:
+        """ML 모델 예측 (기존)"""
         try:
             if self.model_obj.model is None:
-                raise ValueError("모델이 없습니다. learning()을 먼저 실행하세요.")
+                raise ValueError("ML 모델이 없습니다. learning()을 먼저 실행하세요.")
             
             # 텍스트 전처리 (줄바꿈, 탭을 공백으로 변환하고 연속 공백 통합)
             import re
@@ -353,29 +437,8 @@ class DiaryEmotionService:
             # TF-IDF 벡터화
             X_tfidf = self.model_obj.vectorizer.transform([processed_text])
             
-            # Word2Vec 임베딩 생성 (문맥 정보 포함)
-            if self.use_word2vec and self.model_obj.word2vec_model is not None:
-                def text_to_embedding(text):
-                    words = simple_preprocess(text, deacc=True, min_len=1)
-                    if len(words) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    word_vectors = [
-                        self.model_obj.word2vec_model.wv[word] 
-                        for word in words 
-                        if word in self.model_obj.word2vec_model.wv
-                    ]
-                    if len(word_vectors) == 0:
-                        return np.zeros(self.model_obj.word2vec_model.vector_size)
-                    return np.mean(word_vectors, axis=0)
-                
-                X_word2vec = np.array([text_to_embedding(processed_text)])
-                
-                # TF-IDF와 Word2Vec 결합
-                from scipy.sparse import csr_matrix
-                X_word2vec_sparse = csr_matrix(X_word2vec)
-                X = hstack([X_tfidf, X_word2vec_sparse])
-            else:
-                X = X_tfidf
+            # TF-IDF만 사용 (Word2Vec 제거됨)
+            X = X_tfidf
             
             # 예측 및 확률 계산
             prediction = self.model_obj.model.predict(X)[0]
@@ -599,7 +662,60 @@ class DiaryEmotionService:
             }
             
         except Exception as e:
-            ic(f"예측 오류: {e}")
+            ic(f"ML 예측 오류: {e}")
+            raise
+    
+    def _predict_dl(self, text: str) -> Dict[str, Any]:
+        """DL 모델 예측"""
+        try:
+            if not DL_AVAILABLE:
+                raise ImportError("딥러닝 라이브러리가 설치되지 않았습니다.")
+            
+            if self.dl_model_obj is None or self.dl_model_obj.model is None:
+                raise ValueError("DL 모델이 없습니다. learning()을 먼저 실행하세요.")
+            
+            if self.dl_trainer is None:
+                # 트레이너 생성
+                self.dl_trainer = DiaryEmotionDLTrainer(
+                    model=self.dl_model_obj.model,
+                    tokenizer=self.dl_model_obj.tokenizer,
+                    device=self.dl_model_obj.device
+                )
+            
+            # 예측 및 확률 계산
+            predictions, probabilities = self.dl_trainer.predict([text], batch_size=1, return_probs=True)
+            prediction = predictions[0]
+            probabilities = probabilities[0]  # 첫 번째 텍스트의 확률
+            
+            # 감정 라벨 매핑 (15개 클래스)
+            emotion_labels = {
+                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
+                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
+            }
+            
+            # 감정별 가중치 조정 적용
+            probabilities = self._apply_emotion_weights(probabilities, emotion_labels)
+            
+            # 가중치 조정 후 최종 예측 (최대 확률)
+            final_prediction = int(np.argmax(probabilities))
+            emotion_label = emotion_labels.get(final_prediction, '알 수 없음')
+            
+            # 확률 딕셔너리 생성
+            prob_dict = {}
+            for idx, label in emotion_labels.items():
+                if idx < len(probabilities):
+                    prob_dict[label] = float(probabilities[idx])
+            
+            return {
+                'emotion': final_prediction,
+                'emotion_label': emotion_label,
+                'probabilities': prob_dict,
+                'confidence': float(probabilities[final_prediction]),
+                'model_type': 'dl'
+            }
+            
+        except Exception as e:
+            ic(f"DL 예측 오류: {e}")
             raise
     
     def _apply_keyword_weights(self, text: str, probabilities: np.ndarray, emotion_labels: Dict[int, str]) -> np.ndarray:
@@ -767,43 +883,11 @@ class DiaryEmotionService:
             # 키워드 매칭 개수 계산
             match_count = sum(1 for keyword in keywords if keyword in text_lower)
             
-            # Word2Vec 유사도 기반 가중치 계산 (키워드 매칭이 없거나 적을 때 보완)
-            similarity_score = 0.0
-            if self.use_word2vec and self.model_obj.word2vec_model is not None:
-                try:
-                    # 텍스트를 단어 리스트로 변환
-                    text_words = simple_preprocess(text_lower, deacc=True, min_len=1)
-                    
-                    # 각 감정 키워드와 입력 텍스트 단어 간의 유사도 계산
-                    similarities = []
-                    for keyword in keywords:
-                        if keyword not in self.model_obj.word2vec_model.wv:
-                            continue
-                        for word in text_words:
-                            if word in self.model_obj.word2vec_model.wv:
-                                try:
-                                    sim = self.model_obj.word2vec_model.wv.similarity(keyword, word)
-                                    if sim > 0.3:  # 유사도 임계값 (0.3 이상만 사용)
-                                        similarities.append(sim)
-                                except KeyError:
-                                    continue
-                    
-                    if similarities:
-                        # 최대 유사도 사용 (또는 평균 유사도)
-                        similarity_score = max(similarities) * 0.5  # 유사도 가중치 (0.5배 적용)
-                        ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: Word2Vec 유사도 {similarity_score:.3f} (최대 {max(similarities):.3f})")
-                except Exception as e:
-                    ic(f"Word2Vec 유사도 계산 오류: {e}")
-            
-            # 키워드 매칭과 Word2Vec 유사도 결합
+            # 키워드 매칭 기반 가중치 적용 (Word2Vec 제거됨)
             if match_count > 0:
                 # 키워드가 발견되면 가중치 적용 (매칭 개수에 비례)
-                weight_scores[emotion_id] = match_count * weight + similarity_score
+                weight_scores[emotion_id] = match_count * weight
                 ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: {match_count}개 키워드 매칭, 가중치 {weight_scores[emotion_id]:.3f}")
-            elif similarity_score > 0:
-                # 키워드 매칭은 없지만 Word2Vec 유사도가 있으면 가중치 적용
-                weight_scores[emotion_id] = similarity_score * weight
-                ic(f"감정 {emotion_labels.get(emotion_id, emotion_id)}: 키워드 매칭 없음, Word2Vec 유사도만 적용, 가중치 {weight_scores[emotion_id]:.3f}")
         
         # 가중치를 확률에 적용 (소프트맥스 방식)
         if weight_scores.sum() > 0:
@@ -833,6 +917,48 @@ class DiaryEmotionService:
         
         return probabilities
     
+    def _apply_emotion_weights(self, probabilities: np.ndarray, emotion_labels: Dict[int, str]) -> np.ndarray:
+        """
+        감정별 가중치 조정 (DL 모델용 - 미세 조정)
+        
+        DL 모델은 BERT/ELECTRA 같은 사전 학습 모델로 문맥을 잘 이해하므로,
+        ML 모델보다 훨씬 작은 가중치 조정만 적용합니다.
+        
+        Args:
+            probabilities: 감정별 확률 배열 (15개 클래스)
+            emotion_labels: 감정 라벨 딕셔너리
+        
+        Returns:
+            가중치 조정된 확률 배열
+        """
+        # DL 모델은 이미 문맥을 잘 이해하므로 큰 조정 불필요
+        # 필요시 미세 조정만 적용 (예: 5-10% 수준)
+        
+        # 확률 딕셔너리로 변환 (가중치 조정 편의를 위해)
+        prob_dict = {}
+        for idx, label in emotion_labels.items():
+            if idx < len(probabilities):
+                prob_dict[label] = float(probabilities[idx])
+        
+        # DL 모델용 미세 가중치 조정 (ML의 1.2/0.8 대신 1.05/0.95 수준)
+        # 불안: 약간 증가 (5% 증가) - ML의 20% 증가 대비 매우 작음
+        if "불안" in prob_dict and prob_dict["불안"] > 0.1:  # 불안 확률이 일정 수준 이상일 때만
+            prob_dict["불안"] *= 1.05
+            ic(f"DL 불안 확률 미세 조정: {prob_dict['불안']:.4f}")
+        
+        # 기대: 약간 감소 (5% 감소) - ML의 20% 감소 대비 매우 작음
+        if "기대" in prob_dict and prob_dict["기대"] > 0.1:  # 기대 확률이 일정 수준 이상일 때만
+            prob_dict["기대"] *= 0.95
+            ic(f"DL 기대 확률 미세 조정: {prob_dict['기대']:.4f}")
+        
+        # 딕셔너리를 다시 배열로 변환
+        adjusted_probs = np.array([prob_dict.get(emotion_labels.get(i, ''), 0.0) for i in range(len(probabilities))])
+        
+        # 정규화 (확률 합이 1이 되도록)
+        adjusted_probs = adjusted_probs / (adjusted_probs.sum() + 1e-10)
+        
+        return adjusted_probs
+    
     def _try_load_model(self):
         """모델 파일이 있으면 자동 로드"""
         try:
@@ -842,11 +968,7 @@ class DiaryEmotionService:
                     self.model_obj.model = pickle.load(f)
                 with open(self.vectorizer_file, 'rb') as f:
                     self.model_obj.vectorizer = pickle.load(f)
-                # Word2Vec 모델 로드 (있는 경우)
-                if self.word2vec_file.exists() and self.use_word2vec:
-                    with open(self.word2vec_file, 'rb') as f:
-                        self.model_obj.word2vec_model = pickle.load(f)
-                    ic("Word2Vec 모델 로드 완료")
+                # Word2Vec 제거됨
                 
                 # 메타데이터 확인 (CSV 파일이 업데이트되었는지 확인)
                 if self.metadata_file.exists():
@@ -870,10 +992,18 @@ class DiaryEmotionService:
             return False
     
     def save_model(self):
-        """모델을 파일로 저장"""
+        """모델을 파일로 저장 (ML 또는 DL)"""
+        # 모델 타입에 따라 분기
+        if self.model_type == "dl":
+            return self._save_model_dl()
+        else:
+            return self._save_model_ml()
+    
+    def _save_model_ml(self):
+        """ML 모델 저장 (기존)"""
         try:
             if self.model_obj.model is None or self.model_obj.vectorizer is None:
-                raise ValueError("모델이 학습되지 않았습니다. learning()을 먼저 실행하세요.")
+                raise ValueError("ML 모델이 학습되지 않았습니다. learning()을 먼저 실행하세요.")
             
             # 모델 디렉토리 생성 (존재하지 않으면 생성)
             try:
@@ -899,11 +1029,7 @@ class DiaryEmotionService:
                 pickle.dump(self.model_obj.vectorizer, f)
             ic(f"Vectorizer 저장 완료: {self.vectorizer_file}")
             
-            # Word2Vec 모델 저장 (있는 경우)
-            if self.model_obj.word2vec_model is not None:
-                with open(self.word2vec_file, 'wb') as f:
-                    pickle.dump(self.model_obj.word2vec_model, f)
-                ic(f"Word2Vec 모델 저장 완료: {self.word2vec_file}")
+            # Word2Vec 제거됨
             
             # 메타데이터 저장 (CSV 파일 수정 시간 포함)
             # pathlib을 사용하여 파일 수정 시간 가져오기 (os 대신)
@@ -919,8 +1045,136 @@ class DiaryEmotionService:
             ic(f"메타데이터 저장 완료: {self.metadata_file}")
             
         except Exception as e:
-            ic(f"모델 저장 오류: {e}")
+            ic(f"ML 모델 저장 오류: {e}")
             raise
+    
+    def _save_model_dl(self):
+        """DL 모델 저장"""
+        try:
+            if not DL_AVAILABLE:
+                raise ImportError("딥러닝 라이브러리가 설치되지 않았습니다.")
+            
+            if self.dl_model_obj is None or self.dl_model_obj.model is None:
+                raise ValueError("DL 모델이 학습되지 않았습니다. learning()을 먼저 실행하세요.")
+            
+            # 모델 디렉토리 생성
+            self.model_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 모델 저장 (PyTorch)
+            import torch
+            torch.save({
+                'model_state_dict': self.dl_model_obj.model.state_dict(),
+                'model_name': self.dl_model_obj.model_name,
+                'num_labels': self.dl_model_obj.num_labels,
+                'max_length': self.dl_model_obj.max_length
+            }, self.dl_model_file)
+            ic(f"DL 모델 저장 완료: {self.dl_model_file}")
+            
+            # 메타데이터 저장
+            csv_mtime = self.csv_file_path.stat().st_mtime
+            metadata = {
+                'model_type': 'dl',
+                'model_name': self.dl_model_obj.model_name,
+                'num_labels': self.dl_model_obj.num_labels,  # 감정 클래스 수 저장
+                'max_length': self.dl_model_obj.max_length,
+                'csv_mtime': csv_mtime,
+                'csv_path': str(self.csv_file_path),
+                'trained_at': datetime.now().isoformat(),
+                'data_count': len(self.df) if self.df is not None else 0
+            }
+            with open(self.dl_metadata_file, 'wb') as f:
+                pickle.dump(metadata, f)
+            ic(f"DL 메타데이터 저장 완료: {self.dl_metadata_file}")
+            
+        except Exception as e:
+            ic(f"DL 모델 저장 오류: {e}")
+            raise
+    
+    def load_model(self, model_type: Optional[str] = None):
+        """모델 로드 (ML 또는 DL)"""
+        target_type = model_type or self.model_type
+        
+        if target_type == "dl":
+            return self._load_model_dl()
+        else:
+            return self._load_model_ml()
+    
+    def _load_model_ml(self):
+        """ML 모델 로드"""
+        try:
+            if not self.model_file.exists():
+                ic(f"ML 모델 파일이 없습니다: {self.model_file}")
+                return False
+            
+            # 모델 로드
+            with open(self.model_file, 'rb') as f:
+                self.model_obj.model = pickle.load(f)
+            
+            # Vectorizer 로드
+            with open(self.vectorizer_file, 'rb') as f:
+                self.model_obj.vectorizer = pickle.load(f)
+            
+            # Word2Vec 제거됨
+            
+            ic("ML 모델 로드 완료")
+            return True
+            
+        except Exception as e:
+            ic(f"ML 모델 로드 오류: {e}")
+            return False
+    
+    def _load_model_dl(self):
+        """DL 모델 로드"""
+        try:
+            if not DL_AVAILABLE:
+                ic("딥러닝 라이브러리가 설치되지 않았습니다.")
+                return False
+            
+            if not self.dl_model_file.exists():
+                ic(f"DL 모델 파일이 없습니다: {self.dl_model_file}")
+                return False
+            
+            # 메타데이터 로드
+            with open(self.dl_metadata_file, 'rb') as f:
+                metadata = pickle.load(f)
+            
+            # 모델 초기화
+            if self.dl_model_obj is None:
+                # 메타데이터에서 num_labels 가져오기 (없으면 동적 계산)
+                num_labels = metadata.get('num_labels', None)
+                if num_labels is None and self.df is not None and 'emotion' in self.df.columns:
+                    unique_emotions = self.df['emotion'].unique()
+                    num_labels = len(unique_emotions)
+                elif num_labels is None:
+                    num_labels = 15  # 기본값
+                
+                self.dl_model_obj = DiaryEmotionDLModel(
+                    model_name=metadata['model_name'],
+                    num_labels=num_labels,
+                    max_length=512
+                )
+            
+            self.dl_model_obj.create_model()
+            
+            # 모델 상태 로드
+            import torch
+            checkpoint = torch.load(self.dl_model_file, map_location=self.dl_model_obj.device)
+            self.dl_model_obj.model.load_state_dict(checkpoint['model_state_dict'])
+            self.dl_model_obj.model.eval()
+            
+            # 트레이너 생성
+            self.dl_trainer = DiaryEmotionDLTrainer(
+                model=self.dl_model_obj.model,
+                tokenizer=self.dl_model_obj.tokenizer,
+                device=self.dl_model_obj.device
+            )
+            
+            ic("DL 모델 로드 완료")
+            return True
+            
+        except Exception as e:
+            ic(f"DL 모델 로드 오류: {e}")
+            return False
     
     def submit(self):
         """제출/모델 저장"""

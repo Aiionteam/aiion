@@ -22,11 +22,6 @@ spring:
       server:
         webflux:
           routes:
-            # soccer-service는 현재 구현되지 않음
-            # - id: soccer-service
-            #   uri: http://soccer-service:8085
-            #   predicates:
-            #     - Path=/soccer/**
             - id: common-service
               uri: http://common-service:8081
               predicates:
@@ -199,10 +194,22 @@ spring:
                 - Path=/diary-emotion/**
               filters:
                 - StripPrefix=0
+            - id: ml-service
+              uri: http://aihoyun-ml-service:9005
+              predicates:
+                - Path=/api/ml-service/**
+              filters:
+                - StripPrefix=2
             - id: inventory-service
               uri: http://inventory-service:9006
               predicates:
                 - Path=/inventory/**
+            - id: business-diary-service
+              uri: http://aihoyun-diary-service:9007
+              predicates:
+                - Path=/api/business/diary/**
+              filters:
+                - StripPrefix=3
           globalcors:
             cors-configurations:
               '[/**]':

@@ -126,8 +126,9 @@ class SeoulHeatmapService:
         
         if not self.shapefile_path or not self.shapefile_path.exists():
             logger.warning("Shapefile을 찾을 수 없습니다. GeoJSON을 시도합니다.")
-            # GeoJSON 파일 시도
+            # GeoJSON 파일 시도 (우선순위: kr-state.json > seoul_gu.geojson)
             geojson_paths = [
+                self.data_dir / "kr-state.json",  # 서울시 경계선 데이터 (최우선)
                 self.data_dir / "seoul_gu.geojson",
                 self.data_dir / "seoul_gu.json",
                 self.save_dir / "seoul_gu.geojson",
@@ -138,9 +139,11 @@ class SeoulHeatmapService:
                     try:
                         gdf = gpd.read_file(str(path))
                         logger.info(f"GeoJSON 로드 완료: {path}")
+                        logger.info(f"로드된 자치구 수: {len(gdf)}")
+                        logger.info(f"사용 가능한 컬럼: {list(gdf.columns)}")
                         return gdf
                     except Exception as e:
-                        logger.error(f"GeoJSON 로드 실패: {e}")
+                        logger.error(f"GeoJSON 로드 실패 ({path}): {e}")
                         continue
             
             logger.error("Shapefile 또는 GeoJSON을 찾을 수 없습니다.")

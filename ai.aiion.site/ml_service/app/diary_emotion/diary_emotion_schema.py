@@ -129,7 +129,10 @@ class DiaryEmotionSchema:
     
     def __repr__(self) -> str:
         """문자열 표현"""
-        emotion_label = {0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람"}.get(self.emotion, "알 수 없음")
+        emotion_label = {
+            0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람",
+            7: "신뢰", 8: "기대", 9: "불안", 10: "안도", 11: "후회", 12: "그리움", 13: "감사", 14: "외로움"
+        }.get(self.emotion, "알 수 없음")
         return (
             f"DiaryEmotionSchema("
             f"id={self.id}, "
@@ -139,7 +142,10 @@ class DiaryEmotionSchema:
     
     def __str__(self) -> str:
         """사용자 친화적 문자열 표현"""
-        emotion_label = {0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람"}.get(self.emotion, "알 수 없음")
+        emotion_label = {
+            0: "평가불가", 1: "기쁨", 2: "슬픔", 3: "분노", 4: "두려움", 5: "혐오", 6: "놀람",
+            7: "신뢰", 8: "기대", 9: "불안", 10: "안도", 11: "후회", 12: "그리움", 13: "감사", 14: "외로움"
+        }.get(self.emotion, "알 수 없음")
         return (
             f"일기 ID: {self.id}\n"
             f"날짜: {self.localdate}\n"

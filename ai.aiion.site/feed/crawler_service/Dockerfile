@@ -25,4 +25,4 @@ COPY feed/crawler_service/app/ .
 
 EXPOSE 9003
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9003"]
+CMD sh -c "uvicorn main:app --host 0.0.0.0 --port 9003 --root-path ${ROOT_PATH}"

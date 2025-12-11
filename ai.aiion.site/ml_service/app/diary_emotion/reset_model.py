@@ -10,7 +10,7 @@ import sys
 def reset_model():
     """모델 파일들을 삭제하여 초기화"""
     # 모델 디렉토리 경로 (diary_emotion/models/ 폴더)
-    model_dir = Path(__file__).parent.parent / "models"
+    model_dir = Path(__file__).parent / "models"
     
     print("=" * 60)
     print("모델 초기화 시작")
@@ -23,11 +23,10 @@ def reset_model():
         print("❌ 모델 디렉토리가 존재하지 않습니다.")
         return False
     
-    # 삭제할 파일 목록
+    # 삭제할 파일 목록 (Word2Vec 제거됨)
     files_to_delete = [
         "diary_emotion_model.pkl",
         "diary_emotion_vectorizer.pkl",
-        "diary_emotion_word2vec.pkl",
         "diary_emotion_metadata.pkl"
     ]
     
