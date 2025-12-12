@@ -87,15 +87,49 @@ class DiaryEmotionDLTrainer:
         Args:
             model: BERTEmotionClassifier 모델
             tokenizer: HuggingFace 토크나이저
-            device: 디바이스
+            device: 디바이스 
+                    - None (기본값): GPU 사용 가능 시 자동으로 GPU 사용, 없으면 CPU
+                    - torch.device("cuda"): GPU 명시적 요청 (사용 가능하지 않으면 오류)
+                    - torch.device("cpu"): CPU 명시적 요청 (GPU가 있어도 CPU 사용)
+                    
+        Note:
+            GPU가 사용 가능하면 device 파라미터와 관계없이 GPU를 우선 사용합니다.
+            CPU를 강제로 사용하려면 device=torch.device("cpu")로 명시하세요.
         """
         if not TORCH_AVAILABLE:
             raise ImportError("torch 관련 라이브러리가 설치되지 않았습니다.")
         
         self.model = model
         self.tokenizer = tokenizer
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # GPU 사용 가능 여부 확인 및 device 설정
+        # GPU가 사용 가능하면 항상 GPU 사용 (device 파라미터 무시)
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            ic(f"✅ GPU 사용 가능: {torch.cuda.get_device_name(0)}")
+            ic(f"   GPU 메모리: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+            if device is not None:
+                if device.type == "cpu":
+                    ic("⚠️ 전달된 device가 CPU이지만, GPU가 사용 가능하므로 GPU로 변경합니다.")
+                elif device.type == "cuda":
+                    ic("✅ GPU 사용 (명시적 요청)")
+        else:
+            # GPU가 없을 때
+            if device is not None and device.type == "cuda":
+                raise RuntimeError("CUDA device를 요청했지만 GPU를 사용할 수 없습니다. CUDA가 설치되어 있는지 확인하세요.")
+            self.device = torch.device("cpu")
+            ic("⚠️ GPU를 사용할 수 없습니다. CPU로 학습합니다.")
+            if device is not None:
+                ic(f"   전달된 device: {device}")
+        
+        # 모델을 디바이스로 이동
         self.model.to(self.device)
+        
+        # GPU 사용 확인
+        if self.device.type == "cuda":
+            ic(f"✅ 모델이 GPU에 로드되었습니다: {next(self.model.parameters()).device}")
+        else:
+            ic(f"⚠️ 모델이 CPU에 로드되었습니다: {next(self.model.parameters()).device}")
         
         # 학습 히스토리
         self.train_losses = []
@@ -103,7 +137,7 @@ class DiaryEmotionDLTrainer:
         self.train_accuracies = []
         self.val_accuracies = []
         
-        ic(f"DiaryEmotionDLTrainer 초기화: device={self.device}")
+        ic(f"DiaryEmotionDLTrainer 초기화 완료: device={self.device}")
     
     def create_dataloader(
         self,
@@ -133,11 +167,38 @@ class DiaryEmotionDLTrainer:
             max_length=max_length
         )
         
+        # num_workers 설정 (데이터 로딩 병목 해소)
+        # Docker 컨테이너나 Linux 환경에서는 멀티프로세싱 사용
+        import platform
+        import os
+        
+        # Docker 컨테이너 내부인지 확인
+        is_docker = os.path.exists('/.dockerenv')
+        is_linux = platform.system() == "Linux"
+        
+        # Windows가 아니고 (Docker 또는 Linux)이면 멀티프로세싱 사용
+        if is_docker or (is_linux and platform.system() != "Windows"):
+            # CPU 코어 수에 따라 num_workers 설정 (최대 8개)
+            try:
+                import multiprocessing
+                num_workers = min(multiprocessing.cpu_count(), 8)
+            except:
+                num_workers = 4
+            ic(f"DataLoader num_workers 설정: {num_workers} (멀티프로세싱 활성화)")
+        else:
+            num_workers = 0  # Windows에서는 0 (멀티프로세싱 문제)
+            ic(f"DataLoader num_workers 설정: {num_workers} (Windows 환경)")
+        
+        # GPU 사용 시 pin_memory 활성화 (데이터 전송 속도 향상)
+        pin_memory = self.device.type == "cuda"
+        
         return DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=0  # Windows 호환성
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=True if num_workers > 0 else False  # 워커 재사용으로 오버헤드 감소
         )
     
     def train_epoch(
@@ -145,7 +206,8 @@ class DiaryEmotionDLTrainer:
         train_loader: DataLoader,
         optimizer,
         scheduler,
-        criterion
+        criterion,
+        use_amp: bool = True  # Mixed Precision Training (FP16)
     ) -> Tuple[float, float]:
         """
         한 에폭 학습
@@ -155,6 +217,7 @@ class DiaryEmotionDLTrainer:
             optimizer: 옵티마이저
             scheduler: 스케줄러
             criterion: 손실 함수
+            use_amp: Mixed Precision Training 사용 여부 (기본: True)
         
         Returns:
             (평균 손실, 정확도)
@@ -164,31 +227,69 @@ class DiaryEmotionDLTrainer:
         correct = 0
         total = 0
         
+        # Mixed Precision Training 설정 (FP16)
+        scaler = None
+        if use_amp and self.device.type == "cuda":
+            try:
+                scaler = torch.cuda.amp.GradScaler()
+                if hasattr(torch.cuda.amp, 'autocast'):
+                    ic("✅ Mixed Precision Training (FP16) 활성화")
+            except AttributeError:
+                ic("⚠️ Mixed Precision Training을 사용할 수 없습니다. 일반 모드로 진행합니다.")
+                use_amp = False
+        
         progress_bar = tqdm(train_loader, desc="Training")
         
-        for batch in progress_bar:
-            # 데이터 이동
-            input_ids = batch['input_ids'].to(self.device)
-            attention_mask = batch['attention_mask'].to(self.device)
-            labels = batch['labels'].to(self.device)
+        for batch_idx, batch in enumerate(progress_bar):
+            # 데이터 이동 (GPU 사용 시 비동기 전송)
+            input_ids = batch['input_ids'].to(self.device, non_blocking=True)
+            attention_mask = batch['attention_mask'].to(self.device, non_blocking=True)
+            labels = batch['labels'].to(self.device, non_blocking=True)
             
-            # 순전파
-            outputs = self.model(
-                input_ids=input_ids,
-                attention_mask=attention_mask
-            )
+            # 첫 번째 배치에서 디바이스 확인
+            if batch_idx == 0:
+                ic(f"첫 번째 배치 디바이스 확인: input_ids.device={input_ids.device}")
+                if use_amp and scaler:
+                    ic(f"Mixed Precision Training 활성화됨")
             
-            # 손실 계산
-            loss = criterion(outputs, labels)
+            # Mixed Precision Training 사용
+            if use_amp and scaler:
+                # FP16으로 순전파
+                with torch.cuda.amp.autocast():
+                    outputs = self.model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask
+                    )
+                    loss = criterion(outputs, labels)
+                
+                # 역전파 (FP16)
+                optimizer.zero_grad()
+                scaler.scale(loss).backward()
+                
+                # Gradient clipping (FP16)
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                
+                # 옵티마이저 스텝 (FP16)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                # 일반 모드 (FP32)
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask
+                )
+                loss = criterion(outputs, labels)
+                
+                # 역전파
+                optimizer.zero_grad()
+                loss.backward()
+                
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                
+                optimizer.step()
             
-            # 역전파
-            optimizer.zero_grad()
-            loss.backward()
-            
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            
-            optimizer.step()
             scheduler.step()
             
             # 통계
@@ -269,11 +370,12 @@ class DiaryEmotionDLTrainer:
         val_texts: List[str],
         val_labels: List[int],
         epochs: int = 3,
-        batch_size: int = 16,
+        batch_size: int = 8,
         learning_rate: float = 2e-5,
-        max_length: int = 512,
+        max_length: int = 256,
         freeze_bert_layers: int = 0,
-        early_stopping_patience: int = 3
+        early_stopping_patience: int = 3,
+        use_amp: bool = True  # Mixed Precision Training (FP16) - RTX 4060 최적화
     ) -> Dict[str, Any]:
         """
         모델 학습
@@ -294,6 +396,8 @@ class DiaryEmotionDLTrainer:
             학습 결과 딕셔너리
         """
         ic(f"학습 시작: epochs={epochs}, batch_size={batch_size}, lr={learning_rate}")
+        if use_amp and self.device.type == "cuda":
+            ic("✅ Mixed Precision Training (FP16) 활성화 - 학습 속도 및 메모리 효율 향상")
         
         # BERT 레이어 동결
         if freeze_bert_layers > 0:
@@ -337,9 +441,9 @@ class DiaryEmotionDLTrainer:
         for epoch in range(epochs):
             ic(f"Epoch {epoch+1}/{epochs}")
             
-            # 학습
+            # 학습 (Mixed Precision Training 사용)
             train_loss, train_acc = self.train_epoch(
-                train_loader, optimizer, scheduler, criterion
+                train_loader, optimizer, scheduler, criterion, use_amp=use_amp
             )
             
             # 평가

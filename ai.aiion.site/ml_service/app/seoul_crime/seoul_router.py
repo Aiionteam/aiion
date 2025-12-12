@@ -581,9 +581,11 @@ async def get_crime_map_html(
         HTML 문자열
     """
     try:
+        logger.info("서울 범죄 지도 HTML 생성 시작")
         service = get_seoul_folium_service()
         
         # 지도 생성
+        logger.info(f"지도 생성 파라미터: location=[{location_lat}, {location_lon}], zoom={zoom_start}")
         service.create_map(
             location=[location_lat, location_lon],
             zoom_start=zoom_start,
@@ -591,6 +593,7 @@ async def get_crime_map_html(
             fill_opacity=fill_opacity,
             line_opacity=line_opacity
         )
+        logger.info("지도 생성 완료")
         
         # save 폴더에 자동 저장
         if save_file:
@@ -599,15 +602,32 @@ async def get_crime_map_html(
         
         # HTML 반환
         html = service.get_map_html()
+        logger.info(f"HTML 반환 준비 완료 (길이: {len(html)} 문자)")
         
         return HTMLResponse(content=html)
         
+    except FileNotFoundError as e:
+        logger.error(f"파일을 찾을 수 없습니다: {e}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"필수 데이터 파일이 없습니다. 데이터 전처리를 먼저 실행하세요: /seoul-crime/preprocess\n오류: {str(e)}"
+        )
+    except ValueError as e:
+        logger.error(f"데이터 형식 오류: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"데이터 형식이 올바르지 않습니다. 데이터 전처리를 다시 실행하세요: /seoul-crime/preprocess\n오류: {str(e)}"
+        )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"지도 HTML 생성 중 오류 발생: {str(e)}")
+        error_trace = traceback.format_exc()
+        logger.error(f"지도 HTML 생성 중 예상치 못한 오류 발생: {e}\n{error_trace}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"지도 HTML 생성 중 오류 발생: {str(e)}\n\n상세 오류:\n{error_trace}"
+        )
 
 
 @router.get("/map/statistics")

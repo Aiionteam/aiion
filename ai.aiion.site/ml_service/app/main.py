@@ -25,7 +25,7 @@ from app.diary_emotion.diary_emotion_router import router as diary_emotion_route
 from app.diary_mbti.router import router as diary_mbti_router
 from app.seoul_crime.seoul_router import router as seoul_crime_router
 from app.us_unemployment.router import router as us_unemployment_router
-from app.nlp.nlp_router import router as nlp_router
+from app.nlp_service.nlp_router import router as nlp_router
 
 # 로깅 설정
 logger = setup_logging(SERVICE_NAME, LOG_LEVEL, LOG_FORMAT)

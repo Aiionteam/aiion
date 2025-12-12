@@ -110,29 +110,52 @@ class DiaryEmotionMethod:
         return df
     
     def preprocess_text(self, df: pd.DataFrame) -> pd.DataFrame:
-        """텍스트 전처리 (제목과 내용 결합)"""
+        """텍스트 전처리 (제목과 내용 결합 또는 기존 text 컬럼 사용)"""
         df = df.copy()
         
-        # 제목과 내용을 문자열로 변환
-        title_text = df['title'].fillna('').astype(str)
-        content_text = df['content'].fillna('').astype(str)
+        # text 컬럼이 이미 있으면 그대로 사용 (diary_copers.csv 같은 경우)
+        if 'text' in df.columns:
+            ic("text 컬럼이 이미 존재합니다. 기존 text 컬럼 사용")
+            # SEP를 공백으로 대체 (title과 content 구분자)
+            df['text'] = df['text'].fillna('').astype(str).str.replace(' SEP ', ' ', regex=False)
+            
+            # 줄바꿈(\n, \r\n)을 공백으로 변환
+            df['text'] = df['text'].str.replace(r'\r?\n', ' ', regex=True)
+            
+            # 탭 문자도 공백으로 변환
+            df['text'] = df['text'].str.replace('\t', ' ', regex=False)
+            
+            # 연속된 공백을 하나로 통합
+            df['text'] = df['text'].str.replace(r'\s+', ' ', regex=True).str.strip()
+            
+            return df
         
-        # 줄바꿈(\n, \r\n)을 공백으로 변환
-        title_text = title_text.str.replace(r'\r?\n', ' ', regex=True)
-        content_text = content_text.str.replace(r'\r?\n', ' ', regex=True)
+        # title과 content 컬럼이 있으면 합치기 (기존 diary.csv 같은 경우)
+        if 'title' in df.columns and 'content' in df.columns:
+            ic("title과 content 컬럼을 합쳐서 text 컬럼 생성")
+            # 제목과 내용을 문자열로 변환
+            title_text = df['title'].fillna('').astype(str)
+            content_text = df['content'].fillna('').astype(str)
+            
+            # 줄바꿈(\n, \r\n)을 공백으로 변환
+            title_text = title_text.str.replace(r'\r?\n', ' ', regex=True)
+            content_text = content_text.str.replace(r'\r?\n', ' ', regex=True)
+            
+            # 탭 문자도 공백으로 변환
+            title_text = title_text.str.replace('\t', ' ', regex=False)
+            content_text = content_text.str.replace('\t', ' ', regex=False)
+            
+            # 연속된 공백을 하나로 통합
+            title_text = title_text.str.replace(r'\s+', ' ', regex=True).str.strip()
+            content_text = content_text.str.replace(r'\s+', ' ', regex=True).str.strip()
+            
+            # 제목과 내용 결합
+            df['text'] = (title_text + ' ' + content_text).str.strip()
+            
+            return df
         
-        # 탭 문자도 공백으로 변환
-        title_text = title_text.str.replace('\t', ' ', regex=False)
-        content_text = content_text.str.replace('\t', ' ', regex=False)
-        
-        # 연속된 공백을 하나로 통합
-        title_text = title_text.str.replace(r'\s+', ' ', regex=True).str.strip()
-        content_text = content_text.str.replace(r'\s+', ' ', regex=True).str.strip()
-        
-        # 제목과 내용 결합
-        df['text'] = (title_text + ' ' + content_text).str.strip()
-        
-        return df
+        # text, title, content 모두 없으면 에러
+        raise ValueError("text 컬럼 또는 (title, content) 컬럼이 필요합니다.")
     
     def get_label_distribution(self, df: pd.DataFrame, label_col: str) -> dict:
         """라벨 분포 확인"""

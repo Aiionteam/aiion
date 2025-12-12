@@ -56,7 +56,8 @@ class BERTEmotionClassifier(nn.Module):
         초기화
         
         Args:
-            model_name: HuggingFace 모델 이름 (기본: klue/bert-base)
+            model_name: HuggingFace 모델 이름 또는 로컬 모델 경로 (기본: klue/bert-base)
+                       예: "klue/bert-base" 또는 "electra_local" 또는 Path 객체
             num_labels: 감정 라벨 수 (0:평가불가, 1:기쁨, 2:슬픔, 3:분노, 4:두려움, 5:혐오, 6:놀람, 7:신뢰, 8:기대, 9:불안, 10:안도, 11:후회, 12:그리움, 13:감사, 14:외로움)
             dropout_rate: Dropout 비율
             hidden_size: 중간 hidden layer 크기 (None이면 직접 분류)
@@ -65,8 +66,31 @@ class BERTEmotionClassifier(nn.Module):
         if not TORCH_AVAILABLE:
             raise ImportError("torch와 transformers가 설치되지 않았습니다.")
         
-        self.config = AutoConfig.from_pretrained(model_name)
-        self.bert = AutoModel.from_pretrained(model_name)
+        # 로컬 모델 경로인지 확인
+        from pathlib import Path
+        model_path_str = str(model_name)
+        
+        # 상대 경로를 절대 경로로 변환
+        if not Path(model_path_str).is_absolute():
+            # 상대 경로인 경우 현재 파일 기준으로 계산
+            base_dir = Path(__file__).parent.parent.parent  # ml_service 디렉토리
+            potential_path = base_dir / model_path_str
+            if potential_path.exists() and potential_path.is_dir():
+                model_path_str = str(potential_path)
+        
+        model_path = Path(model_path_str)
+        is_local_model = model_path.exists() and model_path.is_dir() and (model_path / "config.json").exists()
+        
+        if is_local_model:
+            # 로컬 모델 로드
+            ic(f"✅ 로컬 모델 로드: {model_path}")
+            self.config = AutoConfig.from_pretrained(str(model_path))
+            self.bert = AutoModel.from_pretrained(str(model_path))
+        else:
+            # HuggingFace 모델 로드
+            ic(f"🌐 HuggingFace 모델 로드: {model_name}")
+            self.config = AutoConfig.from_pretrained(model_name)
+            self.bert = AutoModel.from_pretrained(model_name)
         self.dropout = nn.Dropout(dropout_rate)
         
         # 분류 헤드
@@ -150,7 +174,7 @@ class DiaryEmotionDLModel:
     
     def __init__(
         self,
-        model_name: str = "klue/bert-base",
+        model_name: str = "electra_local",  # 로컬 KoELECTRA 모델 (기본값)
         num_labels: int = 7,
         max_length: int = 512,
         device: Optional[torch.device] = None
@@ -159,7 +183,7 @@ class DiaryEmotionDLModel:
         초기화
         
         Args:
-            model_name: HuggingFace 모델 이름
+            model_name: HuggingFace 모델 이름 또는 로컬 모델 경로 (기본: electra_local)
             num_labels: 감정 라벨 수
             max_length: 최대 토큰 길이
             device: 디바이스 (None이면 자동 감지)
@@ -170,10 +194,34 @@ class DiaryEmotionDLModel:
         self.model_name = model_name
         self.num_labels = num_labels
         self.max_length = max_length
-        self.device = device or DEVICE
+        # device가 None이면 런타임에 다시 확인 (모듈 로드 시점의 DEVICE는 무시)
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
         
-        # 토크나이저 로드
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # 토크나이저 로드 (로컬 모델 경로 지원)
+        from pathlib import Path
+        model_path_str = str(self.model_name)
+        
+        # 상대 경로를 절대 경로로 변환
+        if not Path(model_path_str).is_absolute():
+            base_dir = Path(__file__).parent.parent.parent  # ml_service 디렉토리
+            potential_path = base_dir / model_path_str
+            if potential_path.exists() and potential_path.is_dir() and (potential_path / "config.json").exists():
+                model_path_str = str(potential_path)
+        
+        model_path = Path(model_path_str)
+        is_local_model = model_path.exists() and model_path.is_dir() and (model_path / "config.json").exists()
+        
+        if is_local_model:
+            # 로컬 모델의 토크나이저 로드
+            ic(f"✅ 로컬 토크나이저 로드: {model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+        else:
+            # HuggingFace 토크나이저 로드
+            ic(f"🌐 HuggingFace 토크나이저 로드: {self.model_name}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         
         # 모델 초기화 (나중에 로드 또는 학습)
         self.model = None

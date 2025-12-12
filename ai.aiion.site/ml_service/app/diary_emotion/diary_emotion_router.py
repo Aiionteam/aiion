@@ -11,6 +11,15 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
+# ic (icecream) import
+try:
+    from icecream import ic
+except ImportError:
+    def ic(*args, **kwargs):
+        if args or kwargs:
+            print(*args, **kwargs)
+        return args[0] if args else None
+
 from app.diary_emotion.diary_emotion_service import DiaryEmotionService
 from app.diary_emotion.diary_emotion_schema import DiaryEmotionSchema
 
@@ -22,7 +31,12 @@ router = APIRouter(
 )
 
 # CSV 파일 경로 (diary_emotion/data/ 폴더에 있음)
-CSV_FILE_PATH = Path(__file__).parent / "data" / "diary.csv"
+# DL: diary_copers.csv 사용 (title과 content가 이미 합쳐진 text 컬럼 포함)
+# ML: diary.csv 사용 (title과 content 컬럼이 분리되어 있음)
+CSV_FILE_PATH_DL = Path(__file__).parent / "data" / "diary_copers.csv"
+CSV_FILE_PATH_ML = Path(__file__).parent / "data" / "diary.csv"
+# 기본 CSV 파일 경로 (일기 목록 조회 등에 사용, diary.csv 사용)
+CSV_FILE_PATH = CSV_FILE_PATH_ML
 
 # 서비스 인스턴스 (ML/DL 각각 별도 관리)
 _diary_emotion_service_ml: Optional[DiaryEmotionService] = None
@@ -44,23 +58,22 @@ def get_diary_emotion_service(model_type: str = "ml") -> DiaryEmotionService:
     """
     global _diary_emotion_service_ml, _diary_emotion_service_dl
     
-    # CSV 파일 경로를 명시적으로 전달 (diary_emotion/data/diary.csv)
-    csv_path = Path(__file__).parent / "data" / "diary.csv"
-    
     if model_type == "dl":
-        # DL 서비스 인스턴스
-        if _diary_emotion_service_dl is None or _diary_emotion_service_dl.csv_file_path != csv_path:
+        # DL 서비스 인스턴스 (diary_copers.csv 사용)
+        csv_path_dl = CSV_FILE_PATH_DL
+        if _diary_emotion_service_dl is None or _diary_emotion_service_dl.csv_file_path != csv_path_dl:
             _diary_emotion_service_dl = DiaryEmotionService(
-                csv_path, 
+                csv_file_path=csv_path_dl, 
                 model_type="dl",
-                dl_model_name="klue/bert-base"
+                dl_model_name="electra_local"  # 로컬 KoELECTRA 모델 사용
             )
         return _diary_emotion_service_dl
     else:
-        # ML 서비스 인스턴스
-        if _diary_emotion_service_ml is None or _diary_emotion_service_ml.csv_file_path != csv_path:
+        # ML 서비스 인스턴스 (diary.csv 사용)
+        csv_path_ml = CSV_FILE_PATH_ML
+        if _diary_emotion_service_ml is None or _diary_emotion_service_ml.csv_file_path != csv_path_ml:
             _diary_emotion_service_ml = DiaryEmotionService(
-                csv_path,
+                csv_file_path=csv_path_ml,
                 model_type="ml"
             )
         return _diary_emotion_service_ml
@@ -148,15 +161,16 @@ async def get_diary_by_id(diary_id: int):
 @router.post("/predict")
 async def predict_emotion(request: PredictRequest):
     """
-    텍스트 감정 예측 (ML, DL, 또는 Ensemble)
+    텍스트 감정 예측 (DL 메인, ML 폴백)
     
     - **text**: 분석할 텍스트
     - **model_type**: 모델 타입
-        - "dl": 딥러닝 모델만 사용 (기본, 고정확도)
+        - "dl": 딥러닝 모델 메인 사용 (기본, 고정확도)
+          - DL 확신도가 낮거나(30% 이하) 평가불가일 때 자동으로 ML로 폴백
         - "ml": 머신러닝 모델만 사용 (빠른 응답, 저비용)
         - "ensemble": ML + DL 결합 예측 (최고 정확도)
-    - **use_fallback**: DL 실패 시 ML로 자동 fallback (기본: True)
-    - **반환**: 예측된 감정
+    - **use_fallback**: DL 확신도 낮거나 평가불가일 때 ML로 자동 fallback (기본: True)
+    - **반환**: 예측된 감정 (model_type 필드로 사용된 모델 표시)
     """
     try:
         # 빈 텍스트 체크
@@ -170,30 +184,63 @@ async def predict_emotion(request: PredictRequest):
         if request.model_type == "ensemble":
             return await _predict_ensemble(request.text)
         
-        # 단일 모델 예측 (DL 기본, 실패 시 ML fallback)
+        # DL 메인 모드 (기본): DL 사용, 확신도 낮거나 평가불가일 때 ML 폴백
         if request.model_type == "dl":
             try:
                 dl_service = get_diary_emotion_service(model_type="dl")
+                
+                # DL 모델이 없으면 ML로 폴백
                 if dl_service.dl_model_obj is None or dl_service.dl_model_obj.model is None:
                     if request.use_fallback:
-                        # DL 모델 없으면 ML로 fallback
-                        return await _predict_with_fallback(request.text, "ml")
-                    raise HTTPException(
-                        status_code=400,
-                        detail="DL 모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
-                    )
+                        ic("DL 모델 없음, ML로 폴백")
+                        ml_service = get_diary_emotion_service(model_type="ml")
+                        if ml_service.model_obj.model is None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="DL과 ML 모델 모두 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
+                            )
+                        result = ml_service.predict(request.text)
+                        result['model_type'] = 'ml_fallback_from_dl'
+                        result['fallback_reason'] = 'DL 모델 없음'
+                        return result
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="DL 모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
+                        )
                 
-                result = dl_service.predict(request.text)
-                result['model_type'] = 'dl'
-                result['fallback_used'] = False
+                # DL 예측 (자동으로 확신도 낮거나 평가불가일 때 ML 폴백)
+                result = dl_service.predict(request.text, use_fallback=request.use_fallback)
                 return result
+                
+            except HTTPException:
+                raise
             except Exception as e:
                 if request.use_fallback:
-                    # DL 예측 실패 시 ML로 fallback
-                    return await _predict_with_fallback(request.text, "ml", str(e))
-                raise HTTPException(status_code=500, detail=f"DL 예측 중 오류 발생: {str(e)}")
+                    # DL 예측 실패 시 ML로 폴백
+                    ic(f"DL 예측 실패: {e}, ML로 폴백")
+                    try:
+                        ml_service = get_diary_emotion_service(model_type="ml")
+                        if ml_service.model_obj.model is None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"DL 예측 실패 및 ML 모델 없음. DL 오류: {str(e)}"
+                            )
+                        result = ml_service.predict(request.text)
+                        result['model_type'] = 'ml_fallback_from_dl_error'
+                        result['fallback_reason'] = f'DL 예측 실패: {str(e)}'
+                        return result
+                    except HTTPException:
+                        raise
+                    except Exception as ml_error:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"DL과 ML 모두 예측 실패: DL={str(e)}, ML={str(ml_error)}"
+                        )
+                else:
+                    raise HTTPException(status_code=500, detail=f"DL 예측 중 오류 발생: {str(e)}")
         
-        # ML 모델 예측
+        # ML 모델만 사용 (명시적으로 ML 요청한 경우)
         else:  # model_type == "ml"
             ml_service = get_diary_emotion_service(model_type="ml")
             if ml_service.model_obj.model is None:
@@ -202,7 +249,7 @@ async def predict_emotion(request: PredictRequest):
                     detail="ML 모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
                 )
             
-            result = ml_service.predict(request.text)
+            result = ml_service.predict(request.text, use_fallback=False)
             result['model_type'] = 'ml'
             result['fallback_used'] = False
             return result
@@ -377,7 +424,7 @@ async def reset_model():
 class TrainRequest(BaseModel):
     """학습 요청 모델"""
     model_type: str = "ml"  # "ml", "dl", 또는 "both" (ML과 DL 모두 학습)
-    dl_model_name: Optional[str] = "klue/bert-base"  # DL 모델 이름
+    dl_model_name: Optional[str] = "electra_local"  # DL 모델 이름 (로컬 KoELECTRA)
     epochs: Optional[int] = 3  # DL 에폭 수
     batch_size: Optional[int] = 16  # DL 배치 크기
 
@@ -391,7 +438,7 @@ async def train_model(request: Optional[TrainRequest] = None):
         - "ml": 머신러닝만 학습
         - "dl": 딥러닝만 학습
         - "both": ML과 DL 모두 학습 (병행)
-    - **dl_model_name**: 딥러닝 모델 이름 (기본: klue/bert-base)
+    - **dl_model_name**: 딥러닝 모델 이름 (기본: electra_local - 로컬 KoELECTRA)
     - **epochs**: 딥러닝 에폭 수 (기본: 3)
     - **batch_size**: 딥러닝 배치 크기 (기본: 16)
     - **반환**: 학습 완료 메시지
@@ -514,18 +561,108 @@ async def train_model(request: Optional[TrainRequest] = None):
 
 
 @router.get("/evaluate")
-async def evaluate_model():
-    """모델 평가"""
+async def evaluate_model(model_type: str = "ml"):
+    """
+    모델 평가 API (ML, DL, 또는 둘 다)
+    
+    - **model_type**: 평가할 모델 타입
+        - "ml": 머신러닝 모델만 평가
+        - "dl": 딥러닝 모델만 평가
+        - "both": ML과 DL 모두 평가
+    - **반환**: 평가 결과 (정확도, 분류 보고서, 혼동 행렬)
+    """
     try:
-        service = get_diary_emotion_service()
+        # "both"인 경우 ML과 DL 모두 평가
+        if model_type == "both":
+            results = {}
+            
+            # 1. ML 평가
+            try:
+                ml_service = get_diary_emotion_service(model_type="ml")
+                # 모델이 없으면 로드 시도
+                if ml_service.model_obj.model is None:
+                    ml_service.load_model(model_type="ml")
+                if ml_service.model_obj.model is None:
+                    results["ml"] = {
+                        "status": "not_available",
+                        "error": "ML 모델이 학습되지 않았습니다."
+                    }
+                else:
+                    ml_evaluation = ml_service.evaluate(model_type="ml")
+                    results["ml"] = {
+                        "status": "success",
+                        **ml_evaluation
+                    }
+            except Exception as e:
+                results["ml"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+            
+            # 2. DL 평가
+            try:
+                dl_service = get_diary_emotion_service(model_type="dl")
+                # 모델이 없으면 로드 시도
+                if dl_service.dl_model_obj is None or dl_service.dl_model_obj.model is None:
+                    dl_service.load_model(model_type="dl")
+                if dl_service.dl_model_obj is None or dl_service.dl_model_obj.model is None:
+                    results["dl"] = {
+                        "status": "not_available",
+                        "error": "DL 모델이 학습되지 않았습니다."
+                    }
+                else:
+                    dl_evaluation = dl_service.evaluate(model_type="dl")
+                    results["dl"] = {
+                        "status": "success",
+                        **dl_evaluation
+                    }
+            except Exception as e:
+                results["dl"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+            
+            # 결과 요약
+            ml_accuracy = results.get("ml", {}).get("accuracy") if results.get("ml", {}).get("status") == "success" else None
+            dl_accuracy = results.get("dl", {}).get("accuracy") if results.get("dl", {}).get("status") == "success" else None
+            
+            return {
+                "model_type": "both",
+                "results": results,
+                "summary": {
+                    "ml_accuracy": ml_accuracy,
+                    "dl_accuracy": dl_accuracy,
+                    "accuracy_difference": dl_accuracy - ml_accuracy if (ml_accuracy is not None and dl_accuracy is not None) else None
+                }
+            }
         
-        if service.model_obj.model is None:
-            raise HTTPException(status_code=400, detail="모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요.")
+        # 단일 모델 평가
+        service = get_diary_emotion_service(model_type=model_type)
         
-        evaluation = service.evaluate()
+        # 모델이 없으면 로드 시도
+        if model_type == "dl":
+            if service.dl_model_obj is None or service.dl_model_obj.model is None:
+                service.load_model(model_type="dl")
+            if service.dl_model_obj is None or service.dl_model_obj.model is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="DL 모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
+                )
+        else:  # model_type == "ml"
+            if service.model_obj.model is None:
+                service.load_model(model_type="ml")
+            if service.model_obj.model is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ML 모델이 학습되지 않았습니다. /train 엔드포인트를 먼저 호출하세요."
+                )
+        
+        evaluation = service.evaluate(model_type=model_type)
         
         return evaluation
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"평가 중 오류 발생: {str(e)}")
 

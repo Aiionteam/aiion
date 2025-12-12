@@ -55,7 +55,7 @@ class DiaryEmotionService:
         self,
         csv_file_path: Optional[Path] = None,
         model_type: str = "ml",  # "ml" 또는 "dl"
-        dl_model_name: str = "klue/bert-base"
+        dl_model_name: str = "electra_local"  # 로컬 KoELECTRA 모델 사용
     ):
         """
         초기화
@@ -63,7 +63,7 @@ class DiaryEmotionService:
         Args:
             csv_file_path: CSV 파일 경로
             model_type: 모델 타입 ("ml": 머신러닝, "dl": 딥러닝)
-            dl_model_name: 딥러닝 모델 이름 (BERT 계열)
+            dl_model_name: 딥러닝 모델 이름 (BERT/ELECTRA 계열, 기본: electra_local)
         """
         self.dataset = DiaryEmotionDataSet()
         self.model_obj = DiaryEmotionModel()
@@ -74,7 +74,17 @@ class DiaryEmotionService:
         self.dl_model_name = dl_model_name
         
         # CSV 파일 경로 (diary_emotion/data/ 폴더에 있음)
-        self.csv_file_path = csv_file_path or (Path(__file__).parent / "data" / "diary.csv")
+        # DL: diary_copers.csv 사용 (title과 content가 이미 합쳐진 text 컬럼 포함)
+        # ML: diary.csv 사용 (title과 content 컬럼이 분리되어 있음)
+        if csv_file_path is None:
+            if model_type == "dl":
+                # DL은 diary_copers.csv 사용
+                self.csv_file_path = Path(__file__).parent / "data" / "diary_copers.csv"
+            else:
+                # ML은 diary.csv 사용
+                self.csv_file_path = Path(__file__).parent / "data" / "diary.csv"
+        else:
+            self.csv_file_path = csv_file_path
         self.df: Optional[pd.DataFrame] = None
         
         # 모델 저장 경로 (diary_emotion/models/ 폴더)
@@ -146,7 +156,9 @@ class DiaryEmotionService:
             ic(f"데이터 타입: {self.df.dtypes.to_dict()}")
             
             # 결측치 처리 (method 사용)
-            self.df = self.method.handle_missing_values(self.df, ['content', 'emotion'])
+            # text 컬럼이 있으면 text 사용, 없으면 content 사용 (하위 호환성)
+            required_cols = ['text', 'emotion'] if 'text' in self.df.columns else ['content', 'emotion']
+            self.df = self.method.handle_missing_values(self.df, required_cols)
             
             # 감정 분포 확인
             emotion_dist = self.method.get_label_distribution(self.df, 'emotion')
@@ -353,15 +365,56 @@ class DiaryEmotionService:
             ic(f"DL 학습 오류: {e}")
             raise
     
-    def evaluate(self):
-        """모델 평가"""
-        ic("😎😎 평가 시작")
+    def evaluate(self, model_type: Optional[str] = None):
+        """모델 평가 (ML 또는 DL)"""
+        # model_type이 지정되지 않으면 인스턴스의 model_type 사용
+        eval_model_type = model_type or self.model_type
+        
+        if eval_model_type == "dl":
+            return self._evaluate_dl()
+        else:
+            return self._evaluate_ml()
+    
+    def _evaluate_ml(self):
+        """ML 모델 평가"""
+        ic("😎😎 ML 평가 시작")
         
         try:
             if self.model_obj.model is None:
-                raise ValueError("모델이 없습니다. learning()을 먼저 실행하세요.")
+                raise ValueError("ML 모델이 없습니다. learning()을 먼저 실행하세요.")
+            
+            # 테스트 데이터셋이 없으면 자동으로 재생성
             if self.dataset.test is None:
-                raise ValueError("테스트 데이터가 없습니다. learning()을 먼저 실행하세요.")
+                ic("테스트 데이터셋이 없어서 자동으로 재생성합니다...")
+                if self.df is None:
+                    # 데이터가 없으면 전처리부터 실행
+                    self.preprocess()
+                
+                # 학습/테스트 분할 재생성 (학습 시와 동일한 방식)
+                texts = self.df['text'].values
+                labels = self.df['emotion'].values
+                
+                from collections import Counter
+                class_counts = Counter(labels)
+                min_class_count = min(class_counts.values()) if class_counts else 0
+                can_stratify = min_class_count >= 2
+                
+                indices = list(range(len(labels)))
+                if can_stratify:
+                    train_indices, test_indices = train_test_split(
+                        indices, test_size=0.2, random_state=42, stratify=labels
+                    )
+                else:
+                    train_indices, test_indices = train_test_split(
+                        indices, test_size=0.2, random_state=42
+                    )
+                
+                # 테스트 데이터셋만 저장 (평가에 필요)
+                self.dataset.test = pd.DataFrame({
+                    'text': self.df['text'].iloc[test_indices].values,
+                    'emotion': labels[test_indices]
+                })
+                ic(f"테스트 데이터셋 재생성 완료: {len(self.dataset.test)}개")
             
             # 테스트 데이터 준비
             X_test_text = self.dataset.test['text'].values
@@ -376,7 +429,7 @@ class DiaryEmotionService:
             
             # 정확도 계산
             accuracy = accuracy_score(y_test, y_pred)
-            ic(f"정확도: {accuracy:.4f}")
+            ic(f"ML 정확도: {accuracy:.4f}")
             
             # 분류 보고서
             emotion_labels = {
@@ -392,31 +445,206 @@ class DiaryEmotionService:
                 output_dict=True,
                 zero_division=0
             )
-            ic(f"분류 보고서:\n{classification_report(y_test, y_pred, target_names=target_names, zero_division=0)}")
+            ic(f"ML 분류 보고서:\n{classification_report(y_test, y_pred, target_names=target_names, zero_division=0)}")
             
             # 혼동 행렬
             cm = confusion_matrix(y_test, y_pred)
-            ic(f"혼동 행렬:\n{cm}")
+            ic(f"ML 혼동 행렬:\n{cm}")
             
-            ic("😎😎 평가 완료")
+            ic("😎😎 ML 평가 완료")
             
             return {
+                'model_type': 'ml',
                 'accuracy': accuracy,
                 'classification_report': report,
                 'confusion_matrix': cm.tolist()
             }
             
         except Exception as e:
-            ic(f"평가 오류: {e}")
+            ic(f"ML 평가 오류: {e}")
             raise
     
-    def predict(self, text: str) -> Dict[str, Any]:
-        """텍스트 감정 예측 (ML 또는 DL)"""
-        # 모델 타입에 따라 분기
-        if self.model_type == "dl":
-            return self._predict_dl(text)
-        else:
-            return self._predict_ml(text)
+    def _evaluate_dl(self):
+        """DL 모델 평가"""
+        ic("😎😎 DL 평가 시작")
+        
+        try:
+            if not DL_AVAILABLE:
+                raise ImportError("딥러닝 라이브러리가 설치되지 않았습니다.")
+            
+            if self.dl_model_obj is None or self.dl_model_obj.model is None:
+                raise ValueError("DL 모델이 없습니다. learning()을 먼저 실행하세요.")
+            
+            # 테스트 데이터셋이 없으면 자동으로 재생성
+            if self.dataset.test is None:
+                ic("테스트 데이터셋이 없어서 자동으로 재생성합니다...")
+                if self.df is None:
+                    # 데이터가 없으면 전처리부터 실행
+                    self.preprocess()
+                
+                # 학습/테스트 분할 재생성 (학습 시와 동일한 방식)
+                texts = self.df['text'].tolist()
+                labels = self.df['emotion'].tolist()
+                
+                train_texts, val_texts, train_labels, val_labels = train_test_split(
+                    texts, labels, test_size=0.2, random_state=42, stratify=labels
+                )
+                
+                # 테스트 데이터셋만 저장 (평가에 필요)
+                self.dataset.test = pd.DataFrame({
+                    'text': val_texts,
+                    'emotion': val_labels
+                })
+                ic(f"테스트 데이터셋 재생성 완료: {len(self.dataset.test)}개")
+            
+            # 트레이너가 없으면 생성
+            if self.dl_trainer is None:
+                self.dl_trainer = DiaryEmotionDLTrainer(
+                    model=self.dl_model_obj.model,
+                    tokenizer=self.dl_model_obj.tokenizer,
+                    device=self.dl_model_obj.device
+                )
+            
+            # 테스트 데이터 준비
+            test_texts = self.dataset.test['text'].tolist()
+            test_labels = self.dataset.test['emotion'].tolist()
+            
+            # DataLoader 생성
+            from torch.utils.data import DataLoader
+            from app.diary_emotion.diary_emotion_dl_trainer import EmotionDataset
+            
+            test_dataset = EmotionDataset(
+                texts=test_texts,
+                labels=test_labels,
+                tokenizer=self.dl_model_obj.tokenizer,
+                max_length=256
+            )
+            test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
+            
+            # 손실 함수
+            import torch.nn as nn
+            criterion = nn.CrossEntropyLoss()
+            
+            # 평가 실행
+            avg_loss, accuracy, y_true, y_pred = self.dl_trainer.evaluate(test_loader, criterion)
+            
+            ic(f"DL 정확도: {accuracy:.4f}, 평균 손실: {avg_loss:.4f}")
+            
+            # 분류 보고서
+            emotion_labels = {
+                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
+                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
+            }
+            unique_classes = sorted(set(list(y_true) + list(y_pred)))
+            target_names = [emotion_labels.get(i, f'클래스{i}') for i in unique_classes]
+            report = classification_report(
+                y_true, y_pred,
+                target_names=target_names,
+                output_dict=True,
+                zero_division=0
+            )
+            ic(f"DL 분류 보고서:\n{classification_report(y_true, y_pred, target_names=target_names, zero_division=0)}")
+            
+            # 혼동 행렬
+            cm = confusion_matrix(y_true, y_pred)
+            ic(f"DL 혼동 행렬:\n{cm}")
+            
+            ic("😎😎 DL 평가 완료")
+            
+            return {
+                'model_type': 'dl',
+                'accuracy': float(accuracy),
+                'avg_loss': float(avg_loss),
+                'classification_report': report,
+                'confusion_matrix': cm.tolist()
+            }
+            
+        except Exception as e:
+            ic(f"DL 평가 오류: {e}")
+            raise
+    
+    def predict(self, text: str, use_fallback: bool = True) -> Dict[str, Any]:
+        """
+        텍스트 감정 예측 (DL 메인, ML 폴백)
+        
+        Args:
+            text: 예측할 텍스트
+            use_fallback: DL 확신도가 낮거나 평가불가일 때 ML로 폴백할지 여부
+        
+        Returns:
+            예측 결과 딕셔너리
+        """
+        # DL을 메인 모델로 사용
+        try:
+            # DL 예측 시도
+            dl_result = self._predict_dl(text)
+            
+            # DL 확신도 및 예측 결과 확인
+            confidence = dl_result.get('confidence', 0.0)
+            emotion = dl_result.get('emotion', 0)
+            emotion_label = dl_result.get('emotion_label', '평가불가')
+            
+            # DL 폴백 조건 확인
+            CONFIDENCE_THRESHOLD = 0.3  # 확신도 임계값 (30% 이하면 ML로 폴백)
+            USE_ML_FALLBACK = (
+                use_fallback and
+                (
+                    confidence < CONFIDENCE_THRESHOLD or  # 확신도가 낮으면
+                    emotion == 0 or  # 평가불가로 판단되면
+                    emotion_label == '평가불가'
+                )
+            )
+            
+            if USE_ML_FALLBACK:
+                # ML로 폴백 시도
+                try:
+                    ic(f"DL 확신도 낮음 ({confidence:.3f}) 또는 평가불가, ML로 폴백 시도")
+                    ml_result = self._predict_ml(text)
+                    
+                    # ML 결과도 확인
+                    ml_confidence = ml_result.get('confidence', 0.0)
+                    ml_emotion = ml_result.get('emotion', 0)
+                    
+                    # ML이 더 확신도가 높거나 평가 가능한 결과를 내면 ML 사용
+                    if ml_confidence > confidence and ml_emotion != 0:
+                        ic(f"ML 폴백 사용: ML 확신도 {ml_confidence:.3f} > DL 확신도 {confidence:.3f}")
+                        ml_result['model_type'] = 'dl_with_ml_fallback'
+                        ml_result['dl_result'] = dl_result
+                        ml_result['fallback_reason'] = f'DL 확신도 낮음 ({confidence:.3f})'
+                        return ml_result
+                    else:
+                        # ML도 확신도가 낮거나 평가불가면 DL 결과 사용
+                        ic(f"ML도 확신도 낮음 ({ml_confidence:.3f}), DL 결과 사용")
+                        dl_result['model_type'] = 'dl'
+                        dl_result['ml_fallback_attempted'] = True
+                        dl_result['ml_result'] = ml_result
+                        return dl_result
+                        
+                except Exception as ml_error:
+                    # ML 폴백 실패 시 DL 결과 사용
+                    ic(f"ML 폴백 실패: {ml_error}, DL 결과 사용")
+                    dl_result['model_type'] = 'dl'
+                    dl_result['ml_fallback_failed'] = True
+                    dl_result['ml_error'] = str(ml_error)
+                    return dl_result
+            else:
+                # DL 확신도가 충분하면 DL 결과 사용
+                dl_result['model_type'] = 'dl'
+                dl_result['fallback_used'] = False
+                return dl_result
+                
+        except Exception as dl_error:
+            # DL 예측 실패 시 ML로 폴백
+            ic(f"DL 예측 실패: {dl_error}, ML로 폴백 시도")
+            try:
+                ml_result = self._predict_ml(text)
+                ml_result['model_type'] = 'ml_fallback_from_dl'
+                ml_result['dl_error'] = str(dl_error)
+                ml_result['fallback_reason'] = 'DL 예측 실패'
+                return ml_result
+            except Exception as ml_error:
+                # ML도 실패하면 에러 발생
+                raise ValueError(f"DL과 ML 모두 예측 실패: DL={dl_error}, ML={ml_error}")
     
     def _predict_ml(self, text: str) -> Dict[str, Any]:
         """ML 모델 예측 (기존)"""
@@ -1061,14 +1289,22 @@ class DiaryEmotionService:
             self.model_dir.mkdir(parents=True, exist_ok=True)
             
             # 모델 저장 (PyTorch)
+            # 로컬 GPU에서 학습한 모델을 컨테이너에서도 사용 가능하도록 CPU로 변환하여 저장
             import torch
+            model_state_dict = self.dl_model_obj.model.state_dict()
+            
+            # GPU에서 학습한 모델을 CPU로 변환 (컨테이너 호환성)
+            cpu_state_dict = {}
+            for key, value in model_state_dict.items():
+                cpu_state_dict[key] = value.cpu()
+            
             torch.save({
-                'model_state_dict': self.dl_model_obj.model.state_dict(),
+                'model_state_dict': cpu_state_dict,  # CPU로 변환된 상태 저장
                 'model_name': self.dl_model_obj.model_name,
                 'num_labels': self.dl_model_obj.num_labels,
                 'max_length': self.dl_model_obj.max_length
             }, self.dl_model_file)
-            ic(f"DL 모델 저장 완료: {self.dl_model_file}")
+            ic(f"DL 모델 저장 완료: {self.dl_model_file} (CPU 호환 형식으로 저장)")
             
             # 메타데이터 저장
             csv_mtime = self.csv_file_path.stat().st_mtime

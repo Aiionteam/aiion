@@ -34,9 +34,16 @@ class SeoulFoliumService:
         self.crime_data: Optional[pd.DataFrame] = None
         self.map: Optional[folium.Map] = None
         
-        # 데이터 로드
-        self._load_geojson()
-        self._load_crime_data()
+        # 데이터 로드 (에러 발생 시 초기화는 성공하지만 데이터는 None으로 유지)
+        try:
+            self._load_geojson()
+        except Exception as e:
+            logger.warning(f"GeoJSON 로드 실패 (나중에 재시도 가능): {e}")
+        
+        try:
+            self._load_crime_data()
+        except Exception as e:
+            logger.warning(f"범죄 데이터 로드 실패 (나중에 재시도 가능): {e}")
     
     def _load_geojson(self) -> Dict[str, Any]:
         """서울시 자치구 경계 GeoJSON 데이터 로드"""
@@ -157,15 +164,42 @@ class SeoulFoliumService:
         
         Returns:
             Folium Map 객체
+        
+        Raises:
+            FileNotFoundError: 필수 파일이 없을 때
+            ValueError: 데이터가 없거나 형식이 잘못되었을 때
         """
         if location is None:
             location = self.SEOUL_CENTER
         
+        # GeoJSON 데이터 로드 확인 및 재시도
         if self.geojson_data is None:
-            self._load_geojson()
+            try:
+                self._load_geojson()
+            except Exception as e:
+                raise FileNotFoundError(
+                    f"GeoJSON 파일을 로드할 수 없습니다: {self.geojson_path}\n"
+                    f"오류: {str(e)}\n"
+                    f"데이터 전처리를 먼저 실행하세요: /seoul-crime/preprocess"
+                )
         
+        # 범죄 데이터 로드 확인 및 재시도
         if self.crime_data is None:
-            self._load_crime_data()
+            try:
+                self._load_crime_data()
+            except Exception as e:
+                raise FileNotFoundError(
+                    f"범죄 데이터 파일을 로드할 수 없습니다: {self.merged_data_path}\n"
+                    f"오류: {str(e)}\n"
+                    f"데이터 전처리를 먼저 실행하세요: /seoul-crime/preprocess"
+                )
+        
+        # 데이터 유효성 검사
+        if self.crime_data is None or len(self.crime_data) == 0:
+            raise ValueError("범죄 데이터가 비어있습니다. 데이터 전처리를 먼저 실행하세요: /seoul-crime/preprocess")
+        
+        if '자치구' not in self.crime_data.columns:
+            raise ValueError(f"범죄 데이터에 '자치구' 컬럼이 없습니다. 컬럼: {list(self.crime_data.columns)}")
         
         # 지도 생성
         self.map = folium.Map(location=location, zoom_start=zoom_start, tiles='OpenStreetMap')

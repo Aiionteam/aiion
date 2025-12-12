@@ -442,6 +442,7 @@ services:
       - ./ai.aiion.site/ml_service/app/titanic/models:/app/app/titanic/models
       # CSV 파일 실시간 반영 (개발 중 데이터 추가 시 즉시 반영)
       - ./ai.aiion.site/ml_service/app/diary_emotion/data/diary.csv:/app/app/diary_emotion/data/diary.csv
+      - ./ai.aiion.site/ml_service/app/diary_emotion/data/diary_copers.csv:/app/app/diary_emotion/data/diary_copers.csv
       - ./ai.aiion.site/ml_service/app/diary_mbti/data/diary_mbti.csv:/app/app/diary_mbti/data/diary_mbti.csv
       - ./ai.aiion.site/ml_service/app/titanic/train.csv:/app/app/titanic/train.csv
       - ./ai.aiion.site/ml_service/app/titanic/test.csv:/app/app/titanic/test.csv
