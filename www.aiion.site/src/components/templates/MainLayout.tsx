@@ -1,0 +1,150 @@
+import React, { memo } from 'react';
+import { Sidebar, ChatContainer, PromptInput, AvatarMode } from '../organisms';
+import { MenuItem, Category, Interaction } from '../types';
+
+interface MainLayoutProps {
+  // Sidebar props
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  darkMode: boolean;
+  setDarkMode: (dark: boolean) => void;
+  currentCategory: Category;
+  setCurrentCategory: (category: Category) => void;
+  menuItems: MenuItem[];
+
+  // Content props
+  avatarMode: boolean;
+  isListening: boolean;
+  interactions: Interaction[];
+  aiResponse?: string; // AI 응답 (아바타 비디오 재생용)
+  isSpeaking?: boolean; // TTS 재생 중 여부
+  
+  // Prompt input props
+  inputText: string;
+  setInputText: (text: string) => void;
+  loading: boolean;
+  micAvailable: boolean;
+  handleMicClick: () => void;
+  handleSubmit: () => void;
+
+  // Children (category-specific content)
+  children?: React.ReactNode;
+}
+
+export const MainLayout: React.FC<MainLayoutProps> = memo(({
+  sidebarOpen,
+  setSidebarOpen,
+  darkMode,
+  setDarkMode,
+  currentCategory,
+  setCurrentCategory,
+  menuItems,
+  avatarMode,
+  isListening,
+  interactions,
+  aiResponse,
+  isSpeaking,
+  inputText,
+  setInputText,
+  loading,
+  micAvailable,
+  handleMicClick,
+  handleSubmit,
+  children,
+}) => {
+  return (
+    <div className={`flex h-screen overflow-hidden ${darkMode ? 'bg-[#0a0a0a]' : 'bg-[#e8e2d5]'} relative`}>
+      {/* 모바일 사이드바는 fixed로 오버레이 - 레이아웃에서 완전히 제외 */}
+      <div className="md:hidden">
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          currentCategory={currentCategory}
+          setCurrentCategory={setCurrentCategory}
+          menuItems={menuItems}
+        />
+      </div>
+      
+      {/* 데스크톱에서만 flex 레이아웃에 포함 */}
+      <div className="hidden md:block md:flex-shrink-0">
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          currentCategory={currentCategory}
+          setCurrentCategory={setCurrentCategory}
+          menuItems={menuItems}
+        />
+      </div>
+
+      <div className={`flex-1 flex flex-col overflow-hidden md:ml-0 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-[#e8e2d5]'}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+        {/* 모바일/태블릿 햄버거 메뉴 버튼 */}
+        <div className={`lg:hidden border-b flex items-center ${
+          darkMode ? 'border-[#2a2a2a] bg-[#121212]' : 'border-[#d4cdc0] bg-[#f5f1e8]'
+        }`} style={{ minHeight: '56px' }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className={`p-3 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 ${
+              darkMode ? 'hover:bg-[#1a1a1a] active:bg-[#1a1a1a] text-gray-300' : 'hover:bg-[#e8e2d5] active:bg-[#e8e2d5] text-gray-700'
+            }`}
+            aria-label="메뉴 열기"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div className="flex-1 flex items-center justify-center px-4">
+            <span className={`text-lg font-semibold ${
+              darkMode ? 'text-white' : 'text-gray-900'
+            }`}>Aiion</span>
+          </div>
+          <div className="w-[44px]" /> {/* 공간 균형을 위한 빈 div */}
+        </div>
+
+        {avatarMode ? (
+          <>
+            <AvatarMode isListening={isListening} aiResponse={aiResponse} isSpeaking={isSpeaking} />
+            <PromptInput
+              inputText={inputText}
+              setInputText={setInputText}
+              loading={loading}
+              avatarMode={avatarMode}
+              micAvailable={micAvailable}
+              onMicClick={handleMicClick}
+              onSubmit={handleSubmit}
+              darkMode={darkMode}
+            />
+          </>
+        ) : currentCategory === 'home' ? (
+          <>
+            <ChatContainer interactions={interactions} darkMode={darkMode} />
+            <PromptInput
+              inputText={inputText}
+              setInputText={setInputText}
+              loading={loading}
+              avatarMode={avatarMode}
+              micAvailable={micAvailable}
+              onMicClick={handleMicClick}
+              onSubmit={handleSubmit}
+              darkMode={darkMode}
+            />
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {children}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+

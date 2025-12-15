@@ -1,0 +1,63 @@
+# 의존성
+node_modules
+.pnp
+.pnp.js
+
+# 테스트
+coverage
+*.log
+
+# Next.js
+.next
+out
+build
+dist
+
+# 프로덕션
+*.pem
+
+# 디버깅
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 로컬 환경 변수
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# 타입스크립트
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 기타
+README.md
+.eslintcache
+

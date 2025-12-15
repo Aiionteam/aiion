@@ -1,0 +1,545 @@
+services:
+  # ===================
+  # Edge Layer (API Gateway)
+  # ===================
+  gateway:
+    build:
+      context: ./api.aiion.site
+      dockerfile: ./server/gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      # SSL 설정은 application.yaml에서 관리 (spring.data.redis.ssl.enabled: true)
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_LOADBALANCER=DEBUG
+      - LOGGING_LEVEL_REACTOR_NETTY=INFO
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ===================
+  # AI Middleware Layer (준비 - 나중에 활성화)
+  # ===================
+  # ai-middleware:
+  #   build:
+  #     context: ./ai-middleware
+  #     dockerfile: Dockerfile
+  #   container_name: ai-middleware
+  #   ports:
+  #     - "8090:8090"
+  #   depends_on:
+  #     - redis
+  #     - postgres
+  #   networks:
+  #     - spring-network
+  #   environment:
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - DB_HOST=postgres
+  #     - DB_PORT=5432
+  #     - DB_NAME=aidb
+  #     - DB_USER=aiion
+  #     - DB_PASSWORD=aiion4man
+
+  # ===================
+  # Domain Microservices
+  # ===================
+  common-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./common-service/Dockerfile
+    container_name: common-service
+    ports:
+      - "8081:8081"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+
+  auth-service:
+    build:
+      context: ./erp.aiion.site
+      dockerfile: services/auth_service/Dockerfile
+    container_name: auth-service
+    ports:
+      - "9000:9000"
+    networks:
+      - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+      - TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_TOKEN_EXPIRE_DAYS=30
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this-in-production}
+    restart: unless-stopped
+
+  admin-user-service:
+    build:
+      context: ./erp.aiion.site
+      dockerfile: services/admin_user_service/Dockerfile
+    container_name: admin-user-service
+    ports:
+      - "9001:9001"
+    networks:
+      - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+    restart: unless-stopped
+
+  oauth-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./oauth-service/Dockerfile
+    container_name: oauth-service
+    ports:
+      - "8087:8087"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
+      - NAVER_REDIRECT_URI=${NAVER_REDIRECT_URI}
+      - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
+      - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=http://localhost:5000
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./user-service/Dockerfile
+    container_name: user-service
+    ports:
+      - "8082:8082"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+
+  diary-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./diary-service/Dockerfile
+    container_name: diary-service
+    ports:
+      - "8083:8083"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=true
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
+
+  calendar-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./calendar-service/Dockerfile
+    container_name: calendar-service
+    ports:
+      - "8084:8084"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
+
+  culture-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./culture-service/Dockerfile
+    container_name: culture-service
+    ports:
+      - "8086:8086"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+
+  healthcare-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./healthcare-service/Dockerfile
+    container_name: healthcare-service
+    ports:
+      - "8088:8088"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+
+  pathfinder-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./pathfinder-service/Dockerfile
+    container_name: pathfinder-service
+    ports:
+      - "8090:8090"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+
+  account-service:
+    build:
+      context: ./service.aiion.site
+      dockerfile: ./account-service/Dockerfile
+    container_name: account-service
+    ports:
+      - "8089:8089"
+    networks:
+      - spring-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
+  # ===================
+  # Client Layer
+  # ===================
+  # 프론트엔드는 별도 폴더(aiion.site)에서 로컬로 실행하므로 주석 처리
+  # nextjs:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - NEXT_PUBLIC_API_GATEWAY_URL=http://gateway:8080
+  #     - NEXT_PUBLIC_API_BASE_URL=http://gateway:8080
+  #     - NEXT_PUBLIC_WS_URL=ws://gateway:8080/ws
+  #   restart: unless-stopped
+  #   networks:
+  #     - spring-network
+  #   depends_on:
+  #     - gateway
+
+  # ===================
+  # Observability (준비 - 나중에 활성화)
+  # ===================
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - spring-network
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: grafana
+  #   ports:
+  #     - "3001:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   networks:
+  #     - spring-network
+  #   depends_on:
+  #     - prometheus
+
+  # zipkin:
+  #   image: openzipkin/zipkin:latest
+  #   container_name: zipkin
+  #   ports:
+  #     - "9411:9411"
+  #   networks:
+  #     - spring-network
+
+  # ===================
+  # AI Services (from ai.aiion.site)
+  # ===================
+  aihoyun-chatbot-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: rag/chatbot_service/Dockerfile
+    container_name: aihoyun-chatbot-service
+    ports:
+      - "9002:9002"
+    networks:
+      - spring-network
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - API_GATEWAY_URL=http://api-gateway:8080
+      - ROOT_PATH=/chatbot  # API Gateway 경로 설정
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  aihoyun-weather-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: feed/weather_service/Dockerfile
+    container_name: aihoyun-weather-service
+    ports:
+      - "9004:9004"
+    networks:
+      - spring-network
+    environment:
+      - KMA_API_KEY=${KMA_API_KEY:-}
+      - KMA_SHORT_KEY=${KMA_SHORT_KEY:-}
+      - ROOT_PATH=/weather  # API Gateway 경로 설정
+    restart: unless-stopped
+
+  aihoyun-crawler-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: feed/crawler_service/Dockerfile
+    container_name: aihoyun-crawler-service
+    ports:
+      - "9003:9003"
+    networks:
+      - spring-network
+    environment:
+      - ROOT_PATH=/crawler  # API Gateway 경로 설정
+    restart: unless-stopped
+
+  aihoyun-ml-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: ml_service/Dockerfile
+    container_name: aihoyun-ml-service
+    volumes:
+      # 코드 파일 실시간 반영 (개발 중 코드 수정 시 즉시 반영)
+      - ./ai.aiion.site/ml_service/app:/app/app
+      # 각 ML 프로젝트별 모델 폴더 영구 저장
+      # diary_emotion과 diary_mbti는 business/diary_service로 이동됨
+      - ./ai.aiion.site/ml_service/app/titanic/models:/app/app/titanic/models
+      # 공통 모델 저장소 (KoELECTRA 백본)
+      - ./ai.aiion.site/models/koelectra:/app/koelectro_v3_base
+      - ./ai.aiion.site/ml_service/app/titanic/train.csv:/app/app/titanic/train.csv
+      - ./ai.aiion.site/ml_service/app/titanic/test.csv:/app/app/titanic/test.csv
+      # 서울 범죄 데이터 실시간 반영
+      - ./ai.aiion.site/ml_service/app/seoul_crime/data:/app/app/seoul_crime/data
+    ports:
+      - "9005:9005"
+    networks:
+      - spring-network
+    environment:
+      - PORT=9005
+      - ROOT_PATH=/api/ml-service  # API Gateway 경로 설정
+      - KAKAO_MAP_REST_API_KEY=${KAKAO_MAP_REST_API_KEY:-}
+      - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY:-}
+    restart: unless-stopped
+
+  aihoyun-transformer-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: transformer_service/Dockerfile
+    container_name: aihoyun-transformer-service
+    volumes:
+      # 코드 파일 실시간 반영 (개발 중 코드 수정 시 즉시 반영)
+      - ./ai.aiion.site/transformer_service/app:/app/app
+      # 공통 모델 저장소 (전체 models 디렉토리)
+      - ./ai.aiion.site/models:/app/models
+      # KoELECTRA 백본 (하위 호환성 유지)
+      - ./ai.aiion.site/models/koelectra:/app/koelectro_v3_base
+    ports:
+      - "9008:9008"
+    networks:
+      - spring-network
+    environment:
+      - PORT=9008
+      - ROOT_PATH=/api/sentiment  # API Gateway 경로 설정
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: ./erp.aiion.site
+      dockerfile: services/customer_service/Dockerfile
+    container_name: inventory-service
+    ports:
+      - "9006:9006"
+    networks:
+      - spring-network
+    environment:
+      # Python 애플리케이션용 데이터베이스 연결 정보
+      - DATABASE_URL=${NEON_CONNECTION_STRING}
+      - NEON_CONNECTION_STRING=${NEON_CONNECTION_STRING}
+      - NEON_USER=${NEON_USER}
+      - NEON_PASSWORD=${NEON_PASSWORD}
+      - SQL_ECHO=false
+      # Spring Boot용 (참고용, 현재 사용 안 함)
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${NEON_CONNECTION_STRING}
+      - SPRING_DATASOURCE_USERNAME=${NEON_USER}
+      - SPRING_DATASOURCE_PASSWORD=${NEON_PASSWORD}
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_JPA_SHOW_SQL=${SPRING_JPA_SHOW_SQL}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT}
+      - SPRING_DATA_REDIS_HOST=${UPSTASH_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
+      - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
+      - SPRING_DATA_REDIS_SSL_ENABLED=true
+    restart: unless-stopped
+
+  aihoyun-diary-service:
+    build:
+      context: ./ai.aiion.site
+      dockerfile: business/diary_service/Dockerfile
+    container_name: aihoyun-diary-service
+    volumes:
+      # 코드 파일 실시간 반영 (개발 중 코드 수정 시 즉시 반영)
+      - ./ai.aiion.site/business/diary_service/app:/app
+      # MBTI 데이터 파일 실시간 반영
+      - ./ai.aiion.site/business/diary_service/app/diary_mbti/data:/app/diary_mbti/data
+      # 감정 분석 데이터 파일 실시간 반영
+      - ./ai.aiion.site/business/diary_service/app/diary_emotion/data:/app/diary_emotion/data
+      # 공통 모델 저장소 (전체 models 디렉토리 마운트)
+      - ./ai.aiion.site/models:/app/models
+      # KoELECTRA 백본 (하위 호환성 유지)
+      - ./ai.aiion.site/models/koelectra:/app/koelectro_v3_base
+    ports:
+      - "9007:9007"
+    networks:
+      - spring-network
+    environment:
+      - ROOT_PATH=/api/business/diary  # API Gateway 경로 설정
+    restart: unless-stopped
+
+# volumes:
+  # postgres_data는 Neon 사용으로 불필요
+  # redis_data는 Upstash Redis 사용으로 불필요
+  # 모든 데이터가 클라우드(Neon, Upstash)에 저장되므로 로컬 볼륨 불필요
+    # prometheus_data:
+    # grafana_data:
+
+networks:
+  spring-network:
+    driver: bridge

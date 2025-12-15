@@ -1,0 +1,44 @@
+# ===================
+# 웹 프레임워크 및 서버 (Core Framework)
+# ===================
+fastapi==0.104.1              # FastAPI 웹 프레임워크 - REST API 엔드포인트 정의 (app/main.py)
+uvicorn[standard]==0.24.0     # ASGI 서버 - FastAPI 애플리케이션 실행 (app/main.py)
+
+# ===================
+# 데이터 처리 및 분석 (Data Processing)
+# ===================
+pandas>=2.2.0,<2.3.0          # 데이터프레임 처리 - CSV 데이터 분석 및 조작 (권장: 2.2.x)
+numpy>=1.26.0,<3.0.0          # 수치 계산 라이브러리 - 머신러닝 데이터 전처리 및 연산 (2.2.x 지원)
+geopandas>=0.14.0             # 지리공간 데이터 처리 - shapefile 읽기 및 지도 시각화
+folium>=0.14.0                # 지도 시각화 라이브러리 - 히트맵 및 그래프 생성
+matplotlib>=3.8.0             # 시각화 라이브러리 - 히트맵 및 그래프 생성
+seaborn>=0.13.0               # 통계 시각화 라이브러리 - 히트맵 및 그래프 생성
+
+# ===================
+# 머신러닝 (Machine Learning)
+# ===================
+scikit-learn>=1.4.0,<1.5.0    # 머신러닝 라이브러리 - 모델 학습, 평가, 데이터셋 (권장: 1.4.x)
+lightgbm>=4.0.0               # LightGBM - 그래디언트 부스팅 모델 (타이타닉 생존 예측)
+xgboost>=2.0.0                # XGBoost - 그래디언트 부스팅 모델 (MBTI 앙상블 모델)
+optuna>=3.0.0                 # Optuna - 하이퍼파라미터 최적화 (MBTI 모델 튜닝)
+datasets>=2.14.0              # Hugging Face 데이터셋 - 외부 데이터셋 로드 및 관리
+gensim>=4.3.0                 # Word2Vec, FastText - 문맥 기반 단어 임베딩 (문맥 이해)
+
+# ===================
+# 딥러닝 (Deep Learning)
+# ===================
+torch>=2.0.0                  # PyTorch - 딥러닝 프레임워크 (BERT, Transformer 모델)
+transformers>=4.30.0          # Transformers - 사전 학습된 언어 모델 (BERT, GPT 등)
+tokenizers>=0.13.0            # Tokenizers - 고성능 토크나이저 (transformers 의존성)
+accelerate>=0.20.0            # Accelerate - 분산 학습 및 mixed precision 지원
+nltk>=3.8.0                   # NLTK - 자연어 처리 및 문서 분석 (NLP 서비스)
+wordcloud>=1.9.0              # WordCloud - 워드클라우드 시각화 (NLP 서비스)
+stylecloud>=0.5.0             # StyleCloud - 스타일리시한 워드클라우드 생성 (NLP 서비스)
+Pillow>=12.0.0                # Pillow - 이미지 처리 라이브러리 (stylecloud 호환성, 최신 버전 사용)
+konlpy>=0.6.0                 # KoNLPy - 한국어 형태소 분석 라이브러리 (한글 NLP 서비스)
+
+# ===================
+# 데이터 검증 및 유틸리티 (Validation & Utilities)
+# ===================
+pydantic>=2.0.0               # 데이터 검증 - API 요청/응답 모델 검증 (app/titanic/model.py)
+icecream>=2.1.0               # 디버깅 유틸리티 - 개발 시 변수 값 출력 및 디버깅 (app/titanic/service.py: ic)

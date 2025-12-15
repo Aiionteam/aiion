@@ -1,0 +1,262 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: gateway-server
+  main:
+    web-application-type: reactive
+  data:
+    redis:
+      ssl:
+        enabled: true
+  cloud:
+    config:
+      enabled: false
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: common-service
+              uri: http://common-service:8081
+              predicates:
+                - Path=/common/**
+            - id: user-service
+              uri: http://user-service:8082
+              predicates:
+                - Path=/user/**
+              filters:
+                - StripPrefix=1
+            - id: diary-service
+              uri: http://diary-service:8083
+              predicates:
+                - Path=/diary/**
+              filters:
+                - StripPrefix=1
+            - id: calendar-service
+              uri: http://calendar-service:8084
+              predicates:
+                - Path=/calendar/**
+              filters:
+                - StripPrefix=1
+            # OAuth 소셜 로그인 콜백 (Google, Naver, Kakao) - oauth-service로 라우팅
+            # 구체적인 경로를 먼저 매칭 (라우팅 우선순위)
+            - id: oauth-google-callback-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth/google/**
+              filters:
+                - StripPrefix=1
+            - id: oauth-naver-callback-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth/naver/**
+              filters:
+                - StripPrefix=1
+            - id: oauth-kakao-callback-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth/kakao/**
+              filters:
+                - StripPrefix=1
+            # OAuth2 경로 (하위 호환성을 위해 유지)
+            - id: oauth2-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth2/**
+              filters:
+                - StripPrefix=1
+            # OAuth 공통 로그아웃 - oauth-service로 라우팅
+            - id: oauth-logout-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth/logout
+              filters:
+                - StripPrefix=0
+            # OAuth 소셜 로그인 (Google, Naver, Kakao) - oauth-service로 라우팅
+            # 구체적인 경로를 먼저 매칭 (라우팅 우선순위)
+            # /auth/google/auth-url -> /google/auth-url (StripPrefix=1로 /auth만 제거)
+            - id: oauth-google-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/auth/google/**
+              filters:
+                - StripPrefix=1
+            - id: oauth-naver-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/auth/naver/**
+              filters:
+                - StripPrefix=1
+            - id: oauth-kakao-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/auth/kakao/**
+              filters:
+                - StripPrefix=1
+            # JWT 인증 서비스 (이메일/비밀번호 로그인)
+            # 일반 경로는 구체적인 경로 이후에 매칭 (/auth/google, /auth/naver, /auth/kakao 제외)
+            - id: auth-service
+              uri: http://auth-service:9000
+              predicates:
+                - Path=/auth/**
+              filters:
+                - StripPrefix=1
+            - id: api-auth-service
+              uri: http://auth-service:9000
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - StripPrefix=1
+            # OAuth 소셜 로그인 API 경로 (Google, Naver, Kakao) - oauth-service로 라우팅
+            # /api/google/** -> /google/** (StripPrefix=1로 /api만 제거)
+            - id: api-oauth-google-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/api/google/**
+              filters:
+                - StripPrefix=1
+            - id: api-oauth-naver-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/api/naver/**
+              filters:
+                - StripPrefix=1
+            - id: api-oauth-kakao-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/api/kakao/**
+              filters:
+                - StripPrefix=1
+            - id: admin-user-service
+              uri: http://admin-user-service:9001
+              predicates:
+                - Path=/api/users/**
+              filters:
+                - StripPrefix=2
+            - id: oauth2-service
+              uri: http://oauth-service:8087
+              predicates:
+                - Path=/oauth2/**
+              filters:
+                - StripPrefix=1
+            - id: culture-service
+              uri: http://culture-service:8086
+              predicates:
+                - Path=/culture/**
+              filters:
+                - StripPrefix=1
+            - id: healthcare-service
+              uri: http://healthcare-service:8088
+              predicates:
+                - Path=/healthcare/**
+              filters:
+                - StripPrefix=1
+            - id: account-service
+              uri: http://account-service:8089
+              predicates:
+                - Path=/account/**
+              filters:
+                - StripPrefix=1
+            - id: pathfinder-service
+              uri: http://pathfinder-service:8090
+              predicates:
+                - Path=/pathfinder/**
+              filters:
+                - StripPrefix=1
+            # AI 서비스 라우팅 (Python FastAPI)
+            - id: chatbot-service
+              uri: http://aihoyun-chatbot-service:9002
+              predicates:
+                - Path=/chatbot/**
+            - id: weather-service
+              uri: http://aihoyun-weather-service:9004
+              predicates:
+                - Path=/weather/**
+            - id: crawler-service
+              uri: http://aihoyun-crawler-service:9003
+              predicates:
+                - Path=/crawler/**
+            - id: titanic-service
+              uri: http://aihoyun-ml-service:9005
+              predicates:
+                - Path=/titanic/**
+              filters:
+                - StripPrefix=1
+            - id: diary-emotion-service
+              uri: http://aihoyun-ml-service:9005
+              predicates:
+                - Path=/diary-emotion/**
+              filters:
+                - StripPrefix=0
+            - id: ml-service
+              uri: http://aihoyun-ml-service:9005
+              predicates:
+                - Path=/api/ml-service/**
+              filters:
+                - StripPrefix=2
+            - id: inventory-service
+              uri: http://inventory-service:9006
+              predicates:
+                - Path=/inventory/**
+            - id: business-diary-service
+              uri: http://aihoyun-diary-service:9007
+              predicates:
+                - Path=/api/business/diary/**
+              filters:
+                - StripPrefix=3
+            # 감성 분석 서비스 (KoELECTRA 기반)
+            - id: sentiment-service
+              uri: http://aihoyun-transformer-service:9008
+              predicates:
+                - Path=/api/predict/**
+              filters:
+                - StripPrefix=1
+            # 리뷰 감성 분석 서비스 (Review Sentiment Analysis)
+            - id: review-service
+              uri: http://aihoyun-transformer-service:9008
+              predicates:
+                - Path=/api/review/**
+              filters:
+                - StripPrefix=1
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins:
+                  - "http://localhost:3000"
+                  - "http://localhost:3001"
+                  - "http://localhost:4000"  # admin.aiion.site
+                  - "http://localhost:5000"  # www.study.site
+                  - "http://frontend:3000"
+                  - "http://127.0.0.1:3000"
+                  - "http://127.0.0.1:4000"  # admin.aiion.site
+                  - "http://127.0.0.1:5000"  # www.study.site
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - OPTIONS
+                  - PATCH
+                allowedHeaders:
+                  - "*"
+                allowCredentials: true
+                exposedHeaders:
+                  - "Content-Type"
+                  - "Authorization"
+                  - "X-Total-Count"
+                maxAge: 3600
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: gateway,health,info
+  endpoint:
+    gateway:
+      access: unrestricted

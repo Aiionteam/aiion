@@ -1,0 +1,53 @@
+# Environment variables
+.env
+
+# Cursor IDE assets (temporary image files)
+assets/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Large video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+
+# ML/AI Model files (large files)
+*.pt
+*.pth
+*.pkl
+*.h5
+*.ckpt
+*.bin
+*.onnx
+*.pb
+ai.aiion.site/models/
+ai.aiion.site/ml_service/app/diary_emotion/models/
+
+# Gradle wrapper JAR
+*.jar
+
+# Node modules (large dependency folders)
+node_modules/
+**/node_modules/
+
+# Build outputs
+build/
+dist/
+out/
+target/
+*.class
+
+# Package manager lock files (optional, but can be large)
+# Uncomment if you want to ignore these:
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
