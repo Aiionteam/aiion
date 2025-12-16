@@ -21,7 +21,7 @@ export type SettingsView = 'home' | 'profile';
 export type CultureView = 'home' | 'travel' | 'movie' | 'performance' | 'records' | 'wishlist';
 
 export type HealthView = 'home' | 'health' | 'exercise' | 'exercise-detail' | 'medication' | 'sleep' | 'nutrition' | 'records' | 'scan';
-export type PathfinderView = 'home' | 'map' | 'search' | 'favorites' | 'learning' | 'new-learning' | 'career' | 'roadmap';
+export type PathfinderView = 'home' | 'map' | 'search' | 'favorites' | 'learning' | 'my-aptitude' | 'career' | 'roadmap';
 
 export interface Interaction {
   id: string;
