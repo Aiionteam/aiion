@@ -346,14 +346,25 @@ class DiaryMbtiDLTrainer:
                 num_training_steps=total_steps
             )
             
-            # 손실 함수 (이진 분류, 클래스 불균형 처리)
+            # 손실 함수 (3-class 분류, 클래스 불균형 처리)
             unique, counts = np.unique(train_labels[label], return_counts=True)
-            if len(unique) == 2:
+            ic(f"{label} 클래스 분포: {dict(zip(unique, counts))}")
+            
+            if len(unique) >= 2:  # 2-class 또는 3-class 모두 가중치 적용
+                # 클래스 가중치 계산 (역빈도 기반)
                 class_weights = 1.0 / counts
                 class_weights = class_weights / class_weights.sum() * len(unique)
-                class_weights = torch.FloatTensor(class_weights).to(self.device)
-                criterion = nn.CrossEntropyLoss(weight=class_weights)
+                
+                # 3-class인 경우 모든 클래스에 대한 가중치 벡터 생성
+                if len(unique) == 3:
+                    weights_tensor = torch.FloatTensor(class_weights).to(self.device)
+                else:  # 2-class (드문 경우)
+                    weights_tensor = torch.FloatTensor(class_weights).to(self.device)
+                
+                ic(f"{label} 클래스 가중치: {class_weights}")
+                criterion = nn.CrossEntropyLoss(weight=weights_tensor)
             else:
+                ic(f"⚠️ {label} 클래스가 1개뿐입니다. 가중치 없이 학습합니다.")
                 criterion = nn.CrossEntropyLoss()
             
             # 학습 루프

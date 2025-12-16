@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import site.aiion.api.diary.common.domain.Messenger;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
@@ -259,29 +261,13 @@ public class DiaryServiceImpl implements DiaryService {
             }
         }
 
-        // 감정 분석 파이프라인 실행 (비동기로 처리하여 응답 지연 방지)
-        try {
-            site.aiion.api.diary.common.domain.Messenger result =
-                diaryEmotionService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
-            if (result.getCode() != 200) {
-                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + result.getMessage());
-            }
-        } catch (Exception e) {
-            // 감정 분석 실패해도 일기 저장은 성공으로 처리
-            System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
-        }
+        // 감정 분석 파이프라인 실행 (비동기)
+        log.info("[DiaryServiceImpl] 일기 ID {} 저장 완료. 감정 분석 시작 (비동기)...", saved.getId());
+        diaryEmotionService.analyzeAndSaveAsync(saved.getId(), saved.getTitle(), saved.getContent());
         
-        // MBTI 분석 파이프라인 실행
-        try {
-            site.aiion.api.diary.common.domain.Messenger result =
-                diaryMbtiService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
-            if (result.getCode() != 200) {
-                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + result.getMessage());
-            }
-        } catch (Exception e) {
-            // MBTI 분석 실패해도 일기 저장은 성공으로 처리
-            System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + e.getMessage());
-        }
+        // MBTI 분석 파이프라인 실행 (비동기)
+        log.info("[DiaryServiceImpl] 일기 ID {} MBTI 분석 시작 (비동기)...", saved.getId());
+        diaryMbtiService.analyzeAndSaveAsync(saved.getId(), saved.getTitle(), saved.getContent());
 
         // 일괄 조회 방식 사용 (N+1 문제 해결)
         List<Long> diaryIds = List.of(saved.getId());
@@ -400,29 +386,13 @@ public class DiaryServiceImpl implements DiaryService {
             
             Diary saved = diaryRepository.save(updated);
             
-            // 일기 수정 시 감정 분석 재실행 (제목이나 내용이 변경되었을 수 있음)
-            try {
-                site.aiion.api.diary.common.domain.Messenger result = 
-                    diaryEmotionService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
-                if (result.getCode() != 200) {
-                    System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + result.getMessage());
-                }
-            } catch (Exception e) {
-                // 감정 분석 실패해도 일기 수정은 성공으로 처리
-                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " 감정 분석 실패: " + e.getMessage());
-            }
+            // 일기 수정 시 감정 분석 재실행 (비동기)
+            log.info("[DiaryServiceImpl] 일기 ID {} 감정 분석 시작 (비동기)", saved.getId());
+            diaryEmotionService.analyzeAndSaveAsync(saved.getId(), saved.getTitle(), saved.getContent());
             
-            // 일기 수정 시 MBTI 분석 재실행
-            try {
-                site.aiion.api.diary.common.domain.Messenger result = 
-                    diaryMbtiService.analyzeAndSave(saved.getId(), saved.getTitle(), saved.getContent());
-                if (result.getCode() != 200) {
-                    System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + result.getMessage());
-                }
-            } catch (Exception e) {
-                // MBTI 분석 실패해도 일기 수정은 성공으로 처리
-                System.err.println("[DiaryServiceImpl] 일기 ID " + saved.getId() + " MBTI 분석 실패: " + e.getMessage());
-            }
+            // 일기 수정 시 MBTI 분석 재실행 (비동기)
+            log.info("[DiaryServiceImpl] 일기 ID {} MBTI 분석 시작 (비동기)", saved.getId());
+            diaryMbtiService.analyzeAndSaveAsync(saved.getId(), saved.getTitle(), saved.getContent());
             
             // 일괄 조회 방식 사용 (N+1 문제 해결)
             List<Long> diaryIds = List.of(saved.getId());

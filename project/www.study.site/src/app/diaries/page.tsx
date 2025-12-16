@@ -2,10 +2,9 @@
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { getUserDiaries, Diary, predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
+import { getUserDiaries, Diary } from "@/lib/api/diary";
 
 interface DiaryWithEmotion extends Diary {
-  emotionResponse?: PredictEmotionResponse; // 프론트엔드에서 분석한 결과 (캐시용)
   emotionLoading?: boolean;
 }
 
@@ -22,123 +21,13 @@ export default function DiariesPage() {
   const isNavigatingAway = useRef(false);
 
   // 로컬 스토리지 키
-  const EMOTION_CACHE_KEY = "diary_emotions_cache";
   const SCROLL_POSITION_KEY = "diaries_scroll_position";
+  
+  // 감정 캐시 관련 코드 제거 - DB에 저장된 결과만 사용
 
-  // 감정 분석 결과 캐시 인터페이스
-  interface EmotionCache {
-    [diaryId: number]: {
-      emotion: PredictEmotionResponse;
-      timestamp: number;
-    };
-  }
-
-  // 캐시 유효 기간 (24시간)
-  const CACHE_EXPIRY = 24 * 60 * 60 * 1000;
-
-  // 로컬 스토리지에서 감정 캐시 가져오기
-  const getEmotionCache = (): EmotionCache => {
-    if (typeof window === "undefined") return {};
-    try {
-      const cached = localStorage.getItem(EMOTION_CACHE_KEY);
-      if (!cached) return {};
-      const cache: EmotionCache = JSON.parse(cached);
-      // 만료된 캐시 제거
-      const now = Date.now();
-      const validCache: EmotionCache = {};
-      for (const [id, data] of Object.entries(cache)) {
-        if (now - data.timestamp < CACHE_EXPIRY) {
-          validCache[Number(id)] = data;
-        }
-      }
-      // 유효한 캐시만 저장
-      if (Object.keys(validCache).length !== Object.keys(cache).length) {
-        localStorage.setItem(EMOTION_CACHE_KEY, JSON.stringify(validCache));
-      }
-      return validCache;
-    } catch {
-      return {};
-    }
-  };
-
-  // 로컬 스토리지에 감정 캐시 저장
-  const setEmotionCache = (diaryId: number, emotion: PredictEmotionResponse) => {
-    if (typeof window === "undefined") return;
-    try {
-      const cache = getEmotionCache();
-      cache[diaryId] = {
-        emotion,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem(EMOTION_CACHE_KEY, JSON.stringify(cache));
-    } catch (err) {
-      console.error("감정 캐시 저장 실패:", err);
-    }
-  };
-
-  // 감정 분석 함수 (재사용 가능)
-  const analyzeDiaryEmotion = async (diary: DiaryWithEmotion, index: number, isFirstRequest: boolean = false) => {
-    // 이미 분석된 일기는 분석하지 않음
-    if (diary.emotion !== null && diary.emotion !== undefined) {
-      console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}는 이미 분석 완료 (emotion=${diary.emotion})`);
-      setAnalyzedIds((prev) => new Set(prev).add(diary.id));
-      return;
-    }
-    
-    // 이미 analyzedIds에 포함된 일기는 분석하지 않음
-    if (analyzedIds.has(diary.id)) {
-      console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}는 이미 분석 중이거나 완료됨`);
-      return;
-    }
-    
-    try {
-      // 제목과 내용을 결합하여 분석
-      const text = `${diary.title || ""} ${diary.content || ""}`.trim();
-      if (!text) {
-        console.log(`[analyzeDiaryEmotion] 일기 ID ${diary.id}의 텍스트가 비어있어 분석을 건너뜁니다.`);
-        setDiaries((prev) =>
-          prev.map((d) =>
-            d.id === diary.id ? { ...d, emotionLoading: false } : d
-          )
-        );
-        setAnalyzedIds((prev) => new Set(prev).add(diary.id));
-        return;
-      }
-
-      // 첫 번째 요청은 모델 학습 시간 고려하여 더 긴 타임아웃
-      const timeout = isFirstRequest ? 60000 : 20000; // 첫 번째: 60초, 나머지: 20초
-      const emotion = await predictEmotion(text, timeout);
-
-      // 진행 상황 업데이트 (ID로 찾아서 업데이트 - 인덱스가 변경될 수 있음)
-      setDiaries((prev) =>
-        prev.map((d) =>
-          d.id === diary.id
-            ? { ...d, emotionResponse: emotion, emotionLoading: false }
-            : d
-        )
-      );
-      
-      // 분석 완료된 ID 추가
-      setAnalyzedIds((prev) => new Set(prev).add(diary.id));
-    } catch (err: any) {
-      // 빈 텍스트나 모델 미학습 등의 에러는 조용히 처리
-      const errorMessage = err?.message || String(err);
-      if (errorMessage.includes("텍스트가 비어있습니다") || 
-          errorMessage.includes("모델이 학습되지 않았습니다")) {
-        console.warn(`일기 ${diary.id} 감정 분석 건너뜀:`, errorMessage);
-      } else {
-        console.error(`일기 ${diary.id} 감정 분석 실패:`, err);
-      }
-
-      // 에러 발생 시에도 로딩 상태 해제
-      setDiaries((prev) =>
-        prev.map((d) =>
-          d.id === diary.id ? { ...d, emotionLoading: false } : d
-        )
-      );
-      setAnalyzedIds((prev) => new Set(prev).add(diary.id));
-    }
-  };
+  // 감정 분석 함수 - 제거됨
+  // 직접 ML 서비스 호출은 더 이상 지원하지 않습니다.
+  // 일기 저장 시 백엔드에서 자동으로 분석되므로, DB에 저장된 결과만 사용합니다.
 
   // 스크롤 위치 저장
   const saveScrollPosition = () => {
@@ -257,26 +146,9 @@ export default function DiariesPage() {
         // emotion이 null이거나 undefined인 경우에만 분석 (0은 이미 분석된 것으로 간주)
         // 이미 analyzedIds에 포함된 일기는 제외
         // 제목과 내용이 모두 비어있는 일기는 분석하지 않음
-        const diariesToAnalyze = diariesWithEmotion.filter(
-          (diary) => 
-            (diary.emotion === null || diary.emotion === undefined) && 
-            diary.emotionLoading &&
-            !analyzedIds.has(diary.id) &&
-            (diary.title || diary.content) // 제목이나 내용이 있어야 함
-        );
-
-        if (diariesToAnalyze.length > 0) {
-          console.log("[DiariesPage] 백엔드 분석 실패한 일기:", diariesToAnalyze.length, "개 - 프론트엔드에서 분석");
-          // 각 일기의 감정 분석 (순차 처리) - 백엔드 분석 실패 시에만 실행
-          for (let i = 0; i < diariesToAnalyze.length; i++) {
-            const diary = diariesToAnalyze[i];
-            const originalIndex = diariesWithEmotion.findIndex(d => d.id === diary.id);
-            const isFirstRequest = i === 0 && analyzedIds.size === 0;
-            await analyzeDiaryEmotion(diary, originalIndex, isFirstRequest);
-          }
-        } else {
-          console.log("[DiariesPage] 모든 일기가 백엔드에서 감정 분석 완료");
-        }
+        // 직접 감정 분석 호출 제거 - DB에 저장된 결과만 사용
+        // 일기 저장 시 백엔드에서 자동으로 분석되므로, 프론트엔드에서 추가 분석하지 않음
+        console.log("[DiariesPage] 일기 목록 로드 완료. DB에 저장된 감정 분석 결과를 표시합니다.");
       } catch (err: any) {
         console.error("일기 목록 로드 실패:", err);
         setError(err.message || "일기 목록을 불러올 수 없습니다.");
@@ -549,9 +421,7 @@ export default function DiariesPage() {
       return normalizeEmotionLabel(diary.emotionLabel);
     }
     
-    if (diary.emotionResponse?.emotion_label) {
-      return normalizeEmotionLabel(diary.emotionResponse.emotion_label);
-    }
+    // DB에서 가져온 emotionLabel 우선 사용
     
     return "";
   };
@@ -634,10 +504,7 @@ export default function DiariesPage() {
       return emotionMap[diary.emotion] || "😐";
     }
     
-    // 캐시된 감정 분석 결과 사용 (fallback)
-    if (diary.emotionResponse) {
-      return emotionMap[diary.emotionResponse.emotion] || "😐";
-    }
+    // DB에서 가져온 emotion 값 사용 (fallback)
     
     return "😐";
   };
@@ -757,16 +624,32 @@ export default function DiariesPage() {
                           {getEmotionDisplay(diary)}
                         </div>
                       )}
-                      {diary.mbtiType && (
-                        <div className="text-xs text-purple-600 mt-1 font-medium">
-                          MBTI: {diary.mbtiType}
-                          {diary.mbtiConfidence && (
-                            <span className="text-gray-500 ml-1">
-                              ({(diary.mbtiConfidence * 100).toFixed(0)}%)
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {diary.mbtiType && (() => {
+                        // 경계 성향 감지
+                        const dimensions = ['E_I', 'S_N', 'T_F', 'J_P'] as const;
+                        const hasBoundary = diary.mbtiDimensionPercentages && dimensions.some(dim => {
+                          const data = diary.mbtiDimensionPercentages?.[dim];
+                          return data && data.confidence_percent >= 45 && data.confidence_percent <= 55;
+                        });
+                        
+                        return (
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="text-xs text-purple-600 font-medium">
+                              MBTI: {diary.mbtiType}
+                              {diary.mbtiConfidence && (
+                                <span className="text-gray-500 ml-1">
+                                  ({(diary.mbtiConfidence * 100).toFixed(0)}%)
+                                </span>
+                              )}
+                            </div>
+                            {hasBoundary && (
+                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium" title="일부 성향이 경계선상에 있습니다">
+                                경계
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     {/* Emotion Emoji (1위만) */}
                     <div className="text-lg flex-shrink-0">

@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import site.aiion.api.diary.common.domain.Messenger;
 
 import java.time.LocalDateTime;
@@ -32,8 +33,9 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     
-    // ML 서비스 URL (Docker 네트워크 내부에서 직접 접근)
-    private static final String ML_SERVICE_URL = "http://aihoyun-ml-service:9005/diary-mbti/predict";
+    // Business Diary Service URL (Docker 네트워크 내부에서 직접 접근)
+    // business/diary_service가 포트 9007에서 실행됨 (컨테이너 이름: aihoyun-diary-service)
+    private static final String BUSINESS_SERVICE_URL = "http://aihoyun-diary-service:9007/diary-mbti/predict";
     
     // MBTI 차원별 라벨 매핑
     private static final Map<Integer, String> E_I_LABELS = Map.of(
@@ -139,6 +141,18 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
     }
 
     @Override
+    @Async("diaryAnalysisExecutor")
+    @Transactional
+    public void analyzeAndSaveAsync(Long diaryId, String title, String content) {
+        log.info("일기 ID {} MBTI 분석 시작 (비동기)...", diaryId);
+        try {
+            analyzeAndSave(diaryId, title, content);
+        } catch (Exception e) {
+            log.error("일기 ID {} MBTI 분석 중 예외 발생: {}", diaryId, e.getMessage(), e);
+        }
+    }
+
+    @Override
     @Transactional
     public Messenger analyzeAndSave(Long diaryId, String title, String content) {
         if (diaryId == null) {
@@ -161,7 +175,7 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                         .build();
             }
 
-            // ML 서비스에 MBTI 분석 요청 (DL 모델 사용)
+            // Business Diary Service에 MBTI 분석 요청 (DL 모델 사용)
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("text", text);
 
@@ -169,12 +183,45 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
-            log.info("일기 ID {} MBTI 분석 요청: DL 모델(KoELECTRA) 호출 중...", diaryId);
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                ML_SERVICE_URL,
-                request,
-                Map.class
-            );
+            log.info("일기 ID {} MBTI 분석 요청: DL 모델(KoELECTRA) 사용 (Business Diary Service 호출 중)...", diaryId);
+            log.info("Business Diary Service URL: {}", BUSINESS_SERVICE_URL);
+            log.info("요청 본문: text length = {}", text.length());
+            log.info("RestTemplate 타임아웃 설정: connectTimeout=10s, readTimeout=60s");
+            
+            ResponseEntity<Map> response;
+            try {
+                log.debug("HTTP POST 요청 시작: {}", BUSINESS_SERVICE_URL);
+                response = restTemplate.postForEntity(
+                    BUSINESS_SERVICE_URL,
+                    request,
+                    Map.class
+                );
+                log.info("일기 ID {} Business Diary Service 응답: status = {}, headers = {}", 
+                    diaryId, response.getStatusCode(), response.getHeaders());
+                if (response.getBody() != null) {
+                    log.debug("응답 본문 키: {}", response.getBody().keySet());
+                }
+            } catch (org.springframework.web.client.ResourceAccessException e) {
+                log.error("일기 ID {} Business Diary Service 연결 실패 - URL: {}", 
+                    diaryId, BUSINESS_SERVICE_URL);
+                log.error("연결 에러 상세: {}", e.getMessage());
+                if (e.getCause() != null) {
+                    log.error("원인: {}", e.getCause().getMessage());
+                }
+                throw e;
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                log.error("일기 ID {} Business Diary Service HTTP 에러 - status: {}, body: {}", 
+                    diaryId, e.getStatusCode(), e.getResponseBodyAsString());
+                throw e;
+            } catch (org.springframework.web.client.HttpServerErrorException e) {
+                log.error("일기 ID {} Business Diary Service 서버 에러 - status: {}, body: {}", 
+                    diaryId, e.getStatusCode(), e.getResponseBodyAsString());
+                throw e;
+            } catch (Exception e) {
+                log.error("일기 ID {} Business Diary Service 호출 실패 - URL: {}, 에러 타입: {}, 메시지: {}", 
+                    diaryId, BUSINESS_SERVICE_URL, e.getClass().getSimpleName(), e.getMessage(), e);
+                throw e;
+            }
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Map<String, Object> result = response.getBody();
@@ -196,7 +243,7 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                     probabilities = (Map<String, Object>) result.get("probabilities");
                 }
                 
-                // ML 서비스 응답 파싱 (null 체크 강화)
+                // Business Diary Service 응답 파싱 (null 체크 강화)
                 Object eIObj = predictions != null ? predictions.get("E_I") : null;
                 Object sNObj = predictions != null ? predictions.get("S_N") : null;
                 Object tFObj = predictions != null ? predictions.get("T_F") : null;
@@ -241,7 +288,7 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                 
                 String mbtiType = (String) result.get("mbti");  // "mbti_type" → "mbti"
                 
-                // confidence 계산 (각 차원의 평균 확률)
+                // confidence 계산 (각 차원의 평균 확률) - 0.0~1.0 범위만 사용
                 Double confidence = null;
                 if (probabilities != null) {
                     try {
@@ -251,21 +298,41 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                             if (probabilities.containsKey(label)) {
                                 Map<String, Object> dimProbs = (Map<String, Object>) probabilities.get(label);
                                 if (dimProbs != null) {
-                                    // 최대 확률 값 찾기
-                                    double maxProb = 0.0;
-                                    for (Object probValue : dimProbs.values()) {
-                                        if (probValue instanceof Number) {
-                                            double prob = ((Number) probValue).doubleValue();
-                                            maxProb = Math.max(maxProb, prob);
+                                    // Python에서 전달한 confidence 값 직접 사용 (0.0~1.0 범위)
+                                    if (dimProbs.containsKey("confidence")) {
+                                        Object confValue = dimProbs.get("confidence");
+                                        if (confValue instanceof Number) {
+                                            double conf = ((Number) confValue).doubleValue();
+                                            // 0.0~1.0 범위인지 확인 (퍼센트 값 제외)
+                                            if (conf >= 0.0 && conf <= 1.0) {
+                                                totalConf += conf;
+                                                count++;
+                                            }
+                                        }
+                                    } else {
+                                        // confidence 키가 없으면 '0', '1', '2' 키만 사용
+                                        double maxProb = 0.0;
+                                        for (String key : new String[]{"0", "1", "2"}) {
+                                            if (dimProbs.containsKey(key)) {
+                                                Object probValue = dimProbs.get(key);
+                                                if (probValue instanceof Number) {
+                                                    double prob = ((Number) probValue).doubleValue();
+                                                    if (prob >= 0.0 && prob <= 1.0) {  // 0.0~1.0 범위만
+                                                        maxProb = Math.max(maxProb, prob);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (maxProb > 0.0) {
+                                            totalConf += maxProb;
+                                            count++;
                                         }
                                     }
-                                    totalConf += maxProb;
-                                    count++;
                                 }
                             }
                         }
                         if (count > 0) {
-                            confidence = totalConf / count;  // 평균 확률
+                            confidence = totalConf / count;  // 평균 확률 (0.0~1.0)
                         }
                     } catch (Exception e) {
                         log.warn("일기 ID {} confidence 계산 실패: {}", diaryId, e.getMessage());
@@ -366,6 +433,38 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                         diaryMbti = diaryMbtiRepository.save(diaryMbti);
                         log.info("일기 ID {} MBTI 분석 결과 저장: {}", diaryId, mbtiType);
                     }
+                } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                    // Duplicate key 에러 발생 시 다시 조회 후 업데이트 시도
+                    log.warn("일기 ID {} MBTI 분석 결과 저장 중 중복 키 에러 발생, 업데이트로 재시도", diaryId);
+                    try {
+                        existingMbtiOpt = diaryMbtiRepository.findByDiaryId(diaryId);
+                        if (existingMbtiOpt.isPresent()) {
+                            DiaryMbti existing = existingMbtiOpt.get();
+                            existing.setEI(eI);
+                            existing.setSN(sN);
+                            existing.setTF(tF);
+                            existing.setJP(jP);
+                            existing.setMbtiType(mbtiType);
+                            existing.setConfidence(confidence);
+                            existing.setProbabilities(probabilitiesJson);
+                            existing.setDimensionPercentages(dimensionPercentagesJson);
+                            existing.setAnalyzedAt(LocalDateTime.now());
+                            diaryMbti = diaryMbtiRepository.save(existing);
+                            log.info("일기 ID {} MBTI 분석 결과 업데이트 완료 (재시도): {}", diaryId, mbtiType);
+                        } else {
+                            log.error("일기 ID {} MBTI 재조회 실패", diaryId);
+                            return Messenger.builder()
+                                    .code(500)
+                                    .message("MBTI 분석 결과 저장 중 오류 발생: 중복 키 에러")
+                                    .build();
+                        }
+                    } catch (Exception retryEx) {
+                        log.error("일기 ID {} MBTI 재시도 실패: {}", diaryId, retryEx.getMessage(), retryEx);
+                        return Messenger.builder()
+                                .code(500)
+                                .message("MBTI 분석 결과 저장 중 오류 발생: " + retryEx.getMessage())
+                                .build();
+                    }
                 } catch (Exception e) {
                     log.error("일기 ID {} MBTI 저장 실패: {}", diaryId, e.getMessage(), e);
                     return Messenger.builder()
@@ -388,10 +487,10 @@ public class DiaryMbtiServiceImpl implements DiaryMbtiService {
                         .data(responseData)
                         .build();
             } else {
-                log.error("일기 ID {} MBTI 분석 실패: DL 서비스 응답 오류", diaryId);
+                log.error("일기 ID {} MBTI 분석 실패: Business Diary Service 응답 오류", diaryId);
                 return Messenger.builder()
                         .code(500)
-                        .message("DL 서비스 응답 오류")
+                        .message("Business Diary Service 응답 오류")
                         .build();
             }
         } catch (RestClientException e) {

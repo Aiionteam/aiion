@@ -92,24 +92,10 @@ export interface PredictEmotionResponse {
 
 /**
  * 일기 텍스트의 감정 분석
+ * @deprecated 직접 ML 서비스 호출은 제거되었습니다. 일기 저장 시 백엔드에서 자동으로 분석되므로, DB에 저장된 결과만 사용하세요.
  */
 export async function predictEmotion(text: string, timeout: number = 20000): Promise<PredictEmotionResponse> {
-  try {
-    // 빈 텍스트 체크
-    if (!text || !text.trim()) {
-      throw new Error("분석할 텍스트가 비어있습니다.");
-    }
-    
-    const response = await apiClient.post<PredictEmotionResponse>(
-      `/diary-emotion/predict`,
-      { text: text.trim() },
-      { timeout } // 기본 20초 타임아웃
-    );
-    return response.data;
-  } catch (error: any) {
-    console.error("[Diary API] 감정 분석 실패:", error);
-    throw error;
-  }
+  throw new Error("직접 감정 분석 API 호출은 지원하지 않습니다. 일기 저장 시 자동으로 분석되며, DB에 저장된 결과를 사용하세요.");
 }
 
 /**

@@ -86,7 +86,36 @@ class PredictRequest(BaseModel):
 
 @router.get("/")
 async def root():
-    """루트 엔드포인트"""
+    """루트 엔드포인트 - 헬스체크용"""
+    return {
+        "service": "Diary Emotion Classification",
+        "status": "running",
+        "model_type": "deep_learning"
+    }
+
+@router.get("/health")
+async def health_check():
+    """헬스체크 엔드포인트"""
+    try:
+        service = get_diary_emotion_service()
+        model_loaded = service.dl_model_obj is not None and service.dl_model_obj.model is not None
+        return {
+            "status": "healthy",
+            "service": "diary-emotion",
+            "model_loaded": model_loaded,
+            "model_file_exists": service.dl_model_file.exists() if hasattr(service, 'dl_model_file') else False
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "diary-emotion",
+            "error": str(e)
+        }
+
+@router.get("/test")
+async def test_endpoint():
+    """테스트 엔드포인트 - 연결 확인용"""
+    return {"message": "diary-emotion service is reachable", "status": "ok"}
     return {
         "service": "Diary Emotion Classification",
         "description": "일기 텍스트를 통한 감정 분류 서비스 (0: 평가불가, 1: 기쁨, 2: 슬픔, 3: 분노, 4: 두려움, 5: 혐오, 6: 놀람)"

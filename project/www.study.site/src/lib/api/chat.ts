@@ -121,10 +121,14 @@ export const deleteConversation = async (
 };
 
 /**
- * 챗봇 서버 상태 확인
+ * 챗봇 서버 상태 확인 (비활성화됨 - 헬스체크 로그 방지)
  * GET /chatbot/chat 엔드포인트를 사용하여 서버 상태 확인
  */
 export const checkChatServerHealth = async (): Promise<boolean> => {
+  // 헬스체크 비활성화 - 항상 true 반환 (로그 방지)
+  return true;
+  
+  /* 비활성화된 코드
   try {
     // 백엔드 문서에 있는 테스트용 GET 엔드포인트 사용
     // 타임아웃을 짧게 설정하여 빠르게 확인
@@ -143,5 +147,6 @@ export const checkChatServerHealth = async (): Promise<boolean> => {
     // 네트워크 연결 실패는 오프라인
     return false;
   }
+  */
 };
 

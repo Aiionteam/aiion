@@ -1,9 +1,24 @@
+// 빌드 출력 디렉터리 명시적 설정 (Eclipse bin 디렉터리 충돌 방지)
+sourceSets {
+	main {
+		output.resourcesDir = file("${buildDir}/classes/java/main")
+	}
+	test {
+		output.resourcesDir = file("${buildDir}/classes/java/test")
+	}
+}
+
 tasks {
 	bootJar {
 		enabled = true
 	}
 	jar {
 		enabled = false
+	}
+	clean {
+		doLast {
+			delete "${projectDir}/bin"
+		}
 	}
 }
 

@@ -51,3 +51,9 @@ target/
 # package-lock.json
 # pnpm-lock.yaml
 # yarn.lock
+
+# Large data files (CSV, large JSON)
+**/mbti_corpus_*.csv
+**/mbti_corpus_*.json
+ai.aiion.site/business/diary_service/app/diary_mbti/data/*.csv
+ai.aiion.site/business/diary_service/app/diary_mbti/data/*.json
