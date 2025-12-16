@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import site.aiion.api.diary.common.domain.Messenger;
 
 import java.time.LocalDateTime;
@@ -32,8 +33,9 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     
-    // ML 서비스 URL (Docker 네트워크 내부에서 직접 접근)
-    private static final String ML_SERVICE_URL = "http://aihoyun-ml-service:9005/diary-emotion/predict";
+    // Business Diary Service URL (Docker 네트워크 내부에서 직접 접근)
+    // business/diary_service가 포트 9007에서 실행됨 (컨테이너 이름: aihoyun-diary-service)
+    private static final String BUSINESS_SERVICE_URL = "http://aihoyun-diary-service:9007/diary-emotion/predict";
     
     // 감정 라벨 매핑
     private static final Map<Integer, String> EMOTION_LABELS = Map.ofEntries(
@@ -127,6 +129,18 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
     }
 
     @Override
+    @Async("diaryAnalysisExecutor")
+    @Transactional
+    public void analyzeAndSaveAsync(Long diaryId, String title, String content) {
+        log.info("일기 ID {} 감정 분석 시작 (비동기)...", diaryId);
+        try {
+            analyzeAndSave(diaryId, title, content);
+        } catch (Exception e) {
+            log.error("일기 ID {} 감정 분석 중 예외 발생: {}", diaryId, e.getMessage(), e);
+        }
+    }
+
+    @Override
     @Transactional
     public Messenger analyzeAndSave(Long diaryId, String title, String content) {
         if (diaryId == null) {
@@ -149,22 +163,53 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                         .build();
             }
 
-            // ML 서비스에 감정 분석 요청 (DL 모델 사용)
+            // Business Diary Service에 감정 분석 요청 (DL 모델 사용)
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("text", text);
-            requestBody.put("model_type", "dl");  // DL 모델 명시적으로 사용
-            requestBody.put("use_fallback", true);  // DL 실패 시 ML로 자동 폴백
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
-            log.info("일기 ID {} 감정 분석 요청: DL 모델 사용 (ML 서비스 호출 중)...", diaryId);
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                ML_SERVICE_URL,
-                request,
-                Map.class
-            );
+            log.info("일기 ID {} 감정 분석 요청: DL 모델 사용 (Business Diary Service 호출 중)...", diaryId);
+            log.info("Business Diary Service URL: {}", BUSINESS_SERVICE_URL);
+            log.info("요청 본문: text length = {}", text.length());
+            log.info("RestTemplate 타임아웃 설정: connectTimeout=10s, readTimeout=60s");
+            
+            ResponseEntity<Map> response;
+            try {
+                log.debug("HTTP POST 요청 시작: {}", BUSINESS_SERVICE_URL);
+                response = restTemplate.postForEntity(
+                    BUSINESS_SERVICE_URL,
+                    request,
+                    Map.class
+                );
+                log.info("일기 ID {} Business Diary Service 응답: status = {}, headers = {}", 
+                    diaryId, response.getStatusCode(), response.getHeaders());
+                if (response.getBody() != null) {
+                    log.debug("응답 본문 키: {}", response.getBody().keySet());
+                }
+            } catch (org.springframework.web.client.ResourceAccessException e) {
+                log.error("일기 ID {} Business Diary Service 연결 실패 - URL: {}", 
+                    diaryId, BUSINESS_SERVICE_URL);
+                log.error("연결 에러 상세: {}", e.getMessage());
+                if (e.getCause() != null) {
+                    log.error("원인: {}", e.getCause().getMessage());
+                }
+                throw e;
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                log.error("일기 ID {} Business Diary Service HTTP 에러 - status: {}, body: {}", 
+                    diaryId, e.getStatusCode(), e.getResponseBodyAsString());
+                throw e;
+            } catch (org.springframework.web.client.HttpServerErrorException e) {
+                log.error("일기 ID {} Business Diary Service 서버 에러 - status: {}, body: {}", 
+                    diaryId, e.getStatusCode(), e.getResponseBodyAsString());
+                throw e;
+            } catch (Exception e) {
+                log.error("일기 ID {} Business Diary Service 호출 실패 - URL: {}, 에러 타입: {}, 메시지: {}", 
+                    diaryId, BUSINESS_SERVICE_URL, e.getClass().getSimpleName(), e.getMessage(), e);
+                throw e;
+            }
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Map<String, Object> result = response.getBody();
@@ -197,32 +242,50 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                     emotionLabel = EMOTION_LABELS.get(emotion);
                 }
 
-                // 기존 감정 분석 결과 확인
-                Optional<DiaryEmotion> existingEmotionOpt = diaryEmotionRepository.findByDiaryId(diaryId);
-
+                // 기존 감정 분석 결과 확인 후 업데이트 또는 생성
                 DiaryEmotion diaryEmotion;
-                if (existingEmotionOpt.isPresent()) {
-                    // 기존 결과 업데이트
-                    DiaryEmotion existing = existingEmotionOpt.get();
-                    existing.setEmotion(emotion);
-                    existing.setEmotionLabel(emotionLabel);
-                    existing.setConfidence(confidence);
-                    existing.setProbabilities(probabilitiesJson);
-                    existing.setAnalyzedAt(LocalDateTime.now());
-                    diaryEmotion = diaryEmotionRepository.save(existing);
-                    log.info("일기 ID {} 감정 분석 결과 업데이트: {} ({})", diaryId, emotionLabel, emotion);
-                } else {
-                    // 새로 생성
-                    diaryEmotion = DiaryEmotion.builder()
-                        .diaryId(diaryId)
-                        .emotion(emotion)
-                        .emotionLabel(emotionLabel)
-                        .confidence(confidence)
-                        .probabilities(probabilitiesJson)
-                        .analyzedAt(LocalDateTime.now())
-                        .build();
-                    diaryEmotion = diaryEmotionRepository.save(diaryEmotion);
-                    log.info("일기 ID {} 감정 분석 결과 저장: {} ({})", diaryId, emotionLabel, emotion);
+                try {
+                    Optional<DiaryEmotion> existingEmotionOpt = diaryEmotionRepository.findByDiaryId(diaryId);
+
+                    if (existingEmotionOpt.isPresent()) {
+                        // 기존 결과 업데이트
+                        DiaryEmotion existing = existingEmotionOpt.get();
+                        existing.setEmotion(emotion);
+                        existing.setEmotionLabel(emotionLabel);
+                        existing.setConfidence(confidence);
+                        existing.setProbabilities(probabilitiesJson);
+                        existing.setAnalyzedAt(LocalDateTime.now());
+                        diaryEmotion = diaryEmotionRepository.save(existing);
+                        log.info("일기 ID {} 감정 분석 결과 업데이트: {} ({})", diaryId, emotionLabel, emotion);
+                    } else {
+                        // 새로 생성
+                        diaryEmotion = DiaryEmotion.builder()
+                            .diaryId(diaryId)
+                            .emotion(emotion)
+                            .emotionLabel(emotionLabel)
+                            .confidence(confidence)
+                            .probabilities(probabilitiesJson)
+                            .analyzedAt(LocalDateTime.now())
+                            .build();
+                        diaryEmotion = diaryEmotionRepository.save(diaryEmotion);
+                        log.info("일기 ID {} 감정 분석 결과 저장: {} ({})", diaryId, emotionLabel, emotion);
+                    }
+                } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                    // Duplicate key 에러 발생 시 다시 조회 후 업데이트 시도
+                    log.warn("일기 ID {} 감정 분석 결과 저장 중 중복 키 에러 발생, 업데이트로 재시도", diaryId);
+                    Optional<DiaryEmotion> existingEmotionOpt = diaryEmotionRepository.findByDiaryId(diaryId);
+                    if (existingEmotionOpt.isPresent()) {
+                        DiaryEmotion existing = existingEmotionOpt.get();
+                        existing.setEmotion(emotion);
+                        existing.setEmotionLabel(emotionLabel);
+                        existing.setConfidence(confidence);
+                        existing.setProbabilities(probabilitiesJson);
+                        existing.setAnalyzedAt(LocalDateTime.now());
+                        diaryEmotion = diaryEmotionRepository.save(existing);
+                        log.info("일기 ID {} 감정 분석 결과 업데이트 완료 (재시도): {} ({})", diaryId, emotionLabel, emotion);
+                    } else {
+                        throw e; // 여전히 찾을 수 없으면 에러 전파
+                    }
                 }
 
                 DiaryEmotionModel model = entityToModel(diaryEmotion);
@@ -232,10 +295,10 @@ public class DiaryEmotionServiceImpl implements DiaryEmotionService {
                         .data(model)
                         .build();
             } else {
-                log.error("일기 ID {} 감정 분석 실패: ML 서비스 응답 오류", diaryId);
+                log.error("일기 ID {} 감정 분석 실패: Business Diary Service 응답 오류", diaryId);
                 return Messenger.builder()
                         .code(500)
-                        .message("ML 서비스 응답 오류")
+                        .message("Business Diary Service 응답 오류")
                         .build();
             }
         } catch (RestClientException e) {

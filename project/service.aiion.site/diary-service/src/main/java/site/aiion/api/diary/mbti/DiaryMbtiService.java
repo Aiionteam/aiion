@@ -21,6 +21,11 @@ public interface DiaryMbtiService {
     Messenger analyzeAndSave(Long diaryId, String title, String content);
     
     /**
+     * 일기 MBTI 분석 수행 및 저장 (비동기)
+     */
+    void analyzeAndSaveAsync(Long diaryId, String title, String content);
+    
+    /**
      * 일기 MBTI 분석 결과 삭제
      */
     Messenger deleteByDiaryId(Long diaryId);

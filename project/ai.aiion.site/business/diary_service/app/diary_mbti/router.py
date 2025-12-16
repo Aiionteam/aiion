@@ -33,12 +33,12 @@ def get_diary_mbti_service() -> DiaryMbtiService:
         # JSON 파일 경로 설정
         data_dir = Path(__file__).parent / "data"
         
-        # 현대 일기 + 이순신 일기
+        # 현대 일기 (48K - 평가불가 25%) + 이순신 일기
         json_files_modern = {
-            'E_I': data_dir / "mbti_corpus_modern_E_I_20000.json",
-            'S_N': data_dir / "mbti_corpus_modern_S_N_20000.json",
-            'T_F': data_dir / "mbti_corpus_modern_T_F_20000.json",
-            'J_P': data_dir / "mbti_corpus_modern_J_P_20000.json"
+            'E_I': data_dir / "mbti_corpus_modern_E_I_48000.json",
+            'S_N': data_dir / "mbti_corpus_modern_S_N_48000.json",
+            'T_F': data_dir / "mbti_corpus_modern_T_F_48000.json",
+            'J_P': data_dir / "mbti_corpus_modern_J_P_48000.json"
         }
         
         json_files_leesoonsin = {
@@ -73,7 +73,35 @@ class TrainRequest(BaseModel):
 
 @router.get("/")
 async def root():
-    """루트 엔드포인트"""
+    """루트 엔드포인트 - 헬스체크용"""
+    return {
+        "service": "Diary MBTI Classification",
+        "status": "running",
+        "model_type": "deep_learning"
+    }
+
+@router.get("/health")
+async def health_check():
+    """헬스체크 엔드포인트"""
+    try:
+        service = get_diary_mbti_service()
+        models_loaded = service.dl_model_obj is not None and service.dl_model_obj.models and any(m is not None for m in service.dl_model_obj.models.values())
+        return {
+            "status": "healthy",
+            "service": "diary-mbti",
+            "models_loaded": models_loaded
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "diary-mbti",
+            "error": str(e)
+        }
+
+@router.get("/test")
+async def test_endpoint():
+    """테스트 엔드포인트 - 연결 확인용"""
+    return {"message": "diary-mbti service is reachable", "status": "ok"}
     return {
         "service": "Diary MBTI Classification",
         "description": "일기 텍스트를 통한 MBTI 분류 서비스 (DL 전용, KoELECTRA 기반)",

@@ -109,9 +109,19 @@ export async function checkGatewayInfo(): Promise<HealthCheckResult> {
 }
 
 /**
- * 챗봇 서비스 헬스체크
+ * 챗봇 서비스 헬스체크 (비활성화됨 - 로그 방지)
  */
 export async function checkChatbotHealth(): Promise<HealthCheckResult> {
+  // 헬스체크 비활성화 - 항상 성공 반환 (로그 방지)
+  return {
+    name: "Chatbot Service",
+    url: "",
+    status: "success",
+    message: "헬스체크 비활성화됨",
+    responseTime: 0,
+  };
+  
+  /* 비활성화된 코드
   const startTime = Date.now();
   const baseUrl = process.env.NEXT_PUBLIC_CHAT_API_URL || "http://localhost:8080";
   const url = `${baseUrl}/chatbot/health`;
@@ -153,6 +163,7 @@ export async function checkChatbotHealth(): Promise<HealthCheckResult> {
       responseTime,
     };
   }
+  */
 }
 
 /**

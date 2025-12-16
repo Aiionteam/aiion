@@ -7,7 +7,7 @@ import { getUserIdFromToken } from "@/lib/api/auth";
 import { WeatherForecast } from "./WeatherForecast";
 import { TitanicPassengers } from "./TitanicPassengers";
 import { useRouter } from "next/navigation";
-import { predictEmotion, PredictEmotionResponse } from "@/lib/api/diary";
+// 직접 감정 분석 호출 제거 - 일기 저장 시 백엔드에서 자동 분석
 
 interface Message {
   role: "user" | "assistant";
@@ -223,27 +223,11 @@ export const ChatInterface: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // 기분 관련 질문이고 일기 내용이 있는 경우 감정 분석 수행
+      // 기분 관련 질문 처리 - 직접 감정 분석 호출 제거
+      // 감정 분석은 일기를 저장할 때 백엔드에서 자동으로 수행됩니다.
       let emotionAnalysis: string = "";
       if (isMoodQuestion(userMessage)) {
-        const diaryContent = extractDiaryContent([...messages, newUserMessage]);
-        if (diaryContent) {
-          try {
-            const emotionResult = await predictEmotion(diaryContent, 20000);
-            const topEmotions = emotionResult.probabilities 
-              ? Object.entries(emotionResult.probabilities)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 2)
-                  .map(([label, prob]) => `${getEmotionLabelKorean(label)} (${(prob * 100).toFixed(1)}%)`)
-                  .join(', ')
-              : `${getEmotionLabelKorean(emotionResult.emotion_label)} (${emotionResult.confidence ? (emotionResult.confidence * 100).toFixed(1) : 'N/A'}%)`;
-            
-            emotionAnalysis = `\n\n📊 감정 분석 결과:\n주요 감정: ${topEmotions}`;
-          } catch (emotionError: any) {
-            console.error("감정 분석 실패:", emotionError);
-            emotionAnalysis = `\n\n⚠️ 감정 분석을 수행할 수 없습니다: ${emotionError.message || '알 수 없는 오류'}`;
-          }
-        }
+        emotionAnalysis = `\n\n📊 감정 분석:\n일기를 저장하면 자동으로 감정 분석 결과를 확인할 수 있습니다.`;
       }
 
       // 대화 히스토리 생성 (백엔드 API 형식에 맞춤)

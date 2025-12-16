@@ -360,6 +360,15 @@ class DiaryMbtiService:
             processed_text = processed_text.replace('\t', ' ')
             processed_text = re.sub(r'\s+', ' ', processed_text).strip()
             
+            # 텍스트 길이 사전 검사
+            text_length = len(processed_text.replace(' ', ''))  # 공백 제외 글자 수
+            ic(f"텍스트 길이 (공백 제외): {text_length}자")
+            
+            # 텍스트가 너무 짧으면 평가불가
+            if text_length < 10:
+                ic(f"텍스트가 너무 짧음 ({text_length}자 < 10자): 평가불가로 판단")
+                return self._create_cannot_evaluate_result("텍스트가 너무 짧습니다")
+            
             # DL 모델로 예측 (4개 차원별)
             predictions = {}
             probabilities = {}
@@ -395,75 +404,60 @@ class DiaryMbtiService:
                     # 디버깅: 원본 확률 분포 출력 (중요!)
                     ic(f"[{label}] 원본 확률: 0={prob[0]:.4f}, 1={prob[1]:.4f}, 2={prob[2]:.4f} (예측: {pred})")
                     
-                    # MBTI 확률 조정 적용 (감정분석보다 보수적으로 - 평가불가를 더 존중)
-                    # 평가불가(0) 확률을 약간만 낮춰서 실제 MBTI 판단 가능하도록 조정
+                    # 모델의 원본 확률을 그대로 사용 (평가불가 판단을 존중)
                     adjusted_prob = prob.copy()
                     
-                    # 1. 평가불가 확률 0.92배로 조정 (8% 감소) - 감정분석(0.84)보다 완화
-                    # MBTI는 감정보다 판단이 어려우므로 더 보수적으로 처리
-                    adjusted_prob[0] = adjusted_prob[0] * 0.92
-                    # 정규화
-                    adjusted_prob = adjusted_prob / (adjusted_prob.sum() + 1e-10)
-                    ic(f"[{label}] 평가불가 확률 0.92배 조정: {prob[0]:.3f} -> {adjusted_prob[0]:.3f}")
+                    ic(f"[{label}] 원본 확률 그대로 사용: 0={prob[0]:.4f}, 1={prob[1]:.4f}, 2={prob[2]:.4f}")
                     
-                    # 2. 평가불가 확률 추가 감소: 다른 확률이 매우 높을 때만 추가 감소
-                    max_other_prob = max(adjusted_prob[1], adjusted_prob[2])
-                    cannot_evaluate_prob = adjusted_prob[0]
-                    
-                    # 다른 확률이 평가불가 확률의 90% 이상이고, 다른 확률이 30% 이상일 때만 추가 감소
-                    if max_other_prob >= cannot_evaluate_prob * 0.9 and max_other_prob >= 0.3:
-                        adjusted_prob[0] = adjusted_prob[0] * 0.90  # 10% 추가 감소 (감정분석 0.85보다 완화)
-                        # 정규화
-                        adjusted_prob = adjusted_prob / (adjusted_prob.sum() + 1e-10)
-                        ic(f"[{label}] 다른 확률이 매우 높음 ({max_other_prob:.3f} vs {cannot_evaluate_prob:.3f}), 평가불가 확률 10% 추가 감소: {adjusted_prob[0]:.3f}")
-                    
-                    # 3. 최대 확률과 해당 클래스 찾기
+                    # 최대 확률과 해당 클래스 찾기
                     max_prob_idx = int(np.argmax(adjusted_prob))
                     max_prob = float(adjusted_prob[max_prob_idx])
                     
-                    # 4. 확률 임계값 설정 (MBTI는 더 보수적으로)
-                    CONFIDENCE_THRESHOLD = 0.3
-                    MIN_CONFIDENCE_FOR_EVALUATION = 0.20  # 평가 가능한 최소 확률 (20% 이상이면 평가 가능, 15%→20%로 상향)
-                    CANNOT_EVALUATE_THRESHOLD = 0.60  # 평가불가로 판단하는 최소 확률 (60% 이상이어야 평가불가로 판단, 50%→60%로 상향)
+                    # 확률 임계값 설정 (모델 재학습 전 임시 조정)
+                    # ⚠️ 모델이 평가불가를 과소 예측(0.2~0.4%)하고 있어 임계값 대폭 낮춤
+                    CONFIDENCE_THRESHOLD = 0.55  # MBTI 판단에 필요한 신뢰도 (55% 이상으로 상향)
+                    MIN_CONFIDENCE_FOR_EVALUATION = 0.35  # 평가 가능한 최소 확률 (35% 이상)
+                    CANNOT_EVALUATE_THRESHOLD = 0.05  # 평가불가로 판단하는 최소 확률 (5% 이상, 모델 재학습 후 상향 예정)
+                    CANNOT_EVALUATE_GAP = 0.10  # 평가불가 확률과 최대 확률의 차이가 10% 미만이면 평가불가
                     
-                    # 5. 최종 예측 결정 (감정분석과 동일한 로직)
-                    if max_prob_idx == 0:
-                        # 평가불가가 최대 확률인 경우
-                        if max_prob >= CANNOT_EVALUATE_THRESHOLD:
-                            # 평가불가 확률이 50% 이상이면 평가불가로 판단
+                    # 최종 예측 결정 (모델의 평가불가 판단을 존중)
+                    cannot_evaluate_prob = float(adjusted_prob[0])
+                    
+                    # 확률 정렬 (내림차순): [최고, 두번째, 평가불가]
+                    sorted_indices = np.argsort(adjusted_prob)[::-1]
+                    top_prob = float(adjusted_prob[sorted_indices[0]])
+                    second_prob = float(adjusted_prob[sorted_indices[1]]) if len(sorted_indices) > 1 else 0.0
+                    
+                    # 1. 평가불가 확률이 임계값 이상이면 평가불가
+                    if cannot_evaluate_prob >= CANNOT_EVALUATE_THRESHOLD:
+                        # 추가 조건: 평가불가 확률이 최고 확률과 비슷하거나 더 높으면 확실히 평가불가
+                        prob_gap = top_prob - cannot_evaluate_prob
+                        if prob_gap < CANNOT_EVALUATE_GAP or cannot_evaluate_prob > top_prob:
                             final_pred = 0
-                            ic(f"[{label}] 평가불가가 최대 확률 ({max_prob:.3f})이고 임계값({CANNOT_EVALUATE_THRESHOLD}) 이상: 평가불가로 판단")
+                            ic(f"[{label}] 평가불가 확률 높음 ({cannot_evaluate_prob:.3f} >= {CANNOT_EVALUATE_THRESHOLD}, 확률차이={prob_gap:.3f}): 평가불가로 판단")
+                        # 평가불가 확률이 높지만 다른 클래스가 더 명확하면 해당 클래스 선택
+                        elif max_prob_idx != 0 and top_prob >= CONFIDENCE_THRESHOLD and prob_gap >= CANNOT_EVALUATE_GAP:
+                            final_pred = max_prob_idx
+                            ic(f"[{label}] 평가불가 확률 높지만 다른 클래스가 더 명확 (평가불가={cannot_evaluate_prob:.3f}, 최고={top_prob:.3f}, 차이={prob_gap:.3f}): {final_pred}로 판단")
                         else:
-                            # 평가불가 확률이 낮으면 두 번째로 높은 것으로 확인
-                            sorted_indices = np.argsort(adjusted_prob)[::-1]
-                            if len(sorted_indices) > 1:
-                                second_max_idx = int(sorted_indices[1])
-                                if second_max_idx != 0:
-                                    second_max_prob = float(adjusted_prob[second_max_idx])
-                                    # 두 번째 확률이 15% 이상이면 그걸 선택
-                                    if second_max_prob >= MIN_CONFIDENCE_FOR_EVALUATION:
-                                        final_pred = int(second_max_idx)
-                                        ic(f"[{label}] 평가불가 확률 낮음 ({max_prob:.3f}), 두 번째 선택: {final_pred} ({second_max_prob:.3f})")
-                                    else:
-                                        # 두 번째 확률도 낮으면 평가불가
-                                        final_pred = 0
-                                        ic(f"[{label}] 평가불가가 최대이지만 낮음 ({max_prob:.3f}), 다른 확률도 낮음: 평가불가로 판단")
-                                else:
-                                    final_pred = 0
-                            else:
-                                final_pred = 0
-                    # 최대 확률이 충분히 높으면 모델 예측 사용
-                    elif max_prob >= CONFIDENCE_THRESHOLD:
-                        final_pred = max_prob_idx
-                        ic(f"[{label}] 최대 확률 충분 ({max_prob:.3f}): {final_pred}로 판단")
-                    # 최대 확률이 낮은 경우에도 모델 예측 사용 (15% 이상이면)
-                    elif max_prob >= MIN_CONFIDENCE_FOR_EVALUATION:
-                        final_pred = max_prob_idx
-                        ic(f"[{label}] 모델 예측 사용: {final_pred} ({max_prob:.3f})")
-                    # 확률이 매우 낮으면 평가불가
+                            final_pred = 0
+                            ic(f"[{label}] 평가불가 확률이 높고 다른 클래스도 불명확: 평가불가로 판단")
+                    
+                    # 2. 평가불가가 낮은 경우, 최대 확률이 충분히 높고 평가불가 확률과 충분한 차이가 있어야 판단
+                    elif max_prob_idx != 0 and top_prob >= CONFIDENCE_THRESHOLD:
+                        # 평가불가 확률과의 차이 확인
+                        prob_gap_from_cannot = top_prob - cannot_evaluate_prob
+                        if prob_gap_from_cannot >= CANNOT_EVALUATE_GAP:
+                            final_pred = max_prob_idx
+                            ic(f"[{label}] 신뢰도 충분 ({top_prob:.3f} >= {CONFIDENCE_THRESHOLD}, 평가불가와 차이={prob_gap_from_cannot:.3f}): {final_pred}로 판단")
+                        else:
+                            final_pred = 0
+                            ic(f"[{label}] 신뢰도는 충분하나 평가불가 확률과 차이가 작음 (최고={top_prob:.3f}, 평가불가={cannot_evaluate_prob:.3f}, 차이={prob_gap_from_cannot:.3f}): 평가불가로 판단")
+                    
+                    # 3. 신뢰도가 낮으면 평가불가
                     else:
                         final_pred = 0
-                        ic(f"[{label}] 확률 매우 낮음 ({max_prob:.3f}): 평가불가로 판단")
+                        ic(f"[{label}] 신뢰도 낮음 (최대확률={top_prob:.3f} < {CONFIDENCE_THRESHOLD}, 평가불가={cannot_evaluate_prob:.3f}): 평가불가로 판단")
                     
                     predictions[label] = int(final_pred)
                     probabilities[label] = {
@@ -479,24 +473,33 @@ class DiaryMbtiService:
                     # 선택된 클래스의 확률 퍼센트
                     probabilities[label]['selected_percent'] = round(float(adjusted_prob[final_pred]) * 100, 1)
                     
-                    # 불확실성(uncertainty) 계산: 최고 확률 - 두 번째 확률
+                    # 확률 차이(확신도 차이) 계산: 최고 확률 - 두 번째 확률
                     sorted_probs = np.sort(adjusted_prob)[::-1]
                     if len(sorted_probs) >= 2:
                         prob_diff = float(sorted_probs[0] - sorted_probs[1])
-                        probabilities[label]['uncertainty'] = prob_diff
+                        probabilities[label]['confidence_gap'] = prob_diff  # 확신도 차이 (높을수록 확실)
+                        
+                        # 실제 불확실성 계산: 엔트로피 (낮을수록 확실, 높을수록 불확실)
+                        # 엔트로피 = -Σ(p * log(p)), 0~log(3) 범위, 높을수록 불확실
+                        entropy = float(-np.sum(adjusted_prob * np.log(adjusted_prob + 1e-10)))  # 1e-10으로 0 나눔 방지
+                        max_entropy = np.log(len(adjusted_prob))  # 최대 엔트로피 (log(3) ≈ 1.099)
+                        normalized_entropy = entropy / max_entropy  # 0~1 범위로 정규화 (1에 가까울수록 불확실)
+                        probabilities[label]['uncertainty'] = normalized_entropy  # 실제 불확실성 (0~1, 높을수록 불확실)
+                        
                         probabilities[label]['confidence'] = float(sorted_probs[0])  # 최고 확률 = 신뢰도
                         probabilities[label]['confidence_percent'] = round(float(sorted_probs[0]) * 100, 1)  # 신뢰도 퍼센트
                         # 애매한 일기 판단: 확률 차이가 0.1 미만이면 애매함 (Python bool로 변환)
                         probabilities[label]['is_ambiguous'] = bool(prob_diff < 0.1)
                     else:
-                        probabilities[label]['uncertainty'] = 0.0
+                        probabilities[label]['confidence_gap'] = 0.0
+                        probabilities[label]['uncertainty'] = 1.0  # 확률 정보가 없으면 최대 불확실
                         probabilities[label]['confidence'] = float(sorted_probs[0]) if len(sorted_probs) > 0 else 0.0
                         probabilities[label]['confidence_percent'] = round(probabilities[label]['confidence'] * 100, 1)
                         probabilities[label]['is_ambiguous'] = True
                     
                     # 디버깅: 최종 예측 및 확률 출력 (항상 출력)
                     ic(f"[{label}] 최종 예측: {final_pred} (조정 확률: 0={adjusted_prob[0]:.4f}, 1={adjusted_prob[1]:.4f}, 2={adjusted_prob[2]:.4f})")
-                    ic(f"[{label}] 불확실성: {probabilities[label]['uncertainty']:.4f}, 신뢰도: {probabilities[label]['confidence']:.4f}, 애매함: {probabilities[label]['is_ambiguous']}")
+                    ic(f"[{label}] 확신도 차이: {probabilities[label]['confidence_gap']:.4f}, 불확실성(엔트로피): {probabilities[label]['uncertainty']:.4f}, 신뢰도: {probabilities[label]['confidence']:.4f}, 애매함: {probabilities[label]['is_ambiguous']}")
                     
                     # 디버깅: 원본 vs 조정된 확률 비교 (항상 출력)
                     if final_pred != pred:
@@ -525,9 +528,11 @@ class DiaryMbtiService:
             
             # 전체 MBTI 불확실성 및 신뢰도 계산 (평균)
             total_uncertainty = float(np.mean([probabilities[label].get('uncertainty', 0.0) for label in self.mbti_labels]))
+            total_confidence_gap = float(np.mean([probabilities[label].get('confidence_gap', 0.0) for label in self.mbti_labels]))
             total_confidence = float(np.mean([probabilities[label].get('confidence', 0.0) for label in self.mbti_labels]))
             total_confidence_percent = round(total_confidence * 100, 1)  # 전체 평균 신뢰도 퍼센트
-            is_ambiguous_overall = bool(total_uncertainty < 0.1)  # 전체적으로 애매한지 판단 (Python bool로 변환)
+            # 전체적으로 애매한지 판단: 불확실성(엔트로피)이 0.3 이상이면 애매함 (엔트로피는 높을수록 불확실)
+            is_ambiguous_overall = bool(total_uncertainty >= 0.3)  # 전체적으로 애매한지 판단 (Python bool로 변환)
             
             # 차원별 애매함 정보
             ambiguous_dimensions = [label for label in self.mbti_labels if probabilities[label].get('is_ambiguous', False)]
@@ -558,6 +563,64 @@ class DiaryMbtiService:
         except Exception as e:
             ic(f"예측 오류: {e}")
             raise
+    
+    def _create_cannot_evaluate_result(self, reason: str) -> Dict[str, Any]:
+        """
+        평가불가 결과 생성 헬퍼 메서드
+        
+        Args:
+            reason: 평가불가 이유
+        
+        Returns:
+            평가불가 결과 딕셔너리
+        """
+        ic(f"평가불가 결과 생성: {reason}")
+        
+        # 모든 차원을 평가불가(0)로 설정
+        predictions = {
+            'E_I': 0,
+            'S_N': 0,
+            'T_F': 0,
+            'J_P': 0
+        }
+        
+        # 확률도 평가불가에 100% 설정
+        probabilities = {}
+        dimension_percentages = {}
+        for label in ['E_I', 'S_N', 'T_F', 'J_P']:
+            prob_data = {
+                '0': 1.0,  # 평가불가 100%
+                '1': 0.0,
+                '2': 0.0,
+                '0_percent': 100.0,
+                '1_percent': 0.0,
+                '2_percent': 0.0,
+                'selected_percent': 100.0,
+                'uncertainty': 1.0,  # 불확실성 최대
+                'confidence': 1.0,  # 평가불가에 대한 신뢰도 100%
+                'confidence_percent': 100.0,
+                'is_ambiguous': False,  # 명확하게 평가불가
+                'selected': '?'
+            }
+            probabilities[label] = prob_data
+            dimension_percentages[label] = prob_data
+        
+        return {
+            'mbti_type': '????',  # 평가불가를 나타내는 특수 타입
+            'E_I': '?',
+            'S_N': '?',
+            'T_F': '?',
+            'J_P': '?',
+            'predictions': predictions,
+            'probabilities': probabilities,
+            'dimension_percentages': dimension_percentages,  # 프론트 호환성
+            'confidence': 1.0,  # 평가불가 판단에 대한 신뢰도
+            'total_confidence_percent': 100.0,
+            'cannot_evaluate': True,
+            'cannot_evaluate_reason': reason,
+            'model_type': 'dl',
+            'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
     
     def load_model(self) -> bool:
         """DL 모델 로드 (4개 차원별)"""

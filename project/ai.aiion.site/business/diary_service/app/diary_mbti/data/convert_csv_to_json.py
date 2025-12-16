@@ -2,14 +2,21 @@
 """CSV 파일을 JSON으로 변환"""
 import csv
 import json
+import os
 from pathlib import Path
 
-# 변환할 파일들
+# 스크립트 파일이 있는 디렉토리로 작업 디렉토리 변경
+script_dir = Path(__file__).parent.absolute()
+os.chdir(script_dir)
+
+print(f"작업 디렉토리: {os.getcwd()}")
+
+# 변환할 파일들 (실제 파일명에 맞게 수정)
 files = [
-    ("mbti_corpus_modern_E_I_20000.csv", "mbti_corpus_modern_E_I_20000.json", "E_I"),
-    ("mbti_corpus_modern_S_N_20000.csv", "mbti_corpus_modern_S_N_20000.json", "S_N"),
-    ("mbti_corpus_modern_T_F_20000.csv", "mbti_corpus_modern_T_F_20000.json", "T_F"),
-    ("mbti_corpus_modern_J_P_20000.csv", "mbti_corpus_modern_J_P_20000.json", "J_P"),
+    ("mbti_corpus_modern_E_I_20000 (1).csv", "mbti_corpus_modern_E_I_20000.json", "E_I"),
+    ("mbti_corpus_modern_S_N_20000 (1).csv", "mbti_corpus_modern_S_N_20000.json", "S_N"),
+    ("mbti_corpus_modern_T_F_20000 (1).csv", "mbti_corpus_modern_T_F_20000.json", "T_F"),
+    ("mbti_corpus_modern_J_P_20000 (1).csv", "mbti_corpus_modern_J_P_20000.json", "J_P"),
 ]
 
 print("=" * 80)
@@ -24,6 +31,8 @@ for csv_file, json_file, label_col in files:
     
     if not csv_path.exists():
         print(f"  [ERROR] File not found: {csv_file}")
+        print(f"  Current directory: {os.getcwd()}")
+        print(f"  CSV path (absolute): {csv_path.absolute()}")
         continue
     
     # CSV 읽기
@@ -60,4 +69,3 @@ for csv_file, json_file, label_col in files:
 print("\n" + "=" * 80)
 print("모든 변환 완료!")
 print("=" * 80)
-

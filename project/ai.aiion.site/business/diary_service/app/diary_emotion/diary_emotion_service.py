@@ -1,7 +1,6 @@
 """
 Diary Emotion Service
-일기 감정 분류 머신러닝 서비스
-판다스, 넘파이, 사이킷런을 사용한 데이터 처리 및 머신러닝 서비스
+일기 감정 분류 딥러닝 서비스 (DL 전용)
 """
 
 import sys
@@ -10,14 +9,9 @@ from typing import List, Dict, Optional, Any
 import pandas as pd
 import numpy as np
 import pickle
-import os
 from datetime import datetime
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-# hstack 제거됨 (Word2Vec 제거로 불필요)
+from sklearn.metrics import classification_report, confusion_matrix
 
 # ic 먼저 정의
 try:
@@ -28,24 +22,18 @@ except ImportError:
             print(*args, **kwargs)
         return args[0] if args else None
 
-# Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해를 제공하므로 불필요
-
 # 공통 모듈 경로 추가 (business/diary_service/app이 루트)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# DL 전용 import
 from diary_emotion.diary_emotion_dataset import DiaryEmotionDataSet
-from diary_emotion.diary_emotion_model import DiaryEmotionModel
 from diary_emotion.diary_emotion_method import DiaryEmotionMethod
-from diary_emotion.diary_emotion_schema import DiaryEmotionSchema
+from diary_emotion.diary_emotion_model import DiaryEmotionDLModel, TORCH_AVAILABLE
+from diary_emotion.diary_emotion_dl_trainer import DiaryEmotionDLTrainer
 
-# 딥러닝 모델 및 트레이너 (옵션)
-try:
-    from diary_emotion.diary_emotion_model import DiaryEmotionDLModel, TORCH_AVAILABLE
-    from diary_emotion.diary_emotion_dl_trainer import DiaryEmotionDLTrainer
-    DL_AVAILABLE = TORCH_AVAILABLE
-except ImportError:
-    DL_AVAILABLE = False
-    ic("경고: 딥러닝 모델을 사용할 수 없습니다.")
+DL_AVAILABLE = TORCH_AVAILABLE
+if not DL_AVAILABLE:
+    raise ImportError("딥러닝 라이브러리(PyTorch)가 필요합니다.")
 
 
 class DiaryEmotionService:
@@ -180,43 +168,6 @@ class DiaryEmotionService:
             ic(f"전처리 오류: {e}")
             raise
     
-    def modeling(self):
-        """모델링 설정"""
-        ic("😎😎 모델링 시작")
-        
-        try:
-            if self.df is None:
-                raise ValueError("데이터가 없습니다. preprocess()를 먼저 실행하세요.")
-            
-            # 텍스트 벡터화 (TF-IDF) - 정확도 향상을 위해 파라미터 조정
-            # 문맥 이해를 위해 더 긴 n-gram 사용
-            self.model_obj.vectorizer = TfidfVectorizer(
-                max_features=10000,  # 5000 -> 10000으로 증가 (더 많은 특징 추출)
-                ngram_range=(1, 4),  # (1,3) -> (1,4)로 증가 (4-gram까지 포함, 문맥 더 많이 반영)
-                min_df=1,  # 2 -> 1로 감소 (더 많은 단어 포함)
-                max_df=0.90,  # 0.95 -> 0.90으로 감소 (너무 흔한 단어 제거)
-                sublinear_tf=True  # 로그 스케일링으로 정확도 향상
-            )
-            
-            # Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해를 제공
-            # 모델 초기화 (Random Forest) - 정확도 향상을 위해 하이퍼파라미터 튜닝
-            self.model_obj.model = RandomForestClassifier(
-                n_estimators=200,  # 100 -> 200으로 증가 (더 많은 트리)
-                max_depth=30,  # 20 -> 30으로 증가 (더 깊은 트리)
-                min_samples_split=2,  # 분할 최소 샘플 수
-                min_samples_leaf=1,  # 리프 노드 최소 샘플 수
-                max_features='sqrt',  # 특징 선택 방식
-                random_state=42,
-                n_jobs=-1,
-                class_weight='balanced'  # 클래스 불균형 처리
-            )
-            
-            ic("😎😎 모델링 완료")
-            
-        except Exception as e:
-            ic(f"모델링 오류: {e}")
-            raise
-    
     def learning(
         self, 
         epochs: int = 3, 
@@ -228,91 +179,19 @@ class DiaryEmotionService:
         use_amp: bool = True,
         label_smoothing: float = 0.0  # Label smoothing (0.0 = 비활성화, 0.1 = 권장값)
     ):
-        """모델 학습 (ML 또는 DL)"""
-        ic(f"😎😎 학습 시작: model_type={self.model_type}")
+        """모델 학습 (DL 전용)"""
+        ic(f"😎😎 DL 학습 시작")
         
-        # 모델 타입에 따라 분기
-        if self.model_type == "dl":
-            return self._learning_dl(
-                epochs=epochs, 
-                batch_size=batch_size, 
-                freeze_bert_layers=freeze_bert_layers,
-                learning_rate=learning_rate,
-                max_length=max_length,
-                early_stopping_patience=early_stopping_patience,
-                use_amp=use_amp,
-                label_smoothing=label_smoothing
-            )
-        else:
-            return self._learning_ml()
-    
-    def _learning_ml(self):
-        """머신러닝 모델 학습 (기존)"""
-        ic("😎😎 ML 학습 시작")
-        
-        try:
-            if self.df is None:
-                raise ValueError("데이터가 없습니다. preprocess()를 먼저 실행하세요.")
-            if self.model_obj.model is None:
-                raise ValueError("모델이 없습니다. modeling()을 먼저 실행하세요.")
-            
-            # 텍스트 벡터화
-            X_text = self.df['text'].values
-            
-            # TF-IDF 벡터화 (Word2Vec 제거됨 - BERT가 더 우수한 문맥 이해 제공)
-            X = self.model_obj.vectorizer.fit_transform(X_text)
-            ic(f"TF-IDF 벡터화 완료: {X.shape}")
-            
-            # 라벨 추출 (emotion)
-            y = self.df['emotion'].values
-            
-            # 학습/테스트 데이터 분할
-            # sparse matrix와 텍스트를 함께 분할하기 위해 인덱스 기반으로 분할
-            indices = list(range(len(y)))
-            
-            # stratify 사용 가능 여부 확인 (각 클래스가 최소 2개 이상의 샘플 필요)
-            from collections import Counter
-            class_counts = Counter(y)
-            min_class_count = min(class_counts.values()) if class_counts else 0
-            can_stratify = min_class_count >= 2
-            
-            if can_stratify:
-                ic(f"클래스별 샘플 수: {dict(class_counts)}, stratify 사용")
-                train_indices, test_indices = train_test_split(
-                    indices, test_size=0.2, random_state=42, stratify=y
-                )
-            else:
-                ic(f"클래스별 샘플 수: {dict(class_counts)}, stratify 사용 불가 (최소 샘플 수: {min_class_count})")
-                train_indices, test_indices = train_test_split(
-                    indices, test_size=0.2, random_state=42
-                )
-            
-            # sparse matrix를 리스트 인덱스로 인덱싱
-            X_train = X[train_indices]
-            X_test = X[test_indices]
-            y_train = y[train_indices]
-            y_test = y[test_indices]
-            
-            # 모델 학습
-            self.model_obj.model.fit(X_train, y_train)
-            
-            # 학습 데이터셋 저장
-            self.dataset.train = pd.DataFrame({
-                'text': self.df['text'].iloc[train_indices].values,
-                'emotion': y_train
-            })
-            self.dataset.test = pd.DataFrame({
-                'text': self.df['text'].iloc[test_indices].values,
-                'emotion': y_test
-            })
-            
-            ic(f"학습 데이터: {X_train.shape[0]} 개")
-            ic(f"테스트 데이터: {X_test.shape[0]} 개")
-            ic("😎😎 ML 학습 완료")
-            
-        except Exception as e:
-            ic(f"ML 학습 오류: {e}")
-            raise
+        return self._learning_dl(
+            epochs=epochs, 
+            batch_size=batch_size, 
+            freeze_bert_layers=freeze_bert_layers,
+            learning_rate=learning_rate,
+            max_length=max_length,
+            early_stopping_patience=early_stopping_patience,
+            use_amp=use_amp,
+            label_smoothing=label_smoothing
+        )
     
     def _learning_dl(
         self, 
@@ -356,7 +235,6 @@ class DiaryEmotionService:
             labels = self.df['emotion'].tolist()
             
             # 학습/검증 분할
-            from sklearn.model_selection import train_test_split
             train_texts, val_texts, train_labels, val_labels = train_test_split(
                 texts, labels, test_size=0.2, random_state=42, stratify=labels
             )
@@ -398,104 +276,9 @@ class DiaryEmotionService:
             ic(f"DL 학습 오류: {e}")
             raise
     
-    def evaluate(self, model_type: Optional[str] = None):
-        """모델 평가 (ML 또는 DL)"""
-        # model_type이 지정되지 않으면 인스턴스의 model_type 사용
-        eval_model_type = model_type or self.model_type
-        
-        if eval_model_type == "dl":
-            return self._evaluate_dl()
-        else:
-            return self._evaluate_ml()
-    
-    def _evaluate_ml(self):
-        """ML 모델 평가"""
-        ic("😎😎 ML 평가 시작")
-        
-        try:
-            if self.model_obj.model is None:
-                raise ValueError("ML 모델이 없습니다. learning()을 먼저 실행하세요.")
-            
-            # 테스트 데이터셋이 없으면 자동으로 재생성
-            if self.dataset.test is None:
-                ic("테스트 데이터셋이 없어서 자동으로 재생성합니다...")
-                if self.df is None:
-                    # 데이터가 없으면 전처리부터 실행
-                    self.preprocess()
-                
-                # 학습/테스트 분할 재생성 (학습 시와 동일한 방식)
-                texts = self.df['text'].values
-                labels = self.df['emotion'].values
-                
-                from collections import Counter
-                class_counts = Counter(labels)
-                min_class_count = min(class_counts.values()) if class_counts else 0
-                can_stratify = min_class_count >= 2
-                
-                indices = list(range(len(labels)))
-                if can_stratify:
-                    train_indices, test_indices = train_test_split(
-                        indices, test_size=0.2, random_state=42, stratify=labels
-                    )
-                else:
-                    train_indices, test_indices = train_test_split(
-                        indices, test_size=0.2, random_state=42
-                    )
-                
-                # 테스트 데이터셋만 저장 (평가에 필요)
-                self.dataset.test = pd.DataFrame({
-                    'text': self.df['text'].iloc[test_indices].values,
-                    'emotion': labels[test_indices]
-                })
-                ic(f"테스트 데이터셋 재생성 완료: {len(self.dataset.test)}개")
-            
-            # 테스트 데이터 준비
-            X_test_text = self.dataset.test['text'].values
-            X_test_tfidf = self.model_obj.vectorizer.transform(X_test_text)
-            
-            # TF-IDF만 사용 (Word2Vec 제거됨)
-            X_test = X_test_tfidf
-            y_test = self.dataset.test['emotion'].values
-            
-            # 예측
-            y_pred = self.model_obj.model.predict(X_test)
-            
-            # 정확도 계산
-            accuracy = accuracy_score(y_test, y_pred)
-            ic(f"ML 정확도: {accuracy:.4f}")
-            
-            # 분류 보고서
-            emotion_labels = {
-                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
-                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
-            }
-            # 실제 데이터에 있는 클래스만 사용
-            unique_classes = sorted(set(list(y_test) + list(y_pred)))
-            target_names = [emotion_labels.get(i, f'클래스{i}') for i in unique_classes]
-            report = classification_report(
-                y_test, y_pred,
-                target_names=target_names,
-                output_dict=True,
-                zero_division=0
-            )
-            ic(f"ML 분류 보고서:\n{classification_report(y_test, y_pred, target_names=target_names, zero_division=0)}")
-            
-            # 혼동 행렬
-            cm = confusion_matrix(y_test, y_pred)
-            ic(f"ML 혼동 행렬:\n{cm}")
-            
-            ic("😎😎 ML 평가 완료")
-            
-            return {
-                'model_type': 'ml',
-                'accuracy': accuracy,
-                'classification_report': report,
-                'confusion_matrix': cm.tolist()
-            }
-            
-        except Exception as e:
-            ic(f"ML 평가 오류: {e}")
-            raise
+    def evaluate(self):
+        """모델 평가 (DL 전용)"""
+        return self._evaluate_dl()
     
     def _evaluate_dl(self):
         """DL 모델 평가"""
@@ -607,254 +390,6 @@ class DiaryEmotionService:
             예측 결과 딕셔너리
         """
         return self._predict_dl(text)
-    
-    def _predict_ml(self, text: str) -> Dict[str, Any]:
-        """ML 모델 예측 (기존)"""
-        try:
-            if self.model_obj.model is None:
-                raise ValueError("ML 모델이 없습니다. learning()을 먼저 실행하세요.")
-            
-            # 텍스트 전처리 (줄바꿈, 탭을 공백으로 변환하고 연속 공백 통합)
-            import re
-            processed_text = str(text)
-            # 줄바꿈(\n, \r\n)을 공백으로 변환
-            processed_text = re.sub(r'\r?\n', ' ', processed_text)
-            # 탭 문자를 공백으로 변환
-            processed_text = processed_text.replace('\t', ' ')
-            # 연속된 공백을 하나로 통합
-            processed_text = re.sub(r'\s+', ' ', processed_text).strip()
-            
-            # TF-IDF 벡터화
-            X_tfidf = self.model_obj.vectorizer.transform([processed_text])
-            
-            # TF-IDF만 사용 (Word2Vec 제거됨)
-            X = X_tfidf
-            
-            # 예측 및 확률 계산
-            prediction = self.model_obj.model.predict(X)[0]
-            probabilities = self.model_obj.model.predict_proba(X)[0]
-            
-            emotion_labels = {
-                0: '평가불가', 1: '기쁨', 2: '슬픔', 3: '분노', 4: '두려움', 5: '혐오', 6: '놀람',
-                7: '신뢰', 8: '기대', 9: '불안', 10: '안도', 11: '후회', 12: '그리움', 13: '감사', 14: '외로움'
-            }
-            
-            # 키워드 기반 가중치 보정
-            probabilities = self._apply_keyword_weights(text, probabilities, emotion_labels)
-            
-            # 평가불가 확률 0.84배로 조정 (16% 감소)
-            if len(probabilities) > 0:
-                probabilities[0] = probabilities[0] * 0.84
-                # 정규화
-                probabilities = probabilities / (probabilities.sum() + 1e-10)
-                ic(f"평가불가 확률 0.84배로 조정 (16% 감소)")
-            
-            # 평가불가 확률 추가 감소: 다른 감정의 확률이 높으면 평가불가 확률을 더 낮춤
-            if len(probabilities) > 0:
-                # 평가불가(0번)를 제외한 다른 감정의 최대 확률
-                other_emotions_probs = probabilities[1:] if len(probabilities) > 1 else []
-                if len(other_emotions_probs) > 0:
-                    max_other_emotion_prob = float(np.max(other_emotions_probs))
-                    cannot_evaluate_prob = float(probabilities[0])
-                    
-                    # 다른 감정의 최대 확률이 평가불가 확률보다 높거나 비슷하면 평가불가 확률 감소
-                    if max_other_emotion_prob >= cannot_evaluate_prob * 0.8:
-                        # 평가불가 확률을 15% 감소
-                        probabilities[0] = probabilities[0] * 0.85
-                        # 정규화
-                        probabilities = probabilities / (probabilities.sum() + 1e-10)
-                        ic(f"다른 감정 확률이 높음 ({max_other_emotion_prob:.3f} vs {cannot_evaluate_prob:.3f}), 평가불가 확률 15% 감소")
-            
-            # 슬픔 > 평범 > 기쁨 순서 조정: 슬픔 확률 증가, 기쁨 확률 감소 (미세 조정)
-            if len(probabilities) > 2:
-                sadness_prob = float(probabilities[2])  # 슬픔 (인덱스 2)
-                joy_prob = float(probabilities[1])      # 기쁨 (인덱스 1)
-                ordinary_prob = float(probabilities[0]) # 평범/평가불가 (인덱스 0)
-                
-                # 슬픔과 기쁨이 모두 일정 확률 이상일 때 미세 조정 (조건: 20% 이상)
-                if sadness_prob > 0.20 and joy_prob > 0.20:
-                    # 슬픔 확률 8% 증가 (미세 조정 강화)
-                    probabilities[2] = sadness_prob * 1.08
-                    # 기쁨 확률 8% 감소 (미세 조정 강화)
-                    probabilities[1] = joy_prob * 0.92
-                    # 정규화
-                    probabilities = probabilities / (probabilities.sum() + 1e-10)
-                    ic(f"슬픔/기쁨 확률 미세 조정: 슬픔 {sadness_prob:.3f} -> {probabilities[2]:.3f}, 기쁨 {joy_prob:.3f} -> {probabilities[1]:.3f}")
-                
-                # 슬픔이 기쁨보다 낮으면 추가 미세 조정
-                if probabilities[2] < probabilities[1]:
-                    # 슬픔과 기쁨의 차이를 줄이기 위해 추가 미세 조정
-                    diff = probabilities[1] - probabilities[2]
-                    if diff > 0.005:  # 차이가 0.5% 이상이면 (조건 완화)
-                        # 슬픔 확률 추가 미세 증가 (5%)
-                        probabilities[2] = probabilities[2] * 1.05
-                        # 기쁨 확률 추가 미세 감소 (5%)
-                        probabilities[1] = probabilities[1] * 0.95
-                        # 정규화
-                        probabilities = probabilities / (probabilities.sum() + 1e-10)
-                        ic(f"슬픔 < 기쁨 순서 역전 방지 (미세 조정): 슬픔 {probabilities[2]:.3f}, 기쁨 {probabilities[1]:.3f}")
-                
-                # 슬픔이 평범보다 낮으면 추가 조정
-                if probabilities[2] < probabilities[0]:
-                    # 슬픔 확률을 평범보다 약간 높게 조정
-                    diff = probabilities[0] - probabilities[2]
-                    if diff > 0.005:  # 차이가 0.5% 이상이면
-                        # 슬픔 확률 추가 미세 증가 (3%)
-                        probabilities[2] = probabilities[2] * 1.03
-                        # 정규화
-                        probabilities = probabilities / (probabilities.sum() + 1e-10)
-                        ic(f"슬픔 < 평범 순서 역전 방지 (미세 조정): 슬픔 {probabilities[2]:.3f}, 평범 {probabilities[0]:.3f}")
-            
-            # 긍정 감정 확률 0.02씩 증가 (기쁨, 감사, 신뢰, 기대, 안도)
-            if len(probabilities) > 14:
-                # 기쁨 (1)
-                if probabilities[1] > 0:
-                    joy_prob_before = float(probabilities[1])
-                    probabilities[1] = probabilities[1] + 0.02
-                    ic(f"기쁨 확률 0.02 증가: {joy_prob_before:.3f} -> {probabilities[1]:.3f}")
-                
-                # 감사 (13)
-                if probabilities[13] > 0:
-                    gratitude_prob_before = float(probabilities[13])
-                    probabilities[13] = probabilities[13] + 0.02
-                    ic(f"감사 확률 0.02 증가: {gratitude_prob_before:.3f} -> {probabilities[13]:.3f}")
-                
-                # 신뢰 (7)
-                if probabilities[7] > 0:
-                    trust_prob_before = float(probabilities[7])
-                    probabilities[7] = probabilities[7] + 0.02
-                    ic(f"신뢰 확률 0.02 증가: {trust_prob_before:.3f} -> {probabilities[7]:.3f}")
-                
-                # 기대 (8)
-                if probabilities[8] > 0:
-                    expectation_prob_before = float(probabilities[8])
-                    probabilities[8] = probabilities[8] + 0.02
-                    ic(f"기대 확률 0.02 증가: {expectation_prob_before:.3f} -> {probabilities[8]:.3f}")
-                
-                # 안도 (10)
-                if probabilities[10] > 0:
-                    relief_prob_before = float(probabilities[10])
-                    probabilities[10] = probabilities[10] + 0.02
-                    ic(f"안도 확률 0.02 증가: {relief_prob_before:.3f} -> {probabilities[10]:.3f}")
-                
-                # 정규화
-                probabilities = probabilities / (probabilities.sum() + 1e-10)
-                ic(f"긍정 감정 확률 보정 완료 및 정규화")
-            
-            # 최대 확률과 해당 클래스 찾기
-            max_prob_idx = int(np.argmax(probabilities))
-            max_prob = float(probabilities[max_prob_idx])
-            
-            # 평가불가 확률 확인
-            cannot_evaluate_prob = float(probabilities[0]) if len(probabilities) > 0 else 0.0
-            
-            # 확률 임계값 설정
-            CONFIDENCE_THRESHOLD = 0.3
-            MIN_CONFIDENCE_FOR_EVALUATION = 0.15  # 평가 가능한 최소 확률 (15% 이상이면 평가 가능)
-            CANNOT_EVALUATE_THRESHOLD = 0.5  # 평가불가로 판단하는 최소 확률 (50% 이상이어야 평가불가로 판단)
-            
-            # 1. 최대 확률이 평가불가(0)인 경우 특별 처리
-            if max_prob_idx == 0:
-                # 평가불가가 가장 높은 확률이지만, 확률이 충분히 높아야만 평가불가로 판단
-                if max_prob >= CANNOT_EVALUATE_THRESHOLD:
-                    # 평가불가 확률이 50% 이상이면 평가불가로 판단
-                    final_prediction = 0
-                    final_label = '평가불가'
-                    ic(f"평가불가가 최대 확률 ({max_prob:.3f})이고 임계값({CANNOT_EVALUATE_THRESHOLD}) 이상: 평가불가로 판단")
-                else:
-                    # 평가불가 확률이 낮으면 두 번째로 높은 감정 확인
-                    sorted_indices = np.argsort(probabilities)[::-1]
-                    if len(sorted_indices) > 1 and len(probabilities) > 1:
-                        second_max_idx = int(sorted_indices[1])
-                        if 0 <= second_max_idx < len(probabilities):
-                            second_max_prob = float(probabilities[second_max_idx])
-                            # 두 번째 감정의 확률이 일정 수준 이상이면 그 감정 선택
-                            if second_max_prob >= MIN_CONFIDENCE_FOR_EVALUATION and second_max_idx != 0:
-                                final_prediction = second_max_idx
-                                final_label = emotion_labels.get(second_max_idx, f'클래스{second_max_idx}')
-                                ic(f"평가불가 확률 낮음 ({max_prob:.3f}), 두 번째 감정 선택: {final_label} ({second_max_prob:.3f})")
-                            else:
-                                # 두 번째 감정도 확률이 낮으면 평가불가
-                                final_prediction = 0
-                                final_label = '평가불가'
-                                ic(f"평가불가가 최대 확률이지만 낮음 ({max_prob:.3f}), 다른 감정도 낮음: 평가불가로 판단")
-                    else:
-                        final_prediction = 0
-                        final_label = '평가불가'
-                        ic(f"평가불가가 최대 확률 ({max_prob:.3f}): 평가불가로 판단")
-            # 2. 최대 확률이 충분히 높으면 모델 예측 사용 (우선순위 높음)
-            elif max_prob >= CONFIDENCE_THRESHOLD:
-                final_prediction = max_prob_idx
-                final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
-                ic(f"최대 확률 충분 ({max_prob:.3f}): {final_label}로 판단")
-            # 3. 최대 확률이 낮은 경우에도 모델 예측 사용 (모델이 학습 데이터로 판단)
-            elif max_prob >= MIN_CONFIDENCE_FOR_EVALUATION:
-                # 모델 예측 사용 (최대 확률이 15% 이상이면)
-                final_prediction = max_prob_idx
-                final_label = emotion_labels.get(max_prob_idx, '알 수 없음')
-                ic(f"모델 예측 사용: {final_label} ({max_prob:.3f})")
-            # 4. 확률이 매우 낮으면 평가불가
-            else:
-                # 확률이 매우 낮으면 평가불가
-                final_prediction = 0
-                final_label = '평가불가'
-                ic(f"확률 매우 낮음 ({max_prob:.3f}): 평가불가로 판단")
-            
-            # 확률 정보 구성 (상위 감정들에 집중하여 확률을 더 명확하게 표시)
-            # 상위 3개 감정의 확률을 추출하고 재분배
-            top_3_indices = np.argsort(probabilities)[::-1][:3]  # 상위 3개 인덱스
-            top_3_probs = probabilities[top_3_indices]  # 상위 3개 확률
-            
-            # 상위 3개 확률의 합
-            top_3_sum = top_3_probs.sum()
-            
-            # 상위 3개 확률을 재분배: 합이 0.85가 되도록 스케일링
-            # (나머지 12개 감정이 0.15를 차지)
-            if top_3_sum > 0:
-                scale_factor = 0.85 / top_3_sum
-                # 최대 2배까지만 스케일링 (너무 과도하게 증가하지 않도록)
-                scale_factor = min(scale_factor, 2.0)
-            else:
-                scale_factor = 1.0
-            
-            # 전체 확률 딕셔너리 생성
-            prob_dict = {}
-            total_prob = 0.0
-            
-            for i, prob in enumerate(probabilities):
-                label = emotion_labels.get(i, f'클래스{i}')
-                if i in top_3_indices:
-                    # 상위 3개는 스케일링된 확률 사용
-                    scaled_prob = float(prob * scale_factor)
-                    prob_dict[label] = scaled_prob
-                    total_prob += scaled_prob
-                else:
-                    # 나머지는 원래 확률을 약간 축소 (상위 3개에 집중)
-                    reduced_prob = float(prob * 0.15 / (probabilities.sum() - top_3_sum)) if (probabilities.sum() - top_3_sum) > 0 else float(prob * 0.1)
-                    prob_dict[label] = reduced_prob
-                    total_prob += reduced_prob
-            
-            # 최종 정규화: 모든 확률의 합이 1이 되도록
-            if total_prob > 0:
-                for label in prob_dict:
-                    prob_dict[label] = prob_dict[label] / total_prob
-            
-            # 최대 확률도 업데이트
-            max_prob_normalized = prob_dict.get(emotion_labels.get(max_prob_idx, '알 수 없음'), max_prob)
-            
-            return {
-                'emotion': final_prediction,
-                'emotion_label': final_label,
-                'probabilities': prob_dict,
-                'confidence': max_prob_normalized,  # 정규화된 최대 확률
-                'original_confidence': max_prob,  # 원래 최대 확률 (디버깅용)
-                'original_prediction': int(prediction)  # 원래 예측 결과도 포함 (디버깅용)
-            }
-            
-        except Exception as e:
-            ic(f"ML 예측 오류: {e}")
-            raise
-    
     def _predict_dl(self, text: str) -> Dict[str, Any]:
         """DL 모델 예측"""
         try:
@@ -1226,37 +761,10 @@ class DiaryEmotionService:
         return adjusted_probs
     
     def _try_load_model(self):
-        """모델 파일이 있으면 자동 로드 (ML 또는 DL)"""
+        """모델 파일이 있으면 자동 로드 (DL 전용)"""
         try:
-            # ML 모델 자동 로드
-            if self.model_type == "ml" and self.model_file.exists() and self.vectorizer_file.exists():
-                ic("ML 모델 파일 발견, 자동 로드 시도...")
-                with open(self.model_file, 'rb') as f:
-                    self.model_obj.model = pickle.load(f)
-                with open(self.vectorizer_file, 'rb') as f:
-                    self.model_obj.vectorizer = pickle.load(f)
-                # Word2Vec 제거됨
-                
-                # 메타데이터 확인 (CSV 파일이 업데이트되었는지 확인)
-                if self.metadata_file.exists():
-                    with open(self.metadata_file, 'rb') as f:
-                        metadata = pickle.load(f)
-                    # pathlib을 사용하여 파일 수정 시간 가져오기 (os 대신)
-                    csv_mtime = self.csv_file_path.stat().st_mtime
-                    if metadata.get('csv_mtime') == csv_mtime:
-                        ic("ML 모델 자동 로드 성공 (CSV 파일 변경 없음)")
-                        return True
-                    else:
-                        # CSV 파일이 업데이트되었지만, 기존 모델을 사용 (재학습 권장)
-                        ic("CSV 파일이 업데이트됨, 기존 ML 모델 사용 (재학습 권장: /train 엔드포인트 호출)")
-                        # 모델은 이미 로드되었으므로 그대로 사용
-                        return True
-                else:
-                    ic("ML 모델 자동 로드 성공 (메타데이터 없음)")
-                    return True
-            
             # DL 모델 자동 로드
-            elif self.model_type == "dl" and self.dl_model_file.exists():
+            if self.dl_model_file.exists():
                 ic("DL 모델 파일 발견, 자동 로드 시도...")
                 return self._load_model_dl()
             
@@ -1266,61 +774,8 @@ class DiaryEmotionService:
             return False
     
     def save_model(self):
-        """모델을 파일로 저장 (ML 또는 DL)"""
-        # 모델 타입에 따라 분기
-        if self.model_type == "dl":
-            return self._save_model_dl()
-        else:
-            return self._save_model_ml()
-    
-    def _save_model_ml(self):
-        """ML 모델 저장 (기존)"""
-        try:
-            if self.model_obj.model is None or self.model_obj.vectorizer is None:
-                raise ValueError("ML 모델이 학습되지 않았습니다. learning()을 먼저 실행하세요.")
-            
-            # 모델 디렉토리 생성 (존재하지 않으면 생성)
-            try:
-                self.model_dir.mkdir(parents=True, exist_ok=True)
-                ic(f"모델 디렉토리 확인/생성: {self.model_dir}")
-            except Exception as dir_error:
-                ic(f"Path.mkdir 실패: {dir_error}, os.makedirs로 재시도...")
-                # os.makedirs로 재시도 (이미 파일 상단에서 import됨)
-                os.makedirs(str(self.model_dir), exist_ok=True)
-                ic(f"os.makedirs로 디렉토리 생성 완료: {self.model_dir}")
-            
-            # 디렉토리 존재 확인
-            if not self.model_dir.exists():
-                raise OSError(f"모델 디렉토리를 생성할 수 없습니다: {self.model_dir}")
-            
-            # 모델 저장
-            with open(self.model_file, 'wb') as f:
-                pickle.dump(self.model_obj.model, f)
-            ic(f"모델 저장 완료: {self.model_file}")
-            
-            # Vectorizer 저장
-            with open(self.vectorizer_file, 'wb') as f:
-                pickle.dump(self.model_obj.vectorizer, f)
-            ic(f"Vectorizer 저장 완료: {self.vectorizer_file}")
-            
-            # Word2Vec 제거됨
-            
-            # 메타데이터 저장 (CSV 파일 수정 시간 포함)
-            # pathlib을 사용하여 파일 수정 시간 가져오기 (os 대신)
-            csv_mtime = self.csv_file_path.stat().st_mtime
-            metadata = {
-                'csv_mtime': csv_mtime,
-                'csv_path': str(self.csv_file_path),
-                'trained_at': datetime.now().isoformat(),
-                'data_count': len(self.df) if self.df is not None else 0
-            }
-            with open(self.metadata_file, 'wb') as f:
-                pickle.dump(metadata, f)
-            ic(f"메타데이터 저장 완료: {self.metadata_file}")
-            
-        except Exception as e:
-            ic(f"ML 모델 저장 오류: {e}")
-            raise
+        """모델을 파일로 저장 (DL 전용)"""
+        return self._save_model_dl()
     
     def _save_model_dl(self):
         """DL 모델 저장"""
@@ -1386,38 +841,9 @@ class DiaryEmotionService:
             ic(f"DL 모델 저장 오류: {e}")
             raise
     
-    def load_model(self, model_type: Optional[str] = None):
-        """모델 로드 (ML 또는 DL)"""
-        target_type = model_type or self.model_type
-        
-        if target_type == "dl":
-            return self._load_model_dl()
-        else:
-            return self._load_model_ml()
-    
-    def _load_model_ml(self):
-        """ML 모델 로드"""
-        try:
-            if not self.model_file.exists():
-                ic(f"ML 모델 파일이 없습니다: {self.model_file}")
-                return False
-            
-            # 모델 로드
-            with open(self.model_file, 'rb') as f:
-                self.model_obj.model = pickle.load(f)
-            
-            # Vectorizer 로드
-            with open(self.vectorizer_file, 'rb') as f:
-                self.model_obj.vectorizer = pickle.load(f)
-            
-            # Word2Vec 제거됨
-            
-            ic("ML 모델 로드 완료")
-            return True
-            
-        except Exception as e:
-            ic(f"ML 모델 로드 오류: {e}")
-            return False
+    def load_model(self):
+        """모델 로드 (DL 전용)"""
+        return self._load_model_dl()
     
     def _load_model_dl(self):
         """DL 모델 로드"""

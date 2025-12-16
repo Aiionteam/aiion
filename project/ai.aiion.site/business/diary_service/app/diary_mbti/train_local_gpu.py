@@ -23,15 +23,15 @@ from icecream import ic
 def main():
     """로컬에서 GPU로 MBTI DL 모델 학습"""
     
-    # JSON 파일 경로 설정 (현대 일기 + 이순신 난중일기)
+    # JSON 파일 경로 설정 (병합 데이터 + 이순신 난중일기)
     data_dir = Path(__file__).parent / "data"
     
-    # 파일셋 1: 현대 일기 (20,000개)
-    json_files_modern = {
-        'E_I': data_dir / "mbti_corpus_modern_E_I_20000.json",
-        'S_N': data_dir / "mbti_corpus_modern_S_N_20000.json",
-        'T_F': data_dir / "mbti_corpus_modern_T_F_20000.json",
-        'J_P': data_dir / "mbti_corpus_modern_J_P_20000.json"
+    # 파일셋 1: 병합 데이터 (22,500개 - 평가불가 포함, 현대 일기 + 0_split 데이터)
+    json_files_merged = {
+        'E_I': data_dir / "mbti_corpus_merged_E_I.json",
+        'S_N': data_dir / "mbti_corpus_merged_S_N.json",
+        'T_F': data_dir / "mbti_corpus_merged_T_F.json",
+        'J_P': data_dir / "mbti_corpus_merged_J_P.json"
     }
     
     # 파일셋 2: 이순신 난중일기 (1,748개)
@@ -43,7 +43,7 @@ def main():
     }
     
     # 모든 파일셋을 리스트로
-    all_json_files = [json_files_modern, json_files_leesoonsin]
+    all_json_files = [json_files_merged, json_files_leesoonsin]
     
     # 모든 JSON 파일 존재 확인
     all_exist = True
@@ -59,8 +59,8 @@ def main():
     ic("=" * 60)
     ic("로컬 GPU 학습 시작 (MBTI DL 모델 - JSON 데이터)")
     ic("학습 데이터:")
-    ic("  [파일셋 1] 현대 일기 (20,000개)")
-    for dimension, path in json_files_modern.items():
+    ic("  [파일셋 1] 병합 데이터 (22,500개 - 현대 일기 20K + 0_split 2.5K)")
+    for dimension, path in json_files_merged.items():
         ic(f"     [{dimension}] {path.name}")
     ic("  [파일셋 2] 이순신 난중일기 (1,748개)")
     for dimension, path in json_files_leesoonsin.items():
@@ -72,7 +72,7 @@ def main():
     dl_model_name = "koelectro_v3_base"  # 로컬 KoELECTRA v3 base 모델 사용
     
     service = DiaryMbtiService(
-        json_files=all_json_files,  # 현대 일기 + 이순신 일기
+        json_files=all_json_files,  # 병합 데이터 + 이순신 일기
         dl_model_name=dl_model_name
     )
     
@@ -82,23 +82,25 @@ def main():
     
     # DL 모델 학습 (4개 MBTI 차원별)
     ic("DL 모델 학습 시작 (GPU 사용 - RTX 4060 랩탑 최적화)...")
-    ic("✅ 최적화 설정:")
+    ic("✅ 최적화 설정 (속도 최적화):")
+    ic("   - Epochs: 4")
     ic("   - 배치 사이즈: 24 (8GB VRAM 최적화)")
     ic("   - Mixed Precision Training (FP16): 활성화")
-    ic("   - Freeze Layers: 6개 (하위 레이어 동결)")
-    ic("   - Max Length: 512 (더 긴 문맥 이해)")
-    ic("   - 분류: 3-class (0=평가불가, 1=첫번째, 2=두번째)")
-    ic("   - 데이터: 현대 일기(20K) + 이순신 일기(1.7K) = 약 22K")
+    ic("   - Freeze Layers: 5개 (더 많은 레이어 학습)")
+    ic("   - Max Length: 384 (일기 길이 최적화, 속도 30% 향상)")
+    ic("   - 분류: 3-class (0=평가불가, 1=성향1, 2=성향2)")
+    ic("   - 데이터: 병합 데이터(22.5K) + 이순신 일기(1.7K) = 약 24.2K")
+    ic("   - 클래스 가중치: 자동 적용 (3-class 불균형 해결)")
     ic("   - 예상 학습 시간: 약 2-3시간 (4개 차원별 학습)")
     
     try:
         history = service.learning(
-            epochs=5,
+            epochs=4,  # 24.2K 데이터로 충분한 학습
             batch_size=24,  # RTX 4060 랩탑 최적화 (8GB VRAM 고려)
-            freeze_bert_layers=6,  # 하위 레이어 동결로 학습 속도 향상
-            learning_rate=1.5e-5,  # 더 낮은 학습률로 안정적 학습
-            max_length=512,  # 더 긴 문맥 이해
-            early_stopping_patience=5  # 더 오래 기다림
+            freeze_bert_layers=5,  # 더 많은 레이어 학습
+            learning_rate=1.5e-5,  # 안정적 학습률
+            max_length=384,  # 일기 평균 길이 최적화 (속도 30% 향상)
+            early_stopping_patience=3  # 조기 종료 기준
         )
         
         ic("=" * 60)

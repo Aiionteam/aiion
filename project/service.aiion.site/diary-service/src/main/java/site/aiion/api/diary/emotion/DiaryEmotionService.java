@@ -22,6 +22,11 @@ public interface DiaryEmotionService {
     Messenger analyzeAndSave(Long diaryId, String title, String content);
     
     /**
+     * 일기 텍스트의 감정 분석 수행 및 저장 (비동기)
+     */
+    void analyzeAndSaveAsync(Long diaryId, String title, String content);
+    
+    /**
      * 일기 삭제 시 감정 분석 결과도 함께 삭제
      */
     Messenger deleteByDiaryId(Long diaryId);
