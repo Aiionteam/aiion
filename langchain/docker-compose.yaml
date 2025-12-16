@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: langchain-postgres
+    environment:
+      POSTGRES_USER: langchain
+      POSTGRES_PASSWORD: langchain
+      POSTGRES_DB: langchain
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langchain"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - langchain-network
+
+  langchain-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: langchain-helloworld
+    environment:
+      PGVECTOR_HOST: postgres
+      PGVECTOR_PORT: 5432
+      PGVECTOR_DATABASE: langchain
+      PGVECTOR_USER: langchain
+      PGVECTOR_PASSWORD: langchain
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - langchain-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  langchain-network:
+    driver: bridge
+

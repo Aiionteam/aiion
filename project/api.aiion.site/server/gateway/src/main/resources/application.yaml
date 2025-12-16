@@ -170,10 +170,6 @@ spring:
               filters:
                 - StripPrefix=1
             # AI 서비스 라우팅 (Python FastAPI)
-            - id: chatbot-service
-              uri: http://aihoyun-chatbot-service:9002
-              predicates:
-                - Path=/chatbot/**
             - id: weather-service
               uri: http://aihoyun-weather-service:9004
               predicates:

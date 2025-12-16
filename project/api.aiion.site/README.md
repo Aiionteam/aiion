@@ -34,7 +34,6 @@ API Gateway (api.aiion.site:8080)  ← 퍼사드 & 프록시
     │   └─→ inventory-service (Python FastAPI)
     │
     └─→ AI Services (ai.aiion.site)
-        ├─→ chatbot-service (Python FastAPI)
         ├─→ weather-service (Python FastAPI)
         └─→ crawler-service (Python FastAPI)
 ```
@@ -79,7 +78,6 @@ API Gateway (api.aiion.site:8080)  ← 퍼사드 & 프록시
 - `/inventory/**` → inventory-service:9002
 
 ### AI Services (Python FastAPI)
-- `/chatbot/**` → chatbot-service:9001
 - `/weather/**` → weather-service:9004
 - `/crawler/**` → crawler-service:9003
 

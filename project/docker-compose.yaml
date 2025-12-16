@@ -1,3 +1,11 @@
+# 공통 로깅 설정 (로그 로테이션으로 용량 제한)
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"      # 로그 파일 최대 크기 (10MB)
+      max-file: "3"        # 보관할 로그 파일 개수 (총 30MB)
+
 services:
   # ===================
   # Edge Layer (API Gateway)
@@ -22,6 +30,7 @@ services:
       - LOGGING_LEVEL_REACTOR_NETTY=INFO
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    <<: *default-logging  # 로그 로테이션 적용
 
   # ===================
   # AI Middleware Layer (준비 - 나중에 활성화)
@@ -73,6 +82,7 @@ services:
       - SPRING_DATA_REDIS_PORT=${UPSTASH_REDIS_PORT}
       - SPRING_DATA_REDIS_PASSWORD=${UPSTASH_REDIS_PASSWORD}
       - SPRING_DATA_REDIS_SSL_ENABLED=true
+    <<: *default-logging  # 로그 로테이션 적용
 
   auth-service:
     build:
@@ -94,6 +104,7 @@ services:
       - REFRESH_TOKEN_EXPIRE_DAYS=30
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this-in-production}
     restart: unless-stopped
+    <<: *default-logging  # 로그 로테이션 적용
 
   admin-user-service:
     build:
@@ -383,23 +394,6 @@ services:
   # ===================
   # AI Services (from ai.aiion.site)
   # ===================
-  aihoyun-chatbot-service:
-    build:
-      context: ./ai.aiion.site
-      dockerfile: rag/chatbot_service/Dockerfile
-    container_name: aihoyun-chatbot-service
-    ports:
-      - "9002:9002"
-    networks:
-      - spring-network
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - API_GATEWAY_URL=http://api-gateway:8080
-      - ROOT_PATH=/chatbot  # API Gateway 경로 설정
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
   aihoyun-weather-service:
     build:
       context: ./ai.aiion.site
