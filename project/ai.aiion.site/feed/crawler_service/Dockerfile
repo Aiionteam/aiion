@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-# 시스템 패키지 및 Chrome 설치
-RUN apt-get update && apt-get install -y \
+# 시스템 패키지 및 Chrome 설치 (재시도 로직 포함)
+# Debian 저장소 일시 오류 대응을 위한 재시도 로직
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
     curl \
@@ -9,8 +10,12 @@ RUN apt-get update && apt-get install -y \
     fonts-nanum \
     && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
+    && for i in 1 2 3; do \
+        apt-get update && \
+        apt-get install -y --fix-missing google-chrome-stable && \
+        break || \
+        (echo "Attempt $i failed, retrying..." && sleep 10); \
+    done \
     && rm -rf /var/lib/apt/lists/*
 
 # ChromeDriver는 Selenium 4.x가 자동으로 관리하므로 수동 설치 불필요

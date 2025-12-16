@@ -82,8 +82,8 @@ def main():
     
     # DL 모델 학습 (4개 MBTI 차원별)
     ic("DL 모델 학습 시작 (GPU 사용 - RTX 4060 랩탑 최적화)...")
-    ic("✅ 최적화 설정 (속도 최적화):")
-    ic("   - Epochs: 4")
+    ic("✅ 최적화 설정 (정확도 개선):")
+    ic("   - Epochs: 5 (정확도 개선을 위해 증가)")
     ic("   - 배치 사이즈: 24 (8GB VRAM 최적화)")
     ic("   - Mixed Precision Training (FP16): 활성화")
     ic("   - Freeze Layers: 5개 (더 많은 레이어 학습)")
@@ -91,16 +91,17 @@ def main():
     ic("   - 분류: 3-class (0=평가불가, 1=성향1, 2=성향2)")
     ic("   - 데이터: 병합 데이터(22.5K) + 이순신 일기(1.7K) = 약 24.2K")
     ic("   - 클래스 가중치: 자동 적용 (3-class 불균형 해결)")
-    ic("   - 예상 학습 시간: 약 2-3시간 (4개 차원별 학습)")
+    ic("   - Early Stopping: 4 (과적합 방지, 더 많은 학습 기회)")
+    ic("   - 예상 학습 시간: 약 2.5-3.5시간 (4개 차원별 학습)")
     
     try:
         history = service.learning(
-            epochs=4,  # 24.2K 데이터로 충분한 학습
+            epochs=5,  # 정확도 개선을 위해 증가 (Early stopping으로 과적합 방지)
             batch_size=24,  # RTX 4060 랩탑 최적화 (8GB VRAM 고려)
             freeze_bert_layers=5,  # 더 많은 레이어 학습
             learning_rate=1.5e-5,  # 안정적 학습률
             max_length=384,  # 일기 평균 길이 최적화 (속도 30% 향상)
-            early_stopping_patience=3  # 조기 종료 기준
+            early_stopping_patience=4  # epochs 증가에 맞춰 patience도 증가 (과적합 방지)
         )
         
         ic("=" * 60)
