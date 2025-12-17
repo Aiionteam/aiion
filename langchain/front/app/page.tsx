@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface RAGResponse {
   question: string;
@@ -12,19 +12,31 @@ interface RAGResponse {
   retrieved_count: number;
 }
 
-const SUGGESTED_PROMPTS = [
-  "LangChain이 뭐야?",
-  "RAG가 무엇인가요?",
-  "pgvector의 역할은?",
-  "OpenAI GPT 모델 설명",
-  "벡터 데이터베이스란?",
-];
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<RAGResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 입력창 포커스 유지
+  useEffect(() => {
+    if (!loading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [loading, response]);
+
+  // 대화 히스토리 스크롤 자동 이동
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversationHistory, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +49,10 @@ export default function Home() {
     try {
       console.log("Sending request:", { question: query, k: 3 });
 
+      // 타임아웃 설정 (60초)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const res = await fetch("http://localhost:8000/rag", {
         method: "POST",
         headers: {
@@ -45,9 +61,12 @@ export default function Home() {
         body: JSON.stringify({
           question: query,
           k: 3,
+          conversation_history: conversationHistory,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       console.log("Response status:", res.status);
 
       if (!res.ok) {
@@ -59,8 +78,29 @@ export default function Home() {
       const data: RAGResponse = await res.json();
       console.log("Success response:", data);
       setResponse(data);
+
+      // 대화 히스토리에 추가
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: "user", content: query },
+        { role: "assistant", content: data.answer },
+      ]);
+
+      // 입력창 초기화
+      setQuery("");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.";
+      let errorMessage = "알 수 없는 오류가 발생했습니다.";
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          errorMessage = "요청 시간이 초과되었습니다. 서버가 아직 준비 중일 수 있습니다. 잠시 후 다시 시도해주세요.";
+        } else if (err.message.includes("Failed to fetch")) {
+          errorMessage = "서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
       setError(errorMessage);
       console.error("Error details:", err);
     } finally {
@@ -68,106 +108,106 @@ export default function Home() {
     }
   };
 
-  const handleSuggestedPrompt = (prompt: string) => {
-    setQuery(prompt);
+  const handleResetHistory = () => {
+    setConversationHistory([]);
+    setResponse(null);
+    setError(null);
+    setQuery("");
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-black font-sans">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-medium text-white">헬로! 😊</h2>
-        </div>
-        <button className="rounded-full bg-gray-800 px-4 py-2 text-sm text-white hover:bg-gray-700 transition-colors">
-          헬로
-        </button>
-      </header>
-
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 pb-32">
-        {/* Greeting Section - only show when no response */}
-        {!response && !loading && (
-          <div className="mb-12 text-center">
-            <h1 className="mb-2 text-2xl font-medium text-white">
-              반가워요. 무엇을 도와드릴까요?
-            </h1>
-            <div className="mt-2">
+      <main className="flex-1 flex flex-col items-center px-6 pb-32 pt-6 overflow-y-auto">
+        {/* Reset History Button */}
+        {conversationHistory.length > 0 && (
+          <div className="w-full max-w-3xl mb-4 flex justify-end">
+            <button
+              onClick={handleResetHistory}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-lg bg-gray-800/50 border border-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-700/50 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              title="대화 히스토리 초기화"
+            >
               <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
                 fill="none"
-                className="mx-auto text-gray-600"
+                xmlns="http://www.w3.org/2000/svg"
               >
                 <path
-                  d="M4 8h16M4 16h16"
+                  d="M8 3V1M8 3L6 1M8 3L10 1M3 8C3 5.79086 4.79086 4 7 4C9.20914 4 11 5.79086 11 8C11 10.2091 9.20914 12 7 12C4.79086 12 3 10.2091 3 8Z"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               </svg>
-            </div>
+              새 대화 시작
+            </button>
           </div>
         )}
 
-        {/* RAG Response Display */}
-        {response && (
-          <div className="mb-8 w-full max-w-3xl rounded-2xl bg-gray-900/50 border border-gray-700 p-6">
-            <div className="mb-4">
-              <h3 className="mb-2 text-lg font-medium text-white">질문:</h3>
-              <p className="text-gray-300">{response.question}</p>
+        {/* Conversation History Display */}
+        <div className="w-full max-w-3xl space-y-4">
+          {conversationHistory.length === 0 && !loading && (
+            <div className="text-center text-gray-500 mt-20">
+              대화를 시작해보세요
             </div>
-            <div className="mb-4">
-              <h3 className="mb-2 text-lg font-medium text-white">답변:</h3>
+          )}
+          {conversationHistory.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`rounded-2xl border p-6 ${
+                msg.role === "user"
+                  ? "bg-gray-800/50 border-gray-700 ml-auto max-w-[80%]"
+                  : "bg-gray-900/50 border-gray-700 mr-auto max-w-[80%]"
+              }`}
+            >
               <p className="text-gray-200 leading-relaxed whitespace-pre-wrap">
-                {response.answer}
+                {msg.content}
               </p>
             </div>
-            {response.retrieved_documents.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium text-gray-400">
-                  참고 문서 ({response.retrieved_count}개):
-                </h3>
-                <div className="space-y-2">
-                  {response.retrieved_documents.map((doc, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg bg-gray-800/50 p-3 text-sm text-gray-300"
-                    >
-                      {doc.content}
-                    </div>
-                  ))}
-                </div>
+          ))}
+
+          {/* Loading indicator */}
+          {loading && (
+            <div className="rounded-2xl border bg-gray-900/50 border-gray-700 p-6 mr-auto max-w-[80%]">
+              <div className="flex items-center gap-2 text-gray-400">
+                <svg
+                  className="animate-spin h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <span>답변 생성 중...</span>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
         {/* Error Display */}
         {error && (
           <div className="mb-8 w-full max-w-3xl rounded-2xl bg-red-900/20 border border-red-700 p-4">
-            <p className="text-red-300">오류: {error}</p>
-          </div>
-        )}
-
-        {/* Suggested Prompts */}
-        {!response && !loading && (
-          <div className="mb-8 w-full max-w-3xl">
-            <p className="mb-3 text-center text-sm text-gray-400">
-              추천 프롬프트:
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTED_PROMPTS.map((prompt, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSuggestedPrompt(prompt)}
-                  className="rounded-full bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            <p className="text-red-300">{error}</p>
           </div>
         )}
 
@@ -175,113 +215,16 @@ export default function Home() {
         <div className="fixed bottom-0 left-0 right-0 bg-black px-6 py-6">
           <form onSubmit={handleSubmit} className="mx-auto w-full max-w-3xl">
             <div className="relative w-full rounded-2xl bg-white/5 border border-white/10 p-4">
-              {/* Placeholder Text */}
-              <div className="mb-3">
-                <span className="text-sm text-gray-400">무엇이든 물어보세요</span>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/20"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    className="text-white/60"
-                  >
-                    <path
-                      d="M8 2v12M2 8h12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  첨부
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/20"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    className="text-white/60"
-                  >
-                    <circle
-                      cx="7"
-                      cy="7"
-                      r="3"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                    <path
-                      d="M10 10l-2-2"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  검색
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/20"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    className="text-white/60"
-                  >
-                    <path
-                      d="M2 4h12M2 8h12M2 12h8"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  학습하기
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/20"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    className="text-white/60"
-                  >
-                    <rect
-                      x="2"
-                      y="2"
-                      width="12"
-                      height="12"
-                      rx="2"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                  </svg>
-                  이미지 그리기
-                </button>
-              </div>
-
               {/* Input Field */}
               <div className="flex items-center gap-3">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="무엇이든 물어보세요"
                   disabled={loading}
+                  autoFocus
                   className="flex-1 bg-transparent text-white placeholder:text-gray-500 focus:outline-none text-lg disabled:opacity-50"
                 />
                 <button
@@ -311,30 +254,27 @@ export default function Home() {
                       ></path>
                     </svg>
                   ) : (
-                    <>
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        className="text-white/60"
-                      >
-                        <circle
-                          cx="10"
-                          cy="10"
-                          r="7"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                        />
-                        <path
-                          d="M10 6v4l2 2"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span>음성</span>
-                    </>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      className="text-white/60"
+                    >
+                      <circle
+                        cx="10"
+                        cy="10"
+                        r="7"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                      <path
+                        d="M10 6v4l2 2"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   )}
                 </button>
               </div>
