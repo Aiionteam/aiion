@@ -217,6 +217,7 @@ export function setTokens(accessToken: string, refreshToken?: string): void {
   if (refreshToken) {
     localStorage.setItem('refresh_token', refreshToken);
   }
+  console.log('[Auth] 토큰 저장 완료');
 }
 
 /**
@@ -227,6 +228,56 @@ export function clearTokens(): void {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('auth_provider');
+  console.log('[Auth] 토큰 삭제 완료');
+}
+
+/**
+ * JWT 토큰 갱신 (Refresh Token 사용)
+ * 401 에러 발생 시 자동으로 호출
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    console.error('[Auth] Refresh Token이 없습니다.');
+    return null;
+  }
+
+  try {
+    console.log('[Auth] Access Token 갱신 시도...');
+    // OAuth 서비스의 토큰 갱신 엔드포인트 호출
+    const response = await fetch(`${GATEWAY_CONFIG.BASE_URL}/oauth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      console.error('[Auth] 토큰 갱신 실패:', response.status);
+      // 갱신 실패 시 모든 토큰 삭제
+      clearTokens();
+      return null;
+    }
+
+    const data = await response.json();
+    const newAccessToken = data.accessToken || data.access_token;
+    
+    if (newAccessToken) {
+      // 새로운 토큰 저장
+      setTokens(newAccessToken, data.refreshToken || refreshToken);
+      console.log('[Auth] ✅ Access Token 갱신 성공');
+      return newAccessToken;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[Auth] 토큰 갱신 중 에러:', error);
+    clearTokens();
+    return null;
+  }
 }
 
 /**
@@ -286,6 +337,7 @@ export async function fetchFromGateway(
 
 /**
  * Gateway를 통한 JSON 응답 호출 (최적화된 버전)
+ * 401 에러 발생 시 자동으로 토큰 갱신 후 재시도
  * 
  * @param endpoint - API 엔드포인트
  * @param params - 쿼리 파라미터
@@ -297,7 +349,28 @@ export async function fetchJSONFromGateway<T = any>(
   params: Record<string, string> = {},
   options: FetchOptions = {}
 ): Promise<JSONResponse<T>> {
-  const response = await fetchFromGateway(endpoint, params, options);
+  let response = await fetchFromGateway(endpoint, params, options);
+  
+  // 401 에러 발생 시 토큰 갱신 후 재시도
+  if (response.status === 401) {
+    console.warn('[API] 401 인증 에러 발생, 토큰 갱신 시도...');
+    const newToken = await refreshAccessToken();
+    
+    if (newToken) {
+      console.log('[API] 토큰 갱신 성공, API 재시도...');
+      // 토큰 갱신 성공 시 재시도
+      response = await fetchFromGateway(endpoint, params, options);
+    } else {
+      console.error('[API] 토큰 갱신 실패, 로그인 필요');
+      // 토큰 갱신 실패 시 에러 반환
+      return {
+        data: null as any,
+        error: 'Authentication failed. Please login again.',
+        status: 401,
+      };
+    }
+  }
+
   return parseJSONResponse<T>(response);
 }
 

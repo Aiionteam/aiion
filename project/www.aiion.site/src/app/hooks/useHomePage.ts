@@ -99,14 +99,18 @@ export const useHomePage = () => {
 
   // Diary 관련 상태 - React Query 사용 (JWT 토큰 기반 사용자별 일기 조회)
   // /diary/diaries/user 엔드포인트로 JWT 토큰에서 userId를 자동 추출하여 일기를 가져옴
+  // Upstash Redis와 Neon DB가 연결되어 있고 JWT 토큰이 제대로 전달되면
+  // 백엔드에서 자동으로 userId를 추출하여 해당 사용자의 일기를 조회함
   console.log('[useHomePage] user 정보 확인:', { 
     user, 
     userId: user?.id, 
     userType: typeof user?.id,
     userString: JSON.stringify(user),
-    willUseToken: true // JWT 토큰 기반 조회
+    willUseToken: true // JWT 토큰 기반 조회 (백엔드에서 userId 자동 추출)
   });
-  // userId 파라미터를 전달하지 않으면 백엔드에서 토큰에서 자동 추출
+  
+  // userId를 전달하지 않으면 백엔드에서 JWT 토큰에서 자동으로 userId 추출
+  // 백엔드 API: /diary/diaries/user (GET) - JWT 토큰에서 userId 자동 추출
   const { data: diariesData = [], isLoading: diariesLoading, error: diariesError, isSuccess: diariesSuccess } = useDiaries();
   
   // 일기 저장 Mutation
