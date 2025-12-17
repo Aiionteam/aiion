@@ -4,15 +4,12 @@ Diary MBTI Router - FastAPI 라우터
 """
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 from pathlib import Path
-import csv
-from typing import List, Dict, Optional, Any
+from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
 
 from diary_mbti.diary_mbti_service import DiaryMbtiService
-from diary_mbti.diary_mbti_schema import DiaryMbtiSchema
 
 # 라우터 생성
 router = APIRouter(
@@ -79,24 +76,6 @@ async def root():
         "status": "running",
         "model_type": "deep_learning"
     }
-
-@router.get("/health")
-async def health_check():
-    """헬스체크 엔드포인트"""
-    try:
-        service = get_diary_mbti_service()
-        models_loaded = service.dl_model_obj is not None and service.dl_model_obj.models and any(m is not None for m in service.dl_model_obj.models.values())
-        return {
-            "status": "healthy",
-            "service": "diary-mbti",
-            "models_loaded": models_loaded
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "service": "diary-mbti",
-            "error": str(e)
-        }
 
 @router.get("/test")
 async def test_endpoint():

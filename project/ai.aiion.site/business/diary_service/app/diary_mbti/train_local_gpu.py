@@ -17,8 +17,17 @@ from pathlib import Path
 app_dir = Path(__file__).parent.parent  # app/
 sys.path.insert(0, str(app_dir))
 
-from diary_mbti.diary_mbti_service import DiaryMbtiService
-from icecream import ic
+# icecream import (fallback 포함)
+try:
+    from icecream import ic
+except ImportError:
+    def ic(*args, **kwargs):
+        if args or kwargs:
+            print(*args, **kwargs)
+        return args[0] if args else None
+
+# sys.path 설정 후 import (필수)
+from diary_mbti.diary_mbti_service import DiaryMbtiService  # noqa: E402
 
 def main():
     """로컬에서 GPU로 MBTI DL 모델 학습"""
@@ -82,26 +91,27 @@ def main():
     
     # DL 모델 학습 (4개 MBTI 차원별)
     ic("DL 모델 학습 시작 (GPU 사용 - RTX 4060 랩탑 최적화)...")
-    ic("✅ 최적화 설정 (정확도 개선):")
-    ic("   - Epochs: 5 (정확도 개선을 위해 증가)")
+    ic("✅ 최적화 설정 (정확도 개선 v2):")
+    ic("   - Epochs: 10 (충분한 학습 시간 확보)")
     ic("   - 배치 사이즈: 24 (8GB VRAM 최적화)")
     ic("   - Mixed Precision Training (FP16): 활성화")
-    ic("   - Freeze Layers: 5개 (더 많은 레이어 학습)")
+    ic("   - Freeze Layers: 0개 (모든 레이어 학습 - S_N/T_F/J_P 개선)")
     ic("   - Max Length: 384 (일기 길이 최적화, 속도 30% 향상)")
+    ic("   - Learning Rate: 2e-5 (학습률 증가)")
     ic("   - 분류: 3-class (0=평가불가, 1=성향1, 2=성향2)")
     ic("   - 데이터: 병합 데이터(22.5K) + 이순신 일기(1.7K) = 약 24.2K")
     ic("   - 클래스 가중치: 자동 적용 (3-class 불균형 해결)")
-    ic("   - Early Stopping: 4 (과적합 방지, 더 많은 학습 기회)")
-    ic("   - 예상 학습 시간: 약 2.5-3.5시간 (4개 차원별 학습)")
+    ic("   - Early Stopping: 5 (과적합 방지)")
+    ic("   - 예상 학습 시간: 약 4-5시간 (4개 차원별 학습)")
     
     try:
         history = service.learning(
-            epochs=5,  # 정확도 개선을 위해 증가 (Early stopping으로 과적합 방지)
+            epochs=10,  # 충분한 학습 시간 확보
             batch_size=24,  # RTX 4060 랩탑 최적화 (8GB VRAM 고려)
-            freeze_bert_layers=5,  # 더 많은 레이어 학습
-            learning_rate=1.5e-5,  # 안정적 학습률
+            freeze_bert_layers=0,  # 모든 레이어 학습 (S_N/T_F/J_P 개선을 위해 필수)
+            learning_rate=2e-5,  # 학습률 증가로 더 빠른 학습
             max_length=384,  # 일기 평균 길이 최적화 (속도 30% 향상)
-            early_stopping_patience=4  # epochs 증가에 맞춰 patience도 증가 (과적합 방지)
+            early_stopping_patience=5  # 과적합 방지
         )
         
         ic("=" * 60)
