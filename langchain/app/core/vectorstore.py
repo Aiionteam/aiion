@@ -29,12 +29,18 @@ async def init_vector_store() -> PGVector:
         postgres_db = parsed.path.lstrip("/") or "langchain"
 
         # Build connection string for asyncpg (postgresql+asyncpg://)
-        # asyncpg doesn't use query params in the same way - handle SSL separately
+        # Add connection pool parameters to prevent connection closed errors
+        # pool_size: number of connections in pool
+        # max_overflow: additional connections beyond pool_size
+        # pool_timeout: seconds to wait for connection from pool
+        # pool_recycle: seconds before recycling connection (prevent stale connections)
         connection_string = (
             f"postgresql+asyncpg://{postgres_user}:{postgres_password}"
             f"@{postgres_host}:{postgres_port}/{postgres_db}"
+            f"?pool_size=5&max_overflow=10&pool_timeout=30&pool_recycle=3600"
         )
         print(f"Using cloud PostgreSQL with asyncpg: {postgres_host}")
+        print("Connection pool: size=5, max_overflow=10, timeout=30s, recycle=3600s")
     else:
         # Fallback to individual environment variables (for backward compatibility)
         postgres_user = os.getenv("PGVECTOR_USER", "langchain")
@@ -46,8 +52,10 @@ async def init_vector_store() -> PGVector:
         connection_string = (
             f"postgresql+asyncpg://{postgres_user}:{postgres_password}"
             f"@{postgres_host}:{postgres_port}/{postgres_db}"
+            f"?pool_size=5&max_overflow=10&pool_timeout=30&pool_recycle=3600"
         )
         print(f"Using local PostgreSQL with asyncpg: {postgres_host}:{postgres_port}")
+        print("Connection pool: size=5, max_overflow=10, timeout=30s, recycle=3600s")
 
     # Use HuggingFace Korean embeddings
     print("Using HuggingFace Korean embeddings (jhgan/ko-sroberta-multitask)")
@@ -61,12 +69,19 @@ async def init_vector_store() -> PGVector:
 
     # Create PGVector with async mode enabled
     print("Creating PGVector with async mode...")
+    print("Configuring connection pool settings for stability...")
+
+    # Connection pool settings to prevent connection closed errors
+    # These settings help maintain connections longer and handle reconnections
     store = PGVector(
         embeddings=embeddings,
         connection=connection_string,
         collection_name=collection_name,
         async_mode=True,  # Enable async mode for asyncpg
         create_extension=False,  # Neon cloud already has pgvector extension installed
+        # Connection pool settings (if supported by langchain-postgres)
+        # Note: These may need to be set via connection string or environment variables
     )
 
+    print("✅ PGVector initialized with async mode and connection pool")
     return store

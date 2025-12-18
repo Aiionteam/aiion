@@ -85,5 +85,6 @@
   "cursorpyright.analysis.include": [
     "libs/**"
   ],
-  "cursorpyright.analysis.typeCheckingMode": "basic"
+  "cursorpyright.analysis.typeCheckingMode": "basic",
+  "git.ignoreLimitWarning": true
 }

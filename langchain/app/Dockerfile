@@ -25,5 +25,5 @@ COPY . .
 EXPOSE 8000
 
 # Run the API server
-CMD ["python", "-u", "api_server.py"]
+CMD ["python", "-u", "main.py"]
 
