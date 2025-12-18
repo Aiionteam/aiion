@@ -166,3 +166,70 @@ virtualenv/
 scratch/
 
 .langgraph_api/
+
+# Model files and directories (large files)
+app/model/
+**/model/
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.bin
+*.onnx
+*.tflite
+
+# Large data files
+*.parquet
+*.feather
+*.arrow
+*.hdf5
+*.h5
+*.npz
+*.npy
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Archive files (can be large)
+*.tar.gz
+*.tar.bz2
+*.zip
+*.rar
+*.7z
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Cache directories
+.cache/
+*.cache/
+.huggingface/
+.transformers_cache/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and secrets
+.env.local
+.env.*.local
+*.key
+*.pem
+*.cert
