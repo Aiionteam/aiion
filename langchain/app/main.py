@@ -6,12 +6,13 @@ import sys
 # Add current directory to Python path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from api.routers import rag, search  # type: ignore
-from core.rag_chain import create_rag_chain, init_llm  # type: ignore
+from api.routes import search  # type: ignore
 from core.vectorstore import init_vector_store  # type: ignore
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from router import chat_router  # type: ignore
+from service.chat_service import create_rag_chain, init_llm  # type: ignore
 
 # Load environment variables from root directory
 env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -45,7 +46,7 @@ async def startup_event():
         print("[OK] RAG chain initialized!")
 
         # Set dependencies for routers
-        rag.set_dependencies(vector_store, rag_chain_instance)
+        chat_router.set_dependencies(vector_store, rag_chain_instance)
         search.set_dependencies(vector_store)
 
         print("API server is ready!")
@@ -59,7 +60,7 @@ async def startup_event():
 
 
 # Include routers
-app.include_router(rag.router)
+app.include_router(chat_router.router)
 app.include_router(search.router)
 
 
@@ -85,7 +86,7 @@ async def health():
     return {
         "status": "healthy",
         "vector_store": "initialized" if search.vector_store else "not initialized",
-        "rag_chain": "initialized" if rag.rag_chain else "not initialized",
+        "rag_chain": "initialized" if chat_router.rag_chain else "not initialized",
     }
 
 
@@ -93,4 +94,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

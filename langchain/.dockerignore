@@ -20,4 +20,5 @@ tests
 uv.lock
 pyproject.toml
 Makefile
+*.pem
 

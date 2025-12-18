@@ -21,4 +21,5 @@ accelerate
 bitsandbytes  # 4bit 양자화
 safetensors   # 안전한 모델 저장
 sentence-transformers
+peft  # PEFT/QLoRA for fine-tuning
 
