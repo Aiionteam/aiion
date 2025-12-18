@@ -349,29 +349,57 @@ export async function fetchJSONFromGateway<T = any>(
   params: Record<string, string> = {},
   options: FetchOptions = {}
 ): Promise<JSONResponse<T>> {
-  let response = await fetchFromGateway(endpoint, params, options);
-  
-  // 401 에러 발생 시 토큰 갱신 후 재시도
-  if (response.status === 401) {
-    console.warn('[API] 401 인증 에러 발생, 토큰 갱신 시도...');
-    const newToken = await refreshAccessToken();
-    
-    if (newToken) {
-      console.log('[API] 토큰 갱신 성공, API 재시도...');
-      // 토큰 갱신 성공 시 재시도
-      response = await fetchFromGateway(endpoint, params, options);
-    } else {
-      console.error('[API] 토큰 갱신 실패, 로그인 필요');
-      // 토큰 갱신 실패 시 에러 반환
+  try {
+    let response = await fetchFromGateway(endpoint, params, options);
+
+    // 401 에러 발생 시 토큰 갱신 후 재시도
+    if (response.status === 401) {
+      console.warn('[API] 401 인증 에러 발생, 토큰 갱신 시도...');
+      const newToken = await refreshAccessToken();
+
+      if (newToken) {
+        console.log('[API] 토큰 갱신 성공, API 재시도...');
+        // 토큰 갱신 성공 시 재시도
+        response = await fetchFromGateway(endpoint, params, options);
+      } else {
+        console.error('[API] 토큰 갱신 실패, 로그인 필요');
+        // 토큰 갱신 실패 시 에러 반환
+        return {
+          data: null as any,
+          error: 'Authentication failed. Please login again.',
+          status: 401,
+        };
+      }
+    }
+
+    return parseJSONResponse<T>(response);
+  } catch (error) {
+    // 네트워크 에러 (백엔드 미실행/연결 실패 등) 처리
+    console.error('[fetchJSONFromGateway] 요청 실패:', error);
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+
+    if (
+      errorMessage.includes('Failed to fetch') ||
+      errorMessage.includes('CONNECTION_REFUSED') ||
+      errorMessage.includes('ERR_CONNECTION_REFUSED') ||
+      errorMessage.includes('NetworkError')
+    ) {
       return {
         data: null as any,
-        error: 'Authentication failed. Please login again.',
-        status: 401,
+        error:
+          `백엔드에 연결할 수 없습니다. (현재는 프론트 화면만 구성 중이면 무시해도 됩니다)\n` +
+          `- 대상: ${GATEWAY_CONFIG.BASE_URL}${endpoint}\n` +
+          `- 에러: ${errorMessage}`,
+        status: 0,
       };
     }
-  }
 
-  return parseJSONResponse<T>(response);
+    return {
+      data: null as any,
+      error: errorMessage,
+      status: 0,
+    };
+  }
 }
 
 /**
