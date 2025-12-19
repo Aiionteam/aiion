@@ -187,6 +187,38 @@ class DiaryMbtiMethod:
         
         return df_filtered
     
+    def filter_short_texts(self, df: pd.DataFrame, min_length: int = 50) -> pd.DataFrame:
+        """너무 짧은 텍스트 필터링
+        
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            입력 데이터프레임 (text 컬럼 필요)
+        min_length : int
+            최소 텍스트 길이 (기본: 50자)
+        
+        Returns:
+        --------
+        pd.DataFrame
+            필터링된 데이터프레임
+        """
+        if 'text' not in df.columns:
+            ic("⚠️ text 컬럼이 없습니다. 필터링을 건너뜁니다.")
+            return df
+        
+        before = len(df)
+        df_filtered = df[df['text'].str.len() >= min_length].copy()
+        df_filtered = df_filtered.reset_index(drop=True)
+        removed_count = before - len(df_filtered)
+        
+        if removed_count > 0:
+            ic(f"짧은 텍스트 제거: {removed_count:,}개 ({removed_count/before*100:.2f}%)")
+            ic(f"필터링 후 데이터: {len(df_filtered):,}개 (최소 길이: {min_length}자)")
+        else:
+            ic(f"짧은 텍스트 없음 (모든 텍스트가 {min_length}자 이상)")
+        
+        return df_filtered
+    
     def extract_advanced_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """고급 특징 추출 (MBTI 특화 특징)"""
         features = pd.DataFrame(index=df.index)
