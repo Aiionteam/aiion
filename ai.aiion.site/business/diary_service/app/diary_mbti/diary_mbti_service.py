@@ -244,6 +244,21 @@ class DiaryMbtiService:
             for i, text in enumerate(self.df['text'].head(3)):
                 ic(f"  [{i+1}] {text[:100]}...")
             
+            # 데이터 품질 개선: 짧은 텍스트 필터링 (최소 50자, 85% 목표 시 100자 권장)
+            ic("\n데이터 품질 개선: 짧은 텍스트 필터링")
+            # 85% 정확도 목표 시 min_length=100 권장
+            self.df = self.method.filter_short_texts(self.df, min_length=50)
+            
+            # 데이터 품질 개선: 평가불가(0) 레이블 필터링
+            ic("\n데이터 품질 개선: 평가불가(0) 레이블 필터링")
+            self.df = self.method.filter_zero_labels(self.df, min_zero_ratio=0.3)
+            
+            # 필터링 후 최종 레이블 분포 확인
+            ic("\n필터링 후 최종 레이블 분포:")
+            for label in self.mbti_labels:
+                dist = self.df[label].value_counts().to_dict()
+                ic(f"  {label}: {dist}")
+            
             ic("😎😎 전처리 완료")
             
         except Exception as e:

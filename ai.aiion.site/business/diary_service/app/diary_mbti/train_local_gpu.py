@@ -106,10 +106,10 @@ def main():
     
     try:
         history = service.learning(
-            epochs=5,  # 충분한 학습 시간 확보
+            epochs=4,  # 충분한 학습 시간 확보
             batch_size=24,  # RTX 4060 랩탑 최적화 (8GB VRAM 고려)
-            freeze_bert_layers=0,  # 모든 레이어 학습 (S_N/T_F/J_P 개선을 위해 필수)
-            learning_rate=1e-5,  # 학습률 증가로 더 빠른 학습
+            freeze_bert_layers=5,  # 모든 레이어 학습 (S_N/T_F/J_P 개선을 위해 필수)
+            learning_rate=2e-5,  # 학습률 증가로 더 빠른 학습
             max_length=384,  # 일기 평균 길이 최적화 (속도 30% 향상)
             early_stopping_patience=5  # 과적합 방지
         )
