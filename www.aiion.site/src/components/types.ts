@@ -55,6 +55,7 @@ export interface Transaction {
   title: string;
   date: string;
   totalAmount: number;
+  category?: string;
 }
 
 // Web Speech API 타입 정의

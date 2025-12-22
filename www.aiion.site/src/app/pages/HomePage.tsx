@@ -45,6 +45,8 @@ export const HomePage: React.FC = () => {
 
   // 카테고리별 컴포넌트를 메모이제이션하여 불필요한 재생성 방지
   const categoryContent = useMemo(() => {
+    console.log('[HomePage] currentCategory:', currentCategory);
+    console.log('[HomePage] accountView:', accountView);
     switch (currentCategory) {
       case 'diary':
         return (
