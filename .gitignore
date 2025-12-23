@@ -20,6 +20,9 @@ __pycache__/
 *.flv
 *.wmv
 
+# Exception: aiion_login.mp4 should be tracked
+!www.aiion.site/public/aiion_login.mp4
+
 # ML/AI Model files (large files)
 *.pt
 *.pth
