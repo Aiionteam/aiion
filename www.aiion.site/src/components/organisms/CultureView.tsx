@@ -875,8 +875,8 @@ export const CultureView: React.FC<CultureViewProps> = ({
                               <h3 className={`font-bold text-2xl mb-2 ${styles.title}`}>
                                 {item.fullName || item.name}
                               </h3>
-                              {item.location && (
-                                <p className={`text-lg ${styles.textMuted}`}>{item.location}</p>
+                              {selectedWishCategory === 'travel' && (item as { location?: string }).location && (
+                                <p className={`text-lg ${styles.textMuted}`}>{(item as { location: string }).location}</p>
                               )}
                             </div>
                             <button
