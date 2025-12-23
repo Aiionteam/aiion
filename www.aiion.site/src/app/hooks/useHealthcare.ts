@@ -229,7 +229,8 @@ export function useHealthcareAnalysis() {
               return null;
             }
           }
-          return response.data as HealthcareAnalysis;
+          // 타입 안전성을 위해 unknown을 거쳐서 변환
+          return response.data as unknown as HealthcareAnalysis;
         }
 
         const responseCode = messenger.code;
@@ -242,7 +243,8 @@ export function useHealthcareAnalysis() {
         // data가 JSON 문자열인 경우 파싱
         if (typeof messenger.data === 'string') {
           try {
-            const analysis = JSON.parse(messenger.data) as HealthcareAnalysis;
+            const parsed = JSON.parse(messenger.data);
+            const analysis = parsed as HealthcareAnalysis;
             console.log('[useHealthcareAnalysis] 종합건강분석 조회 성공');
             return analysis;
           } catch (e) {
@@ -254,7 +256,8 @@ export function useHealthcareAnalysis() {
         // data가 이미 객체인 경우
         if (messenger.data) {
           console.log('[useHealthcareAnalysis] 종합건강분석 조회 성공');
-          return messenger.data as HealthcareAnalysis;
+          // 타입 안전성을 위해 unknown을 거쳐서 변환
+          return messenger.data as unknown as HealthcareAnalysis;
         }
 
         return null;

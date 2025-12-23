@@ -56,6 +56,9 @@ export const HealthView: React.FC<HealthViewProps> = ({
   const { data: diaries = [], isLoading: diariesLoading } = useDiaries();
   const { data: healthcareRecords = [], isLoading: healthcareLoading } = useHealthcareRecords();
   const { data: healthcareAnalysis, isLoading: analysisLoading } = useHealthcareAnalysis();
+  
+  // healthView가 유효하지 않은 경우 'home'으로 초기화
+  const validHealthView = healthView || 'home';
   const [recommendation, setRecommendation] = useState<ExerciseRecommendation | null>(null);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
@@ -397,14 +400,14 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // 운동 메인 화면 진입 시 맞춤형 메시지 생성
   useEffect(() => {
-    if (healthView === 'exercise' && diaries && diaries.length > 0) {
+    if (validHealthView === 'exercise' && diaries && diaries.length > 0) {
       generateCustomizedMessage();
     }
   }, [healthView, diaries, generateCustomizedMessage]);
 
   // 건강 화면 진입 시 정보 생성
   useEffect(() => {
-    if (healthView === 'health' && diaries && diaries.length > 0) {
+    if (validHealthView === 'health' && diaries && diaries.length > 0) {
       generateHealthInfo();
       generateHealthCheckupSummary();
       generateInbodyData();
@@ -413,7 +416,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // 뷰가 변경될 때 상태 초기화
   useEffect(() => {
-    if (healthView !== 'exercise' && healthView !== 'exercise-recommendation') {
+    if (validHealthView !== 'exercise' && validHealthView !== 'exercise-recommendation') {
       setRecommendation(null);
       setRecommendationError(null);
       setIsLoadingRecommendation(false);
@@ -422,7 +425,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }, [healthView]);
 
   // Home 뷰
-  if (healthView === 'home') {
+  if (validHealthView === 'home') {
     return (
       <div className={`flex-1 flex flex-col ${styles.bg}`}>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -542,7 +545,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Exercise 메인 뷰
-  if (healthView === 'exercise') {
+  if (validHealthView === 'exercise') {
     const exerciseOnlyRecords = getExerciseRelatedRecords(); // 운동 관련 기록만
     const exerciseCategories = ['스트레칭', '체중감량', '웨이트', '스포츠'];
 
@@ -788,7 +791,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Exercise 추천 뷰
-  if (healthView === 'exercise-recommendation') {
+  if (validHealthView === 'exercise-recommendation') {
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
         <div className={`border-b shadow-sm p-4 ${styles.header}`}>
@@ -932,7 +935,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Health 뷰
-  if (healthView === 'health') {
+  if (validHealthView === 'health') {
     const healthRelatedDiaries = getHealthRelatedDiaries();
     const maxValue = inbodyData.length > 0
       ? Math.max(...inbodyData.flatMap(d => [d.bmi, d.weight, d.muscle]), 90)
@@ -1149,7 +1152,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Records 뷰
-  if (healthView === 'records') {
+  if (validHealthView === 'records') {
     // 날짜 포맷팅 함수
     const formatDate = (dateString: string) => {
       try {
@@ -1279,7 +1282,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Scan 뷰
-  if (healthView === 'scan') {
+  if (validHealthView === 'scan') {
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
         <div className={`border-b shadow-sm p-4 ${styles.header}`}>
@@ -1310,7 +1313,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   }
 
   // Exercise-detail 뷰
-  if (healthView === 'exercise-detail') {
+  if (validHealthView === 'exercise-detail') {
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
         <div className={`border-b shadow-sm p-4 ${styles.header}`}>

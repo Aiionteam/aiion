@@ -133,7 +133,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
   };
 
   const parseMmDdYyyyToIso = (mdy: string): string => {
-    // revenue.csv: 10/26/2025
+    // 하드코딩된 수익 데이터 사용
     const t = (mdy || '').trim().replace(/^"|"$/g, '');
     const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) return '';
@@ -144,7 +144,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
   };
 
   const parseUsDateToIso = (mdy: string): string => {
-    // consumption_diary.csv: 12/4/2025
+    // 하드코딩된 소비 일기 데이터 사용
     const t = (mdy || '').trim().replace(/^"|"$/g, '');
     const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) return '';
@@ -278,29 +278,29 @@ export const AccountView: React.FC<AccountViewProps> = ({
     return categorized.map((it) => `${it.category}: ${it.name} ${it.amount.toLocaleString()}원`).join(' / ');
   };
 
+  // 하드코딩된 소비 일기 데이터
+  const HARDCODED_CONSUMPTION_DIARY_DATA = [
+    { date: '2025-12-04', diaryText: '퇴근길에 갑자기 비가 쏟아졌다. 우산이 없어서 편의점에서 하나 샀는데, 비 오는 날의 운치가 나쁘지 않았다. 따뜻한 커피 한 잔과 함께 하루를 마무리했다. (지출: 우산 5,000원)' },
+    { date: '2025-12-06', diaryText: '주말을 맞아 근교로 드라이브를 다녀왔다. 맑은 공기를 마시니 머리가 맑아지는 기분이었다. 맛있는 지역 음식도 먹고 힐링하는 시간을 가졌다. (지출: 고속도로 통행료 12,000원, 점심 식사 35,000원)' },
+    { date: '2025-12-09', diaryText: '새로운 외국어 공부를 시작했다. 아직은 서툴지만, 꾸준히 하다 보면 언젠가는 유창하게 말할 수 있을 것이다. 매일 30분씩 투자하기로 했다. (지출: 온라인 강의 구독료 29,900원)' },
+    { date: '2025-12-12', diaryText: '동료들과 저녁 식사를 함께 했다. 업무 외적인 이야기를 나누며 친목을 다질 수 있었다. 좋은 사람들과 함께 일하는 것은 큰 행운이다. (지출: 저녁 식사 20,000원 - 개인 부담금)' },
+    { date: '2025-12-17', diaryText: '인터넷으로 주문한 물건이 도착했다. 기대했던 것보다 훨씬 마음에 든다. 소소한 행복을 느꼈다. (지출: 택배비 3,000원)' },
+    { date: '2025-12-18', diaryText: '오늘 아침에는 유독 차가 막혀서 출근하는게 너무 힘들었다. 하루의 시작인데 벌써 삐걱거리는 느낌이 들어서 불길했지만, 다행히 주유소에 들려서 주유 60,000원어치 하고 갔는데도 지각하지 않아서 기분이 풀렸다.' },
+    { date: '2025-12-19', diaryText: '점심시간에 회사 근처 새로 생긴 샌드위치 가게에 가봤다. \'에그마요 샌드위치\'가 맛있다고 해서 먹어봤는데, 정말 부드럽고 든든했다. 가격은 8,500원. 다음에는 다른 메뉴도 시도해봐야겠다.' },
+    { date: '2025-12-29', diaryText: '서점에 들러 자기계발서를 한 권 샀다. 새로운 지식을 얻는 것은 언제나 즐거운 일이다. 빨리 읽어보고 싶다.' },
+    { date: '2026-01-04', diaryText: '새로 산 옷을 입고 출근했다. 기분 전환이 되는 것 같다. 작은 변화가 큰 활력을 준다.' },
+    { date: '2026-01-10', diaryText: '은행 앱으로 가계부를 정리했다. 불필요한 지출을 줄이고 저축을 늘려야겠다고 다짐했다. 재정 관리를 철저히 하자.' },
+  ];
+
   const loadConsumptionDiaryCsv = useCallback(async () => {
     setConsumptionDiaryLoading(true);
     setConsumptionDiaryError(null);
     try {
-      const res = await fetch('/consumption_diary.csv', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`CSV 로드 실패: ${res.status}`);
-      const text = await res.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      if (lines.length <= 1) {
-        setConsumptionDiaryRows([]);
-        return;
-      }
-
-      // 헤더: 날짜, 일기 내용
-      const rows: ConsumptionDiaryRow[] = lines
-        .slice(1)
-        .map((line, idx) => {
-          const cols = parseCsvLine(line);
-          const dateIso = parseUsDateToIso(cols[0] || '');
-          const diaryText = cols[1] || '';
+      // 하드코딩된 데이터 사용
+      const rows: ConsumptionDiaryRow[] = HARDCODED_CONSUMPTION_DIARY_DATA
+        .map((item, idx) => {
+          const dateIso = item.date;
+          const diaryText = item.diaryText;
           const expensesText = extractExpensesFromDiaryText(diaryText);
           const items = parseExpenseItemsFromDiaryText(diaryText);
           const categorized =
@@ -336,7 +336,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
       setConsumptionDiaryRows(rows);
     } catch (e) {
       setConsumptionDiaryRows([]);
-      setConsumptionDiaryError(e instanceof Error ? e.message : 'CSV 로드 중 오류');
+      setConsumptionDiaryError(e instanceof Error ? e.message : '데이터 로드 중 오류');
     } finally {
       setConsumptionDiaryLoading(false);
     }
@@ -344,49 +344,59 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   // (삭제됨) diary_entries.csv 파싱 로직 제거
 
+  // 하드코딩된 지출 데이터
+  const HARDCODED_EXPENSE_DATA = [
+    { transaction_date: '2025-10-26', transaction_time: '오전 8:30:15', description: '스타벅스 아메리카노', amount: 4500, category: '식비' },
+    { transaction_date: '2025-10-26', transaction_time: '오후 12:45:00', description: '회사 근처 식당 점심', amount: 9000, category: '식비' },
+    { transaction_date: '2025-10-26', transaction_time: '오후 6:10:30', description: '지하철 이용', amount: 1450, category: '교통' },
+    { transaction_date: '2025-10-26', transaction_time: '오후 8:00:00', description: '친구와 저녁 식사', amount: 25000, category: '식비' },
+    { transaction_date: '2025-10-27', transaction_time: '오전 9:00:00', description: '택시 이용', amount: 12000, category: '교통' },
+    { transaction_date: '2025-10-27', transaction_time: '오후 7:30:00', description: 'CGV 영화 관람', amount: 15000, category: '오락' },
+    { transaction_date: '2025-10-28', transaction_time: '오후 2:00:00', description: '온라인 쇼핑 (옷)', amount: 78000, category: '쇼핑' },
+    { transaction_date: '2025-10-28', transaction_time: '오후 5:20:00', description: '마트 장보기', amount: 54000, category: '식비' },
+    { transaction_date: '2025-10-29', transaction_time: '오전 11:00:00', description: '병원 진료', amount: 8000, category: '건강' },
+    { transaction_date: '2025-10-30', transaction_time: '오전 10:00:00', description: '월세 납부', amount: 500000, category: '주거' },
+    { transaction_date: '2025-10-30', transaction_time: '오전 10:05:00', description: '관리비 납부', amount: 80000, category: '주거' },
+    { transaction_date: '2025-11-01', transaction_time: '오전 12:00:01', description: '넷플릭스 구독료', amount: 17000, category: '구독' },
+    { transaction_date: '2025-11-02', transaction_time: '오후 3:00:00', description: '서점 (책 구매)', amount: 32000, category: '교육' },
+    { transaction_date: '2025-11-03', transaction_time: '오후 9:00:00', description: '배달 음식 (치킨)', amount: 22000, category: '식비' },
+    { transaction_date: '2025-11-04', transaction_time: '오후 1:00:00', description: '편의점 간식', amount: 5500, category: '식비' },
+    { transaction_date: '2025-11-05', transaction_time: '오전 9:00:00', description: '주유', amount: 50000, category: '교통' },
+    { transaction_date: '2025-11-05', transaction_time: '오후 6:00:00', description: '헬스장 등록', amount: 150000, category: '건강' },
+    { transaction_date: '2025-11-05', transaction_time: '오후 8:30:00', description: '친구 선물 구매', amount: 35000, category: '경조사' },
+  ];
+
   const loadExpenseCsv = useCallback(async () => {
     setExpenseCsvLoading(true);
     setExpenseCsvError(null);
     try {
-      const res = await fetch('/expense.csv', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`CSV 로드 실패: ${res.status}`);
-      const text = await res.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      if (lines.length <= 1) {
-        setExpenseRows([]);
-        return;
-      }
-      const rows: ExpenseRow[] = lines.slice(1).map((line) => {
-        const cols = parseCsvLine(line);
-        // header: transaction_date,transaction_time,description,amount,...
-        const transactionDate = cols[0] || '';
-        const transactionTime = cols[1] || '';
-        const description = cols[2] || '';
-        const amountRaw = cols[3] || '0';
-        const category = cols[5] || '기타';
+      // 하드코딩된 데이터 사용
+      const rows: ExpenseRow[] = HARDCODED_EXPENSE_DATA.map((item) => {
+        const transactionDate = item.transaction_date;
+        const transactionTime = item.transaction_time;
+        const description = item.description;
+        const amount = item.amount;
+        const category = item.category;
         const time24 = parseKoreanTimeTo24H(transactionTime);
         const ts = new Date(`${transactionDate}T${time24}`).getTime();
         return {
           date: transactionDate,
           category,
           description,
-          amount: Number(String(amountRaw).replace(/,/g, '')) || 0,
+          amount,
           ts: isNaN(ts) ? 0 : ts,
         };
       });
       setExpenseRows(rows);
     } catch (e) {
       setExpenseRows([]);
-      setExpenseCsvError(e instanceof Error ? e.message : 'CSV 로드 중 오류');
+      setExpenseCsvError(e instanceof Error ? e.message : '데이터 로드 중 오류');
     } finally {
       setExpenseCsvLoading(false);
     }
   }, []);
 
-  // 항목별 지출/홈 화면 진입 시 expense.csv 로드(백엔드 없이 화면 구성용)
+  // 항목별 지출/홈 화면 진입 시 하드코딩된 지출 데이터 로드(백엔드 없이 화면 구성용)
   useEffect(() => {
     if (accountView !== 'daily' && accountView !== 'home') return;
     if (expenseRows.length > 0) return;
@@ -396,7 +406,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   // (삭제됨) diary_entries.csv 자동 로드 제거
 
-  // 데이터관리 진입 시 consumption_diary.csv 로드
+  // 데이터관리 진입 시 하드코딩된 소비 일기 데이터 로드
   useEffect(() => {
     if (accountView !== 'data') return;
     if (consumptionDiaryRows.length > 0) return;
@@ -404,55 +414,45 @@ export const AccountView: React.FC<AccountViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountView]);
 
+  // 하드코딩된 수익 데이터
+  const HARDCODED_REVENUE_DATA = [
+    { id: '1', date: '2025-10-26', amount: 150, currency: 'USD', sourceNote: '해외 플랫폼 광고 수익 (10월분 정산)', allocationPath: '50% 미국주식_A, 50% 원화계좌_저축' },
+    { id: '2', date: '2025-10-28', amount: 550000, currency: 'KRW', sourceNote: '국내 프리랜서 프로젝트 완료 수수료', allocationPath: '70% 정기예금, 30% 생활비' },
+    { id: '3', date: '2025-10-30', amount: 85.5, currency: 'USD', sourceNote: '기존 투자 포트폴리오 배당금', allocationPath: '100% 미국주식_B (재투자)' },
+    { id: '4', date: '2025-11-01', amount: 120000, currency: 'KRW', sourceNote: '블로그 제휴 마케팅 수익', allocationPath: '100% 국내주식_C' },
+    { id: '5', date: '2025-11-03', amount: 250, currency: 'USD', sourceNote: '컨설팅 서비스 계약금', allocationPath: '80% 달러예금, 20% 원화계좌_저축' },
+    { id: '6', date: '2025-11-05', amount: 320000, currency: 'KRW', sourceNote: '소액 주식 매도 차익', allocationPath: '100% 국내주식_D' },
+  ];
+
   const loadRevenueCsv = useCallback(async () => {
     setRevenueCsvLoading(true);
     setRevenueCsvError(null);
     try {
-      const res = await fetch('/revenue.csv', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`CSV 로드 실패: ${res.status}`);
-      const text = await res.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      if (lines.length <= 2) {
-        setRevenueRows([]);
-        return;
-      }
-      // 0,1 라인은 헤더(한글/영문)
-      const rows: RevenueRow[] = lines
-        .slice(2)
-        .map((line) => {
-          const cols = parseCsvLine(line);
-          const id = (cols[0] || '').replace(/"/g, '').trim();
-          const dateIso = parseMmDdYyyyToIso(cols[1] || '');
-          const amountRaw = cols[3] || '0';
-          const currency = (cols[4] || 'KRW').replace(/"/g, '').trim();
-          const sourceNote = (cols[5] || '').replace(/(^"|"$)/g, '').trim();
-          const allocationPath = (cols[6] || '').replace(/(^"|"$)/g, '').trim();
-          const ts = dateIso ? new Date(`${dateIso}T00:00:00`).getTime() : 0;
-          return {
-            id: id || `${dateIso}_${currency}_${amountRaw}`,
-            date: dateIso,
-            currency,
-            amount: Number(String(amountRaw).replace(/,/g, '').replace(/"/g, '')) || 0,
-            sourceNote,
-            allocationPath,
-            ts,
-          } satisfies RevenueRow;
-        })
-        .filter((r) => !!r.date && r.amount > 0);
+      // 하드코딩된 데이터 사용
+      const rows: RevenueRow[] = HARDCODED_REVENUE_DATA.map((item) => {
+        const dateIso = item.date;
+        const ts = dateIso ? new Date(`${dateIso}T00:00:00`).getTime() : 0;
+        return {
+          id: item.id,
+          date: dateIso,
+          currency: item.currency,
+          amount: item.amount,
+          sourceNote: item.sourceNote,
+          allocationPath: item.allocationPath,
+          ts,
+        } satisfies RevenueRow;
+      }).filter((r) => !!r.date && r.amount > 0);
 
       setRevenueRows(rows);
     } catch (e) {
       setRevenueRows([]);
-      setRevenueCsvError(e instanceof Error ? e.message : 'CSV 로드 중 오류');
+      setRevenueCsvError(e instanceof Error ? e.message : '데이터 로드 중 오류');
     } finally {
       setRevenueCsvLoading(false);
     }
   }, []);
 
-  // 수익/세금/홈 화면 진입 시 revenue.csv 로드
+  // 수익/세금/홈 화면 진입 시 하드코딩된 수익 데이터 로드
   useEffect(() => {
     if (accountView !== 'income' && accountView !== 'tax' && accountView !== 'home') return;
     if (revenueRows.length > 0) return;
@@ -1011,7 +1011,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </div>
 
               <p className={`text-sm mb-3 ${styles.textMuted}`}>
-                `consumption_diary.csv`의 일기에서 지출 표현만 추출해서 보여줍니다. (표시: 날짜 + 소비내용)
+                하드코딩된 소비 일기 데이터에서 지출 표현만 추출해서 보여줍니다. (표시: 날짜 + 소비내용)
               </p>
 
               {consumptionDiaryLoading && (
@@ -2259,7 +2259,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
                 <div className={`flex items-center justify-between gap-4 mb-4 pb-3 border-b-2 ${styles.border}`}>
                   <h2 className={`text-xl font-bold ${styles.title}`}>이번 달 수익 요약</h2>
-                  <p className={`text-xs ${styles.textMuted}`}>`revenue.csv` 기준</p>
+                  <p className={`text-xs ${styles.textMuted}`}>하드코딩된 수익 데이터 기준</p>
                 </div>
 
                 <div className="space-y-4">
@@ -2483,7 +2483,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
             {revenueCsvLoading && (
               <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
-                <p className={`text-center py-8 ${styles.textMuted}`}>`revenue.csv` 불러오는 중…</p>
+                <p className={`text-center py-8 ${styles.textMuted}`}>수익 데이터 불러오는 중…</p>
               </div>
             )}
 
@@ -2551,7 +2551,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
                   <div className={`flex items-center justify-between gap-4 mb-4 pb-3 border-b-2 ${styles.border}`}>
                     <h2 className={`text-xl font-bold ${styles.title}`}>세금 리포트(대략)</h2>
-                    <p className={`text-xs ${styles.textMuted}`}>`revenue.csv` 기반 · 추정치</p>
+                    <p className={`text-xs ${styles.textMuted}`}>하드코딩된 수익 데이터 기반 · 추정치</p>
                   </div>
 
                   <div className="space-y-4">

@@ -68,6 +68,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
     handleOAuthLogin('kakao');
   };
 
+  const handleGuestLogin = () => {
+    console.log('[LandingPage] 게스트 로그인 시작');
+    // 게스트로 로그인 처리 (기능 사용 없이 구경만 가능)
+    if (login) {
+      login({
+        name: 'Guest',
+        email: 'guest@aiion.com',
+        // id는 optional이므로 전달하지 않음 (user_id 없이 로그인)
+      });
+    }
+    
+    // onLogin 콜백 호출하여 메인 화면으로 이동
+    if (onLogin) {
+      console.log('[LandingPage] 게스트 로그인 - onLogin 콜백 호출');
+      setTimeout(() => {
+        onLogin();
+      }, 100);
+    }
+  };
+
   const handleVideoEnded = () => {
     console.log('[LandingPage] 동영상 재생 완료, 메인 화면으로 이동');
     // 동영상 재생 완료 시 로그인 처리 후 메인 화면으로 이동
@@ -269,13 +289,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 {/* 카카오 로그인 */}
                 <button
                   onClick={handleKakaoLogin}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-[#FEE500] border-2 border-[#FEE500] rounded-lg hover:bg-[#fdd835] hover:border-[#fdd835] transition-all font-medium text-black mb-4 touch-manipulation"
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-[#FEE500] border-2 border-[#FEE500] rounded-lg hover:bg-[#fdd835] hover:border-[#fdd835] transition-all font-medium text-black mb-3 touch-manipulation"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="black">
                     <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 0 1-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3Z"/>
                   </svg>
                   <span className="text-base">카카오로 계속하기</span>
+                </button>
+
+                {/* 구분선 */}
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-600"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="px-2 bg-gray-900 text-gray-400">또는</span>
+                  </div>
+                </div>
+
+                {/* 게스트 로그인 */}
+                <button
+                  onClick={handleGuestLogin}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-gray-700 border-2 border-gray-500 rounded-lg hover:bg-gray-600 hover:border-gray-400 transition-all font-medium text-white touch-manipulation"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                    <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                  <span className="text-base">게스트로 구경하기</span>
                 </button>
               </div>
             </div>
