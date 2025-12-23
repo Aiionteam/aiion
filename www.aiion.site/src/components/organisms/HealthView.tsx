@@ -7,6 +7,7 @@ import { useDiaries } from '../../app/hooks/useDiary';
 import { useHealthcareRecords, useHealthcareAnalysis } from '../../app/hooks/useHealthcare';
 import { aiGatewayClient } from '../../lib/api/aiGateway';
 import { getAccessToken } from '../../lib/api/client';
+import { useStore } from '../../store';
 
 interface HealthViewProps {
   healthView: HealthViewType;
@@ -51,6 +52,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   darkMode = false,
 }) => {
   const styles = getCommonStyles(darkMode);
+  const user = useStore((state) => state.user?.user);
 
   // Hook은 항상 최상위에서 호출해야 함 (early return 전에 모두 호출)
   const { data: diaries = [], isLoading: diariesLoading } = useDiaries();
@@ -66,6 +68,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   const [healthCheckupSummary, setHealthCheckupSummary] = useState<string>('');
   const [inbodyData, setInbodyData] = useState<Array<{ month: string; bmi: number; weight: number; muscle: number }>>([]);
   const [bodyType, setBodyType] = useState<string>('');
+  const [selectedHealthDate, setSelectedHealthDate] = useState<string>('2024-11-15'); // 기본 날짜
 
   const getExerciseRecommendation = useCallback(async () => {
     setIsLoadingRecommendation(true);
@@ -395,12 +398,291 @@ export const HealthView: React.FC<HealthViewProps> = ({
       .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
   }, [healthcareRecords]);
 
+  // 카테고리별 추천 받기 (각 페이지에서 사용)
+  const getCategoryRecommendation = useCallback(async (category: string) => {
+    setIsLoadingRecommendation(true);
+    setRecommendationError(null);
+
+    try {
+      if (!diaries || diaries.length === 0) {
+        setRecommendationError('일기 기록이 없어 맞춤 운동을 추천할 수 없습니다.');
+        setIsLoadingRecommendation(false);
+        return;
+      }
+
+      const recentDiaries = diaries
+        .slice()
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 10);
+
+      const diarySummary = recentDiaries
+        .map((diary) => `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content}\n감정: ${diary.emotion}`)
+        .join('\n\n---\n\n');
+
+      const systemMessage = `당신은 건강 전문가입니다. 사용자의 일기 기록을 분석하여 "${category}" 카테고리에 맞는 운동을 추천해주세요.
+다음 형식으로 JSON 응답을 제공해주세요:
+{
+  "categories": [
+    {
+      "name": "${category}",
+      "exercises": [
+        {
+          "name": "운동 이름",
+          "description": "운동 설명",
+          "duration": "운동 시간 (예: 30분)",
+          "difficulty": "난이도 (초급/중급/고급)",
+          "benefits": ["효과1", "효과2", "효과3"],
+          "youtubeVideoId": "유튜브 비디오 ID"
+        }
+      ]
+    }
+  ],
+  "summary": "전체 추천 요약"
+}
+각 카테고리마다 최대 5개의 운동을 추천하고, 각 운동에는 반드시 유튜브 비디오 ID를 포함해주세요.`;
+
+      const userMessage = `다음은 사용자의 최근 일기 기록입니다:\n\n${diarySummary}\n\n이 일기 기록을 바탕으로 "${category}" 카테고리에 맞는 운동을 추천해주세요. JSON 형식으로 응답해주세요.`;
+
+      let jwtToken: string | null = null;
+      if (typeof window !== 'undefined') {
+        jwtToken = getAccessToken();
+      }
+
+      const response = await aiGatewayClient.sendChat({
+        message: userMessage,
+        system_message: systemMessage,
+        jwtToken: jwtToken || undefined,
+      });
+
+      if (response.error || !response.data) {
+        throw new Error(response.error || '운동 추천을 받을 수 없습니다.');
+      }
+
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message || 'AI 처리 중 오류가 발생했습니다.');
+      }
+
+      let recommendationData: ExerciseRecommendation;
+      try {
+        const responseText = response.data.message.trim();
+        const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+        if (jsonMatch) {
+          recommendationData = JSON.parse(jsonMatch[1]);
+        } else {
+          recommendationData = JSON.parse(responseText);
+        }
+      } catch (parseError) {
+        console.warn('JSON 파싱 실패:', parseError);
+        recommendationData = {
+          categories: [],
+          summary: response.data.message,
+        };
+      }
+
+      setRecommendation(recommendationData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+      setRecommendationError(errorMessage);
+      console.error('운동 추천 오류:', error);
+    } finally {
+      setIsLoadingRecommendation(false);
+    }
+  }, [diaries]);
+
+  // 카테고리별 운동 추천 뷰 렌더링 함수
+  const renderCategoryExerciseView = useCallback((categoryName: string, categoryTitle: string) => {
+    return (
+      <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
+        <div className={`border-b shadow-sm p-4 ${styles.header}`}>
+          <div className="max-w-4xl mx-auto flex items-center gap-4">
+            <button
+              onClick={() => setHealthView('exercise')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${styles.buttonHover}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h1 className={`text-2xl font-bold ${styles.title}`}>{categoryTitle}</h1>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="max-w-4xl mx-auto space-y-6">
+            {/* 로딩 상태 */}
+            {isLoadingRecommendation && (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
+                <p className={`mt-4 ${styles.textMuted}`}>일기 기록을 분석하여 맞춤 운동을 추천하고 있습니다...</p>
+              </div>
+            )}
+
+            {/* 에러 메시지 */}
+            {recommendationError && (
+              <div className={`rounded-lg p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800`}>
+                <p className={`text-sm text-red-600 dark:text-red-400`}>{recommendationError}</p>
+              </div>
+            )}
+
+            {/* 맞춤 안내 메시지 */}
+            {recommendation && recommendation.summary && !isLoadingRecommendation && (
+              <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                <p className={`${styles.title} whitespace-pre-wrap`}>
+                  {categoryTitle} 카테고리에 맞는 맞춤 운동 리스트입니다. 운동 전 후 스트레칭은 필수!
+                </p>
+              </div>
+            )}
+
+            {/* 카테고리별 영상 리스트 */}
+            {recommendation && recommendation.categories && recommendation.categories.length > 0 && !isLoadingRecommendation && (
+              <div className="space-y-8">
+                {recommendation.categories
+                  .filter((cat) => cat.name === categoryName)
+                  .map((category, categoryIndex) => (
+                    <div key={categoryIndex} className="space-y-4">
+                      <h2 className={`text-2xl font-bold ${styles.title}`}>{category.name}</h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {category.exercises.map((exercise, exerciseIndex) => (
+                          <div key={exerciseIndex} className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                            <div className="space-y-4">
+                              <h3 className={`text-xl font-bold ${styles.title}`}>{exercise.name}</h3>
+                              <p className={`text-sm ${styles.textMuted}`}>{exercise.description}</p>
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`px-3 py-1 rounded-full text-xs ${styles.cardBg} ${styles.title}`}>
+                                  {exercise.duration}
+                                </span>
+                                <span className={`px-3 py-1 rounded-full text-xs ${styles.cardBg} ${styles.title}`}>
+                                  {exercise.difficulty}
+                                </span>
+                              </div>
+                              {exercise.benefits && exercise.benefits.length > 0 && (
+                                <div>
+                                  <p className={`text-sm font-semibold mb-2 ${styles.title}`}>효과:</p>
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {exercise.benefits.map((benefit, benefitIndex) => (
+                                      <li key={benefitIndex} className={`text-sm ${styles.textMuted}`}>
+                                        {benefit}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {exercise.youtubeVideoId && (
+                                <div className="aspect-video rounded-lg overflow-hidden">
+                                  <iframe
+                                    width="100%"
+                                    height="100%"
+                                    src={`https://www.youtube.com/embed/${exercise.youtubeVideoId}`}
+                                    title={exercise.name}
+                                    frameBorder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                    className="w-full h-full"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* 데이터가 없을 때 예시 메시지 */}
+            {!recommendation && !isLoadingRecommendation && !recommendationError && (
+              <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                <p className={`text-center ${styles.textMuted}`}>
+                  일기 기록을 분석하여 {categoryTitle} 카테고리에 맞는 운동을 추천해드립니다.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }, [styles, isLoadingRecommendation, recommendationError, recommendation, setHealthView]);
+
+  // 일기에서 헬스/운동 관련 내용 파싱
+  // 날짜 포맷팅 함수 (2025-11-14 -> 2025-11-금)
+  const formatDateWithDay = useCallback((dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = date.getDay();
+      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${year}-${month}-${dayNames[day]}`;
+    } catch {
+      return dateString;
+    }
+  }, []);
+
+  const parseHealthContentFromDiaries = useCallback(() => {
+    if (!diaries || diaries.length === 0) return [];
+
+    const healthKeywords = [
+      '운동', '운동하다', '땀', '피로', '스트레칭', '달리기', '걷기', '산책', '헬스', '요가', '필라테스', 
+      '수영', '자전거', '등산', '조깅', '점심시간', '저녁', '건강', '병원', '의사', '진료', '약', '복용',
+      '아픔', '통증', '불편', '증상', '검진', '검사', '혈압', '혈당', '콜레스테롤', '체중', '다이어트',
+      '식단', '영양', '비타민', '수면', '잠', '피곤', '스트레스', '우울', '불안', '두통', '어지러움'
+    ];
+    
+    const healthContents: Array<{ content: string; date: string }> = [];
+
+    diaries.forEach((diary) => {
+      const content = diary.content || '';
+      const lines = content.split('\n').filter(line => line.trim());
+      
+      lines.forEach((line) => {
+        const lowerLine = line.toLowerCase();
+        // 건강 관련 키워드가 포함된 문장 찾기
+        const hasHealthKeyword = healthKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase()));
+        
+        if (hasHealthKeyword) {
+          let extractedContent = line.trim();
+          
+          // 날짜가 문장 끝에 있으면 제거 (원본에서)
+          extractedContent = extractedContent.replace(/[_\s]*\d{4}-\d{2}-\d{2}[-\s]?[월화수목금토일]?[_\s]*$/, '').trim();
+          
+          if (extractedContent) {
+            healthContents.push({
+              content: extractedContent,
+              date: diary.date
+            });
+          }
+        }
+      });
+    });
+
+    // 날짜순으로 정렬 (최신순)
+    return healthContents
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10); // 최대 10개
+  }, [diaries]);
+
   // 운동 메인 화면 진입 시 맞춤형 메시지 생성
   useEffect(() => {
     if (healthView === 'exercise' && diaries && diaries.length > 0) {
       generateCustomizedMessage();
     }
   }, [healthView, diaries, generateCustomizedMessage]);
+
+  // 카테고리별 뷰 진입 시 추천 받기
+  useEffect(() => {
+    const categoryViewMap: Record<string, string> = {
+      'exercise-stretching': '스트레칭',
+      'exercise-weight-loss': '체중감량',
+      'exercise-weight': '웨이트',
+      'exercise-sports': '스포츠',
+    };
+    
+    const category = categoryViewMap[healthView];
+    if (category && !isLoadingRecommendation && !recommendation && diaries && diaries.length > 0) {
+      setSelectedCategory(category);
+      getCategoryRecommendation(category);
+    }
+  }, [healthView, isLoadingRecommendation, recommendation, diaries, getCategoryRecommendation]);
 
   // 건강 화면 진입 시 정보 생성
   useEffect(() => {
@@ -413,7 +695,12 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // 뷰가 변경될 때 상태 초기화
   useEffect(() => {
-    if (healthView !== 'exercise' && healthView !== 'exercise-recommendation') {
+    if (healthView !== 'exercise' && 
+        healthView !== 'exercise-recommendation' && 
+        healthView !== 'exercise-stretching' && 
+        healthView !== 'exercise-weight-loss' && 
+        healthView !== 'exercise-weight' && 
+        healthView !== 'exercise-sports') {
       setRecommendation(null);
       setRecommendationError(null);
       setIsLoadingRecommendation(false);
@@ -488,11 +775,59 @@ export const HealthView: React.FC<HealthViewProps> = ({
                         </div>
                       </div>
                     )}
+                    {/* 운동 레포트 */}
+                    <div className={`mt-6 pt-6 border-t ${styles.border}`}>
+                      <p className={`text-base font-semibold mb-3 ${styles.title}`}>💪 운동 리포트</p>
+                      <div className={`space-y-3 ${styles.textMuted} text-sm leading-relaxed`}>
+                        {healthcareAnalysis.recent_activity.recent_records > 0 ? (
+                          <>
+                            <p>
+                              이번 주 총 {healthcareAnalysis.recent_activity.recent_records}회 운동하셨으며, 
+                              평균 {healthcareAnalysis.recent_activity.recent_avg_steps 
+                                ? Math.round(healthcareAnalysis.recent_activity.recent_avg_steps).toLocaleString() 
+                                : '0'}걸음을 기록하셨습니다.
+                            </p>
+                            <p>
+                              최근 30일간 꾸준한 운동 습관을 유지하고 계시네요! 
+                              규칙적인 운동은 건강 관리에 큰 도움이 됩니다.
+                            </p>
+                            <p>
+                              주말 하루 정도 휴식을 취하시며 컨디션을 관리하시는 것을 권장드립니다.
+                            </p>
+                          </>
+                        ) : (
+                          <p>
+                            아직 운동 기록이 없습니다. 첫 운동을 시작해보세요! 
+                            꾸준한 운동은 건강한 생활의 기초가 됩니다.
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <p className={`text-center py-4 ${styles.textMuted}`}>
-                    아직 기록된 건강 데이터가 없습니다. 첫 건강 기록을 작성해보세요!
-                  </p>
+                  <div className={`space-y-4 ${styles.textMuted} text-sm leading-relaxed`}>
+                    <p className="font-semibold text-base mb-2">
+                      안녕하세요
+                    </p>
+                    <div className="space-y-2">
+                      <p>
+                        이번 주는 3회 운동, 총 9,000kcal 소모했어요.
+                      </p>
+                      <p>
+                        어제 섭취한 음식은 총 3,500kcal로<br />
+                        하루 권장 섭취 열량에 비해 800kcal 초과했어요.
+                      </p>
+                      <p>
+                        오늘 아침식사는 샐러드나 가벼운 음식으로 조절해보세요.
+                      </p>
+                      <p>
+                        최근 수면 시간이 일 평균 2시간 이상 줄었어요.
+                      </p>
+                      <p>
+                        컨디션 조절을 위해 주말 중 하루는 휴식이 필요해요.
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -545,6 +880,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   if (healthView === 'exercise') {
     const exerciseOnlyRecords = getExerciseRelatedRecords(); // 운동 관련 기록만
     const exerciseCategories = ['스트레칭', '체중감량', '웨이트', '스포츠'];
+    const healthContents = parseHealthContentFromDiaries(); // 일기에서 파싱한 헬스 내용
 
     // 날짜 포맷팅 함수
     const formatDate = (dateString: string) => {
@@ -555,103 +891,23 @@ export const HealthView: React.FC<HealthViewProps> = ({
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const dayOfWeek = days[date.getDay()];
-        return `${year}-${month}-${day} ${dayOfWeek}`;
+        return `${year}-${month}-${day}-${dayOfWeek}`;
       } catch (e) {
         return dateString;
       }
     };
 
-    // 카테고리별 추천 받기
-    const handleCategoryClick = async (category: string) => {
+    // 카테고리별 페이지 이동
+    const handleCategoryClick = (category: string) => {
+      const categoryViewMap: Record<string, HealthViewType> = {
+        '스트레칭': 'exercise-stretching',
+        '체중감량': 'exercise-weight-loss',
+        '웨이트': 'exercise-weight',
+        '스포츠': 'exercise-sports',
+      };
+      const view = categoryViewMap[category] || 'exercise';
       setSelectedCategory(category);
-      setIsLoadingRecommendation(true);
-      setRecommendationError(null);
-
-      try {
-        if (!diaries || diaries.length === 0) {
-          setRecommendationError('일기 기록이 없어 맞춤 운동을 추천할 수 없습니다.');
-          setIsLoadingRecommendation(false);
-          return;
-        }
-
-        const recentDiaries = diaries
-          .slice()
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-          .slice(0, 10);
-
-        const diarySummary = recentDiaries
-          .map((diary) => `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content}\n감정: ${diary.emotion}`)
-          .join('\n\n---\n\n');
-
-        const systemMessage = `당신은 건강 전문가입니다. 사용자의 일기 기록을 분석하여 "${category}" 카테고리에 맞는 운동을 추천해주세요.
-다음 형식으로 JSON 응답을 제공해주세요:
-{
-  "categories": [
-    {
-      "name": "${category}",
-      "exercises": [
-        {
-          "name": "운동 이름",
-          "description": "운동 설명",
-          "duration": "운동 시간 (예: 30분)",
-          "difficulty": "난이도 (초급/중급/고급)",
-          "benefits": ["효과1", "효과2", "효과3"],
-          "youtubeVideoId": "유튜브 비디오 ID"
-        }
-      ]
-    }
-  ],
-  "summary": "전체 추천 요약"
-}
-각 카테고리마다 최대 5개의 운동을 추천하고, 각 운동에는 반드시 유튜브 비디오 ID를 포함해주세요.`;
-
-        const userMessage = `다음은 사용자의 최근 일기 기록입니다:\n\n${diarySummary}\n\n이 일기 기록을 바탕으로 "${category}" 카테고리에 맞는 운동을 추천해주세요. JSON 형식으로 응답해주세요.`;
-
-        let jwtToken: string | null = null;
-        if (typeof window !== 'undefined') {
-          jwtToken = getAccessToken();
-        }
-
-        const response = await aiGatewayClient.sendChat({
-          message: userMessage,
-          system_message: systemMessage,
-          jwtToken: jwtToken || undefined,
-        });
-
-        if (response.error || !response.data) {
-          throw new Error(response.error || '운동 추천을 받을 수 없습니다.');
-        }
-
-        if (response.data.status === 'error') {
-          throw new Error(response.data.message || 'AI 처리 중 오류가 발생했습니다.');
-        }
-
-        let recommendationData: ExerciseRecommendation;
-        try {
-          const responseText = response.data.message.trim();
-          const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-          if (jsonMatch) {
-            recommendationData = JSON.parse(jsonMatch[1]);
-          } else {
-            recommendationData = JSON.parse(responseText);
-          }
-        } catch (parseError) {
-          console.warn('JSON 파싱 실패:', parseError);
-          recommendationData = {
-            categories: [],
-            summary: response.data.message,
-          };
-        }
-
-        setRecommendation(recommendationData);
-        setHealthView('exercise-recommendation');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
-        setRecommendationError(errorMessage);
-        console.error('운동 추천 오류:', error);
-      } finally {
-        setIsLoadingRecommendation(false);
-      }
+      setHealthView(view);
     };
 
     // 맞춤형 추천 받기
@@ -679,6 +935,29 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-6">
+            {/* 일기에서 파싱한 헬스/운동 내용 - 상단에 항상 표시 */}
+            <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+              <h2 className={`text-lg font-bold mb-4 text-center ${styles.title}`}>운동</h2>
+              <div className="space-y-3">
+                {healthContents.length > 0 ? (
+                  healthContents.map((item, index) => (
+                    <p key={index} className={`text-sm ${styles.title} leading-relaxed`}>
+                      {item.content} <span className={styles.textMuted}>_ {formatDate(item.date)}</span>
+                    </p>
+                  ))
+                ) : (
+                  <>
+                    <p className={`text-sm ${styles.title} leading-relaxed`}>
+                      점심시간에는 잠깐 밖으로 나가 산책
+                    </p>
+                    <p className={`text-sm ${styles.title} leading-relaxed`}>
+                      저녁에는 운동을 조금 했는데, 땀이 흐르면서 하루의 피로가 풀리는 듯했다. <span className={styles.textMuted}>_ 2025-11-14-금</span>
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* 최근 운동 관련 데이터 */}
             {exerciseOnlyRecords.length > 0 && (
               <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
@@ -718,19 +997,17 @@ export const HealthView: React.FC<HealthViewProps> = ({
               ))}
             </div>
 
-            {/* 맞춤형 추천 메시지 및 버튼 */}
+            {/* 맞춤형 추천 메시지 */}
             <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
-              {customizedMessage && (
-                <p className={`mb-4 ${styles.title} whitespace-pre-wrap`}>{customizedMessage}</p>
+              {customizedMessage ? (
+                <p className={`text-sm ${styles.title} leading-relaxed whitespace-pre-wrap`}>{customizedMessage}</p>
+              ) : (
+                <p className={`text-sm ${styles.title} leading-relaxed`}>
+                  최근에 유산소 위주로 운동하셨네요!<br />
+                  오늘은 오후에 비 소식이 있으니<br />
+                  실내에서 할 수 있는 운동 위주로 추천해드릴까요?
+                </p>
               )}
-              <Button
-                onClick={handleCustomizedRecommendation}
-                disabled={isLoadingRecommendation || diariesLoading || !diaries || diaries.length === 0}
-                variant="primary"
-                className="w-full"
-              >
-                {isLoadingRecommendation ? '추천 중...' : '맞춤 운동 추천 받기'}
-              </Button>
             </div>
 
             {/* 로딩 상태 */}
@@ -785,6 +1062,24 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
       </div>
     );
+  }
+
+
+  // 카테고리별 운동 페이지
+  if (healthView === 'exercise-stretching') {
+    return renderCategoryExerciseView('스트레칭', '스트레칭');
+  }
+
+  if (healthView === 'exercise-weight-loss') {
+    return renderCategoryExerciseView('체중감량', '체중감량');
+  }
+
+  if (healthView === 'exercise-weight') {
+    return renderCategoryExerciseView('웨이트', '웨이트');
+  }
+
+  if (healthView === 'exercise-sports') {
+    return renderCategoryExerciseView('스포츠', '스포츠');
   }
 
   // Exercise 추천 뷰
@@ -955,7 +1250,60 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* 1. 일기 기반 사용자 데이터 요약 (최상단) */}
+            {/* 1. 일기에서 파싱한 건강 내용 (최상단) */}
+            {(() => {
+              const healthContents = parseHealthContentFromDiaries();
+              return (
+                <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                  <div className="space-y-2">
+                    {healthContents.length > 0 ? (
+                      <>
+                        {healthContents.map((item, index) => (
+                          <p key={index} className={`text-sm ${styles.title} leading-relaxed`}>
+                            {item.content} <span className={styles.textMuted}>_ {formatDateWithDay(item.date)}</span>
+                          </p>
+                        ))}
+                        {/* 푸터 */}
+                        <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                          <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                            <span>ㄴ&gt;</span>
+                            <span>일기숙 홍길동님 건강 데이터예요!</span>
+                            <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </p>
+                          {/* 칼로리 소모량 캡션 */}
+                          <p className={`text-xs ${styles.textMuted} mt-2`}>
+                            대략 <span className="font-semibold">약 350kcal</span> 소모되었습니다.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className={`text-sm ${styles.title} leading-relaxed`}>
+                          점심시간에는 잠깐 밖으로 나가 산책
+                        </p>
+                        <p className={`text-sm ${styles.title} leading-relaxed`}>
+                          저녁에는 운동을 조금 했는데, 땀이 흐르면서 하루의 피로가 풀리는 듯했다. <span className={styles.textMuted}>_ 2025-11-금</span>
+                        </p>
+                        {/* 푸터 */}
+                        <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                          <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                            <span>ㄴ&gt;</span>
+                            <span>일기숙 홍길동님 건강 데이터예요!</span>
+                            <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 2. 일기 기반 사용자 데이터 요약 */}
             {healthInfo && (
               <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
                 <div className="max-h-64 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
@@ -963,6 +1311,32 @@ export const HealthView: React.FC<HealthViewProps> = ({
                 </div>
               </div>
             )}
+
+            {/* 추가 일기 파싱 내용 박스 */}
+            <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+              <div className="space-y-2">
+                <p className={`text-sm ${styles.title} leading-relaxed`}>
+                  오늘은 수업이 없는 날이라 느긋하게 늦잠을 잤다.
+                </p>
+                <p className={`text-sm ${styles.title} leading-relaxed`}>
+                  일어나자마자 스트레칭을 하며 몸을 깨웠는데, 어제 약 먹고 일찍 자서 그런지 컨디션이 많이 좋아진 것 같다. <span className={styles.textMuted}>_ 2025-11-목</span>
+                </p>
+                {/* 푸터 */}
+                <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                  <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                    <span>ㄴ&gt;</span>
+                    <span>일기숙 홍길동님 건강 데이터예요!</span>
+                    <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </p>
+                  {/* 칼로리 소모량 캡션 */}
+                  <p className={`text-xs ${styles.textMuted} mt-2`}>
+                    대략 <span className="font-semibold">약 180kcal</span> 소모되었습니다.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* 2. 인바디 기반 사용자 체형 데이터 */}
             <div className="space-y-6">
@@ -1101,12 +1475,305 @@ export const HealthView: React.FC<HealthViewProps> = ({
             {/* 3. 건강기록 데이터 */}
             <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
               <h2 className={`text-xl font-bold mb-4 ${styles.title}`}>건강검진 요약</h2>
+              
+              {/* 알림 형식 - 작년 진료 이력 */}
+              <div className={`mb-4 p-4 rounded-lg border-l-4 ${
+                darkMode 
+                  ? 'bg-blue-900/20 border-blue-500 text-blue-200' 
+                  : 'bg-blue-50 border-blue-500 text-blue-800'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <p className="font-semibold text-sm leading-relaxed">
+                    작년 비슷한 시기에 감기로 AI병원에서 진료를 받은 적이 있어요.
+                  </p>
+                </div>
+              </div>
+
               <div className="max-h-64 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                 {healthCheckupSummary ? (
-                  <p className={`${styles.textMuted} whitespace-pre-wrap leading-relaxed`}>{healthCheckupSummary}</p>
+                  <div className={`${styles.textMuted} whitespace-pre-wrap leading-relaxed space-y-2`}>
+                    {healthCheckupSummary.split('\n').map((line, index) => (
+                      <p key={index}>{line}</p>
+                    ))}
+                  </div>
                 ) : (
-                  <p className={`${styles.textMuted}`}>최근 건강검진 데이터가 없습니다.</p>
+                  <div className={`${styles.textMuted} space-y-2 leading-relaxed`}>
+                    <p>요즘 감기에 걸린 사용자가 급증하고 있으니 외출 시 마스크를 꼭 착용하세요 😷</p>
+                    <p>이번 주 토요일 12시 AI치과 스케일링이 예약 되어 있어요.</p>
+                    <p>다음 주 금요일에 AI병원 건강검진이 예약 되어 있어요.</p>
+                  </div>
                 )}
+              </div>
+
+              {/* 건강검진 진단서 스캔 */}
+              <div className="mt-6 space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-lg font-bold ${styles.title}`}>건강검진 진단서</h3>
+                  <div className="flex items-center gap-2">
+                    <label className={`text-sm ${styles.textMuted}`}>날짜:</label>
+                    <input
+                      type="date"
+                      value={selectedHealthDate}
+                      onChange={(e) => setSelectedHealthDate(e.target.value)}
+                      className={`px-3 py-1.5 rounded-lg border ${styles.cardBg} ${styles.border} text-sm ${styles.title} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    />
+                  </div>
+                </div>
+                
+                {/* 진단서 이미지 (예시) */}
+                <div className={`rounded-lg border-2 p-6 ${styles.card} ${styles.cardBg} relative overflow-hidden`}>
+                  <div className="absolute inset-0 opacity-5">
+                    <div className="absolute top-0 left-0 w-full h-full" style={{
+                      backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 2px, ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} 2px, ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} 4px)`
+                    }}></div>
+                  </div>
+                  <div className="relative">
+                    {/* 병원 헤더 */}
+                    <div className="text-center mb-6 pb-4 border-b-2 border-gray-400">
+                      <h4 className={`text-2xl font-bold ${styles.title} mb-2`}>AI병원</h4>
+                      <p className={`text-sm ${styles.textMuted}`}>건강검진 결과지</p>
+                    </div>
+                    
+                    {/* 환자 정보 */}
+                    <div className="mb-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className={`text-sm font-semibold ${styles.title}`}>성명:</span>
+                        <span className={`text-sm ${styles.textMuted}`}>홍길동</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={`text-sm font-semibold ${styles.title}`}>검진일자:</span>
+                        <span className={`text-sm ${styles.textMuted}`}>{selectedHealthDate}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={`text-sm font-semibold ${styles.title}`}>생년월일:</span>
+                        <span className={`text-sm ${styles.textMuted}`}>1990-01-01</span>
+                      </div>
+                    </div>
+
+                    {/* 검사 결과 */}
+                    <div className="space-y-3 mt-6">
+                      <div className="border-b border-gray-300 pb-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-sm font-semibold ${styles.title}`}>혈압</span>
+                          <span className={`text-sm ${styles.textMuted}`}>120/80 mmHg</span>
+                        </div>
+                        <span className={`text-xs ${styles.textMuted}`}>정상</span>
+                      </div>
+                      <div className="border-b border-gray-300 pb-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-sm font-semibold ${styles.title}`}>혈당</span>
+                          <span className={`text-sm ${styles.textMuted}`}>95 mg/dL</span>
+                        </div>
+                        <span className={`text-xs ${styles.textMuted}`}>정상</span>
+                      </div>
+                      <div className="border-b border-gray-300 pb-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-sm font-semibold ${styles.title}`}>콜레스테롤</span>
+                          <span className={`text-sm ${styles.textMuted}`}>180 mg/dL</span>
+                        </div>
+                        <span className={`text-xs ${styles.textMuted}`}>정상</span>
+                      </div>
+                      <div className="border-b border-gray-300 pb-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-sm font-semibold ${styles.title}`}>BMI</span>
+                          <span className={`text-sm ${styles.textMuted}`}>22.5</span>
+                        </div>
+                        <span className={`text-xs ${styles.textMuted}`}>정상</span>
+                      </div>
+                    </div>
+
+                    {/* 종합 판정 */}
+                    <div className={`mt-6 p-4 rounded-lg ${darkMode ? 'bg-green-900/20 border border-green-700' : 'bg-green-50 border border-green-200'}`}>
+                      <p className={`text-sm font-semibold ${darkMode ? 'text-green-300' : 'text-green-800'}`}>
+                        종합 판정: 정상
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 진단서 브리핑 */}
+                <div className={`rounded-lg border-2 p-4 ${styles.card}`}>
+                  <h4 className={`text-base font-bold mb-3 ${styles.title}`}>📋 진단서 브리핑</h4>
+                  <div className={`space-y-2 text-sm leading-relaxed ${styles.textMuted}`}>
+                    <p>
+                      <span className="font-semibold">검진 일자:</span> {new Date(selectedHealthDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p>
+                      <span className="font-semibold">주요 검사 결과:</span> 혈압, 혈당, 콜레스테롤, BMI 모두 정상 범위 내입니다.
+                    </p>
+                    <p>
+                      <span className="font-semibold">종합 판정:</span> 전반적으로 건강 상태가 양호하며 특별한 이상 소견은 없습니다.
+                    </p>
+                    <p>
+                      <span className="font-semibold">권장 사항:</span> 현재 건강 상태를 유지하기 위해 규칙적인 운동과 균형 잡힌 식단을 권장합니다.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 인바디 체형 모형 */}
+                <div className={`rounded-lg border-2 p-6 ${styles.card}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className={`text-base font-bold ${styles.title}`}>인바디 체형 분석</h4>
+                    <div className="flex items-center gap-2">
+                      <label className={`text-sm ${styles.textMuted}`}>날짜:</label>
+                      <input
+                        type="date"
+                        value={selectedHealthDate}
+                        onChange={(e) => setSelectedHealthDate(e.target.value)}
+                        className={`px-3 py-1.5 rounded-lg border ${styles.cardBg} ${styles.border} text-sm ${styles.title} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col items-center space-y-4">
+                    {/* 체형 실루엣 */}
+                    <div className="relative w-32 h-64 flex items-center justify-center">
+                      {/* Overweight 체형 (자연스러운 형태) */}
+                      <svg width="100" height="180" viewBox="0 0 100 180" className="absolute">
+                        {/* 머리 - 원형 */}
+                        <circle cx="50" cy="12" r="10" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 목 - 작은 직사각형 */}
+                        <rect x="48" y="22" width="4" height="5" rx="1" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 어깨/상체 - 넓은 타원 */}
+                        <ellipse cx="50" cy="42" rx="20" ry="12" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 왼쪽 팔 - 자연스러운 타원 */}
+                        <ellipse cx="28" cy="55" rx="6" ry="20" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 오른쪽 팔 - 자연스러운 타원 */}
+                        <ellipse cx="72" cy="55" rx="6" ry="20" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 몸통 - 배 부분이 넓은 타원 */}
+                        <ellipse cx="50" cy="88" rx="22" ry="28" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 왼쪽 다리 - 자연스러운 타원 */}
+                        <ellipse cx="42" cy="140" rx="7" ry="25" fill={darkMode ? "#ffffff" : "#000000"} />
+                        
+                        {/* 오른쪽 다리 - 자연스러운 타원 */}
+                        <ellipse cx="58" cy="140" rx="7" ry="25" fill={darkMode ? "#ffffff" : "#000000"} />
+                      </svg>
+                    </div>
+
+                    {/* 체형 정보 */}
+                    <div className={`w-full max-w-xs rounded-lg p-4 text-center ${styles.cardBg}`}>
+                      <p className={`text-lg font-bold ${styles.title} mb-1`}>Normal</p>
+                      <p className={`text-sm ${styles.textMuted}`}>(18.5-23)</p>
+                    </div>
+
+                    {/* BMI 정보 */}
+                    <div className={`w-full space-y-2 text-sm ${styles.textMuted}`}>
+                      <div className="flex justify-between items-center">
+                        <span>BMI:</span>
+                        <span className="font-semibold">23</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>체중:</span>
+                        <span className="font-semibold">82kg</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>골격근량:</span>
+                        <span className="font-semibold">40kg</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 인바디 추이 그래프 */}
+                <div className={`rounded-lg border-2 p-6 ${styles.card}`}>
+                  <h4 className={`text-base font-bold mb-4 ${styles.title}`}>인바디 추이</h4>
+                  
+                  {/* 예시 데이터 */}
+                  {(() => {
+                    const graphData = [
+                      { month: '10월', muscle: 38, weight: 82, bmi: 30 },
+                      { month: '11월', muscle: 38, weight: 82, bmi: 28 },
+                      { month: '12월', muscle: 40, weight: 82, bmi: 23 },
+                    ];
+                    const maxValue = 100;
+
+                    return (
+                      <div className="space-y-6">
+                        {/* 그래프 */}
+                        <div className="space-y-4">
+                          {graphData.map((data, index) => (
+                            <div key={index} className="space-y-2">
+                              <p className={`text-sm font-semibold ${styles.title}`}>{data.month}</p>
+                              <div className="space-y-1.5">
+                                {/* 골격근량 (초록) */}
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 text-xs text-right">
+                                    <span className={styles.textMuted}>골격근량</span>
+                                  </div>
+                                  <div className="flex-1 relative h-6 bg-gray-200 dark:bg-gray-700 rounded">
+                                    <div 
+                                      className="h-full bg-green-500 rounded flex items-center justify-end pr-2"
+                                      style={{ width: `${(data.muscle / maxValue) * 100}%` }}
+                                    >
+                                      <span className="text-xs text-white font-semibold">{data.muscle}kg</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* 체중 (주황) */}
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 text-xs text-right">
+                                    <span className={styles.textMuted}>체중</span>
+                                  </div>
+                                  <div className="flex-1 relative h-6 bg-gray-200 dark:bg-gray-700 rounded">
+                                    <div 
+                                      className="h-full bg-orange-500 rounded flex items-center justify-end pr-2"
+                                      style={{ width: `${(data.weight / maxValue) * 100}%` }}
+                                    >
+                                      <span className="text-xs text-white font-semibold">{data.weight}kg</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* BMI (파랑) */}
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 text-xs text-right">
+                                    <span className={styles.textMuted}>BMI</span>
+                                  </div>
+                                  <div className="flex-1 relative h-6 bg-gray-200 dark:bg-gray-700 rounded">
+                                    <div 
+                                      className="h-full bg-blue-500 rounded flex items-center justify-end pr-2"
+                                      style={{ width: `${(data.bmi / maxValue) * 100}%` }}
+                                    >
+                                      <span className="text-xs text-white font-semibold">{data.bmi}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 범례 */}
+                        <div className="flex justify-center gap-4 pt-2 border-t border-gray-300 dark:border-gray-600">
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-green-500 rounded"></div>
+                            <span className={`text-xs ${styles.textMuted}`}>골격근량(kg)</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                            <span className={`text-xs ${styles.textMuted}`}>체중(kg)</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                            <span className={`text-xs ${styles.textMuted}`}>BMI(kg/m²)</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -1167,6 +1834,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
     // 운동 및 건강 관련 기록 필터링 (모든 healthcareRecords 표시)
     const sortedRecords = getHealthRelatedRecords();
+    const healthContents = parseHealthContentFromDiaries();
 
     return (
       <div className={`flex-1 flex flex-col overflow-hidden ${styles.bg}`}>
@@ -1185,13 +1853,163 @@ export const HealthView: React.FC<HealthViewProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto space-y-4">
+            {/* 일기에서 파싱한 건강 내용 */}
+            <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+              <div className="space-y-2">
+                {healthContents.length > 0 ? (
+                  <>
+                    {healthContents.map((item, index) => (
+                      <p key={index} className={`text-sm ${styles.title} leading-relaxed`}>
+                        {item.content} <span className={styles.textMuted}>_ {formatDateWithDay(item.date)}</span>
+                      </p>
+                    ))}
+                    {/* 푸터 */}
+                    <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                      <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                        <span>ㄴ&gt;</span>
+                        <span>일기숙 홍길동님 건강 데이터예요!</span>
+                        <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </p>
+                      {/* 칼로리 소모량 캡션 */}
+                      <p className={`text-xs ${styles.textMuted} mt-2`}>
+                        대략 <span className="font-semibold">약 350kcal</span> 소모되었습니다.
+                      </p>
+                      {/* 인바디 확인 버튼 - 인바디 키워드가 포함된 경우에만 표시 */}
+                      {healthContents.some(item => item.content.toLowerCase().includes('인바디')) && (
+                        <button
+                          onClick={() => setHealthView('health')}
+                          className={`mt-3 w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                            darkMode
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                              : 'bg-blue-500 hover:bg-blue-600 text-white'
+                          }`}
+                        >
+                          인바디 확인
+                        </button>
+                      )}
+                      {/* 진단서 확인 버튼 - 이비인후과, 병원, 진료 키워드가 포함된 경우에만 표시 */}
+                      {healthContents.some(item => {
+                        const content = item.content.toLowerCase();
+                        return content.includes('이비인후과') || content.includes('병원') || content.includes('진료') || content.includes('진단서');
+                      }) && (
+                        <button
+                          onClick={() => setHealthView('health')}
+                          className={`mt-3 w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                            darkMode
+                              ? 'bg-green-600 hover:bg-green-700 text-white'
+                              : 'bg-green-500 hover:bg-green-600 text-white'
+                          }`}
+                        >
+                          진단서 확인
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-sm ${styles.title} leading-relaxed`}>
+                      점심시간에는 잠깐 밖으로 나가 산책
+                    </p>
+                    <p className={`text-sm ${styles.title} leading-relaxed`}>
+                      저녁에는 운동을 조금 했는데, 땀이 흐르면서 하루의 피로가 풀리는 듯했다. <span className={styles.textMuted}>_ 2025-11-금</span>
+                    </p>
+                    {/* 푸터 */}
+                    <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                      <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                        <span>ㄴ&gt;</span>
+                        <span>일기숙 홍길동님 건강 데이터예요!</span>
+                        <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </p>
+                      {/* 칼로리 소모량 캡션 */}
+                      <p className={`text-xs ${styles.textMuted} mt-2`}>
+                        대략 <span className="font-semibold">약 350kcal</span> 소모되었습니다.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 추가 일기 파싱 내용 박스 */}
+            <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+              <div className="space-y-2">
+                <p className={`text-sm ${styles.title} leading-relaxed`}>
+                  오늘은 수업이 없는 날이라 느긋하게 늦잠을 잤다.
+                </p>
+                <p className={`text-sm ${styles.title} leading-relaxed`}>
+                  일어나자마자 스트레칭을 하며 몸을 깨웠는데, 어제 약 먹고 일찍 자서 그런지 컨디션이 많이 좋아진 것 같다. <span className={styles.textMuted}>_ 2025-11-목</span>
+                </p>
+                {/* 푸터 */}
+                <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                  <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                    <span>ㄴ&gt;</span>
+                    <span>일기숙 홍길동님 건강 데이터예요!</span>
+                    <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </p>
+                  {/* 칼로리 소모량 캡션 */}
+                  <p className={`text-xs ${styles.textMuted} mt-2`}>
+                    대략 <span className="font-semibold">약 180kcal</span> 소모되었습니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {healthcareLoading ? (
               <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
                 <p className={`text-center py-8 ${styles.textMuted}`}>로딩 중...</p>
               </div>
             ) : sortedRecords.length === 0 ? (
-              <div className={`rounded-2xl border-2 p-8 shadow-lg ${styles.card}`}>
-                <p className={`text-center py-8 ${styles.textMuted}`}>기록이 없습니다.</p>
+              <div className={`rounded-2xl border-2 p-6 shadow-lg ${styles.card}`}>
+                <div className="space-y-2">
+                  <p className={`text-sm ${styles.title} leading-relaxed`}>
+                    아침에 일어났는데 감기 기운이 있어 오전에 이비인후과에 다녀왔다.
+                  </p>
+                  <p className={`text-sm ${styles.title} leading-relaxed`}>
+                    점심엔 입맛이 없어서 죽과 닭가슴살을 간단하게 먹고 수업 끝난 후 컨디션이 안좋았지만 이겨내기 위해 헬스장에서 운동 후 오랜만에 인바디도 측정했다. <span className={styles.textMuted}>_ 2025-11-수</span>
+                  </p>
+                  {/* 푸터 */}
+                  <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600">
+                    <p className={`text-xs ${styles.textMuted} flex items-center gap-1`}>
+                      <span>ㄴ&gt;</span>
+                      <span>일기숙 홍길동님 건강 데이터예요!</span>
+                      <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </p>
+                    {/* 칼로리 소모량 캡션 */}
+                    <p className={`text-xs ${styles.textMuted} mt-2`}>
+                      대략 <span className="font-semibold">약 420kcal</span> 소모되었습니다.
+                    </p>
+                    {/* 인바디 확인 버튼 */}
+                    <button
+                      onClick={() => setHealthView('health')}
+                      className={`mt-3 w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                        darkMode
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      }`}
+                    >
+                      인바디 확인
+                    </button>
+                    {/* 진단서 확인 버튼 */}
+                    <button
+                      onClick={() => setHealthView('health')}
+                      className={`mt-3 w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                        darkMode
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      }`}
+                    >
+                      진단서 확인
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
               sortedRecords.map((record) => (

@@ -102,6 +102,18 @@ export function useHealthcareRecords() {
         console.log('[useHealthcareRecords] 응답 상태:', response.status);
         console.log('[useHealthcareRecords] 응답 데이터:', response.data);
         console.log('[useHealthcareRecords] 응답 에러:', response.error);
+        
+        // 네트워크 에러인 경우 조용히 처리
+        if (response.error && (
+          response.error.includes('fetch') ||
+          response.error.includes('network') ||
+          response.error.includes('CONNECTION_REFUSED') ||
+          response.error.includes('ERR_CONNECTION_REFUSED') ||
+          response.error.includes('Failed to fetch')
+        )) {
+          console.log('[useHealthcareRecords] 네트워크 에러 (백엔드 미실행), 빈 배열 반환');
+          return [];
+        }
 
         // 404 에러 처리
         if (response.status === 404) {
@@ -157,6 +169,17 @@ export function useHealthcareRecords() {
 
         return [];
       } catch (error) {
+        // 네트워크 에러인 경우 조용히 처리 (프론트엔드만 구성 중일 때)
+        if (error instanceof Error && (
+          error.message.includes('fetch') ||
+          error.message.includes('network') ||
+          error.message.includes('CONNECTION_REFUSED') ||
+          error.message.includes('ERR_CONNECTION_REFUSED') ||
+          error.message.includes('Failed to fetch')
+        )) {
+          console.log('[useHealthcareRecords] 네트워크 에러 (백엔드 미실행), 빈 배열 반환');
+          return [];
+        }
         console.error('[useHealthcareRecords] API 호출 중 에러:', error);
         return [];
       }
@@ -164,7 +187,19 @@ export function useHealthcareRecords() {
     enabled: true,
     staleTime: 1000 * 30, // 30초
     refetchOnWindowFocus: true,
-    retry: 1,
+    retry: (failureCount, error) => {
+      // 네트워크 에러인 경우 재시도하지 않음 (프론트엔드만 구성 중일 때)
+      if (error instanceof Error && (
+        error.message.includes('fetch') ||
+        error.message.includes('network') ||
+        error.message.includes('CONNECTION_REFUSED') ||
+        error.message.includes('ERR_CONNECTION_REFUSED') ||
+        error.message.includes('Failed to fetch')
+      )) {
+        return false;
+      }
+      return failureCount < 1;
+    },
     retryDelay: 1000,
   });
 
@@ -200,6 +235,18 @@ export function useHealthcareAnalysis() {
         console.log('[useHealthcareAnalysis] 응답 상태:', response.status);
         console.log('[useHealthcareAnalysis] 응답 데이터:', response.data);
         console.log('[useHealthcareAnalysis] 응답 에러:', response.error);
+
+        // 네트워크 에러인 경우 조용히 처리
+        if (response.error && (
+          response.error.includes('fetch') ||
+          response.error.includes('network') ||
+          response.error.includes('CONNECTION_REFUSED') ||
+          response.error.includes('ERR_CONNECTION_REFUSED') ||
+          response.error.includes('Failed to fetch')
+        )) {
+          console.log('[useHealthcareAnalysis] 네트워크 에러 (백엔드 미실행), null 반환');
+          return null;
+        }
 
         if (response.status === 404) {
           console.warn('[useHealthcareAnalysis] 404 에러: 종합건강분석 데이터를 찾을 수 없습니다.');
@@ -259,6 +306,17 @@ export function useHealthcareAnalysis() {
 
         return null;
       } catch (error) {
+        // 네트워크 에러인 경우 조용히 처리 (프론트엔드만 구성 중일 때)
+        if (error instanceof Error && (
+          error.message.includes('fetch') ||
+          error.message.includes('network') ||
+          error.message.includes('CONNECTION_REFUSED') ||
+          error.message.includes('ERR_CONNECTION_REFUSED') ||
+          error.message.includes('Failed to fetch')
+        )) {
+          console.log('[useHealthcareAnalysis] 네트워크 에러 (백엔드 미실행), null 반환');
+          return null;
+        }
         console.error('[useHealthcareAnalysis] API 호출 중 에러:', error);
         return null;
       }
@@ -266,7 +324,19 @@ export function useHealthcareAnalysis() {
     enabled: true,
     staleTime: 1000 * 60 * 5, // 5분
     refetchOnWindowFocus: false,
-    retry: 1,
+    retry: (failureCount, error) => {
+      // 네트워크 에러인 경우 재시도하지 않음 (프론트엔드만 구성 중일 때)
+      if (error instanceof Error && (
+        error.message.includes('fetch') ||
+        error.message.includes('network') ||
+        error.message.includes('CONNECTION_REFUSED') ||
+        error.message.includes('ERR_CONNECTION_REFUSED') ||
+        error.message.includes('Failed to fetch')
+      )) {
+        return false;
+      }
+      return failureCount < 1;
+    },
     retryDelay: 1000,
   });
 
