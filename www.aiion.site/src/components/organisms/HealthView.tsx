@@ -60,7 +60,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
   const { data: healthcareAnalysis, isLoading: analysisLoading } = useHealthcareAnalysis();
   
   // healthView가 유효하지 않은 경우 'home'으로 초기화
-  const validHealthView = healthView || 'home';
+  const validHealthView: HealthViewType = healthView || 'home';
   const [recommendation, setRecommendation] = useState<ExerciseRecommendation | null>(null);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
