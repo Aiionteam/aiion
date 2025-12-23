@@ -8,6 +8,7 @@ import { useStore } from "../store";
 export default function Home() {
   const isLoggedIn = useStore((state) => state.user?.isLoggedIn ?? false);
   const [showLanding, setShowLanding] = useState(!isLoggedIn);
+  const [isLoading, setIsLoading] = useState(true);
   const login = useStore((state) => state.user?.login);
 
   // JWT 토큰 디코딩 함수
@@ -43,6 +44,7 @@ export default function Home() {
     if (currentIsLoggedIn && token) {
       console.log('[page.tsx] 로그인 상태 확인 - 홈페이지 표시');
       setShowLanding(false);
+      setIsLoading(false);
       return;
     }
     
@@ -50,6 +52,7 @@ export default function Home() {
     if (!token) {
       console.log('[page.tsx] 토큰 없음 - 로그인 화면 표시');
       setShowLanding(true);
+      setIsLoading(false);
       return;
     }
     
@@ -80,6 +83,8 @@ export default function Home() {
         setShowLanding(true);
       }
     }
+    
+    setIsLoading(false);
   }, [isLoggedIn, login]);
 
   const handleLogin = () => {
@@ -96,6 +101,18 @@ export default function Home() {
       });
     }
   };
+
+  // 로딩 중일 때 로딩 UI 표시
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-700 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white font-medium">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (showLanding) {
     return <LandingPage onLogin={handleLogin} />;

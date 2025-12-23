@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
   /* eslint-disable-line */
+  
+  // 워크스페이스 루트 명시 (lockfile 경고 해결)
+  outputFileTracingRoot: path.join(__dirname),
   
   // Lambda 최적화: 압축 및 성능 최적화
   compress: true, // gzip 압축 활성화

@@ -723,7 +723,7 @@ export const HealthView: React.FC<HealthViewProps> = ({
                 📊 종합 건강 분석
               </h2>
               <div className={`leading-relaxed text-sm ${styles.title}`}>
-                {analysisLoading ? (
+                {analysisLoading || healthcareLoading ? (
                   <p className={`text-center py-4 ${styles.textMuted}`}>로딩 중...</p>
                 ) : healthcareAnalysis ? (
                   <div className="space-y-4">
@@ -779,28 +779,60 @@ export const HealthView: React.FC<HealthViewProps> = ({
                     <div className={`mt-6 pt-6 border-t ${styles.border}`}>
                       <p className={`text-base font-semibold mb-3 ${styles.title}`}>💪 운동 리포트</p>
                       <div className={`space-y-3 ${styles.textMuted} text-sm leading-relaxed`}>
-                        {healthcareAnalysis.recent_activity.recent_records > 0 ? (
-                          <>
+                        {/* 사용자가 작성한 레포트가 있으면 우선 표시 */}
+                        {(() => {
+                          // healthcareRecords에서 최근 레코드의 weeklySummary나 recommendedRoutine 찾기
+                          const recentRecordWithReport = healthcareRecords
+                            .filter(record => record.weeklySummary || record.recommendedRoutine)
+                            .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime())[0];
+                          
+                          if (recentRecordWithReport) {
+                            return (
+                              <div className="space-y-3">
+                                {recentRecordWithReport.weeklySummary && (
+                                  <div>
+                                    <p className="font-semibold mb-2 text-base">📝 주간 요약</p>
+                                    <p className="whitespace-pre-wrap">{recentRecordWithReport.weeklySummary}</p>
+                                  </div>
+                                )}
+                                {recentRecordWithReport.recommendedRoutine && (
+                                  <div>
+                                    <p className="font-semibold mb-2 text-base">💡 추천 루틴</p>
+                                    <p className="whitespace-pre-wrap">{recentRecordWithReport.recommendedRoutine}</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          
+                          // 레포트가 없으면 기본 리포트 표시
+                          if (healthcareAnalysis.recent_activity.recent_records > 0) {
+                            return (
+                              <>
+                                <p>
+                                  이번 주 총 {healthcareAnalysis.recent_activity.recent_records}회 운동하셨으며, 
+                                  평균 {healthcareAnalysis.recent_activity.recent_avg_steps 
+                                    ? Math.round(healthcareAnalysis.recent_activity.recent_avg_steps).toLocaleString() 
+                                    : '0'}걸음을 기록하셨습니다.
+                                </p>
+                                <p>
+                                  최근 30일간 꾸준한 운동 습관을 유지하고 계시네요! 
+                                  규칙적인 운동은 건강 관리에 큰 도움이 됩니다.
+                                </p>
+                                <p>
+                                  주말 하루 정도 휴식을 취하시며 컨디션을 관리하시는 것을 권장드립니다.
+                                </p>
+                              </>
+                            );
+                          }
+                          
+                          return (
                             <p>
-                              이번 주 총 {healthcareAnalysis.recent_activity.recent_records}회 운동하셨으며, 
-                              평균 {healthcareAnalysis.recent_activity.recent_avg_steps 
-                                ? Math.round(healthcareAnalysis.recent_activity.recent_avg_steps).toLocaleString() 
-                                : '0'}걸음을 기록하셨습니다.
+                              아직 운동 기록이 없습니다. 첫 운동을 시작해보세요! 
+                              꾸준한 운동은 건강한 생활의 기초가 됩니다.
                             </p>
-                            <p>
-                              최근 30일간 꾸준한 운동 습관을 유지하고 계시네요! 
-                              규칙적인 운동은 건강 관리에 큰 도움이 됩니다.
-                            </p>
-                            <p>
-                              주말 하루 정도 휴식을 취하시며 컨디션을 관리하시는 것을 권장드립니다.
-                            </p>
-                          </>
-                        ) : (
-                          <p>
-                            아직 운동 기록이 없습니다. 첫 운동을 시작해보세요! 
-                            꾸준한 운동은 건강한 생활의 기초가 됩니다.
-                          </p>
-                        )}
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
