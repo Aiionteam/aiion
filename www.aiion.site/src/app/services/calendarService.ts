@@ -144,8 +144,29 @@ export async function addEventService(params: AddEventParams): Promise<AddEventR
   }
 
   try {
-    // 사용자 ID 가져오기
-    const userId = useStore.getState().user?.user?.id;
+    // 사용자 정보 가져오기
+    const user = useStore.getState().user?.user;
+    const userId = user?.id;
+    const isGuest = !userId || user?.email === 'guest@aiion.com';
+
+    // 게스트 모드: 백엔드 연동 없이 로컬에서만 처리
+    if (isGuest) {
+      const newEvent: Event = {
+        id: Date.now().toString(),
+        date: getLocalDateStr(params.selectedDate),
+        text: params.text,
+        time: params.isAllDay ? '하루종일' : params.time,
+        isAllDay: params.isAllDay,
+        alarmOn: true,
+      };
+
+      return {
+        success: true,
+        event: newEvent,
+      };
+    }
+
+    // 일반 사용자: 백엔드 API 호출
     if (!userId) {
       return {
         success: false,
@@ -156,7 +177,6 @@ export async function addEventService(params: AddEventParams): Promise<AddEventR
     const newEvent: Event = {
       id: Date.now().toString(), // 임시 ID, 백엔드에서 실제 ID 반환됨
       date: getLocalDateStr(params.selectedDate),
-      title: params.text, // title 필드 추가 (백엔드 검증: title 또는 text 필수)
       text: params.text,
       time: params.isAllDay ? '하루종일' : params.time,
       isAllDay: params.isAllDay,
@@ -193,8 +213,28 @@ export async function addTaskService(params: AddTaskParams): Promise<AddTaskResu
   }
 
   try {
-    // 사용자 ID 가져오기
-    const userId = useStore.getState().user?.user?.id;
+    // 사용자 정보 가져오기
+    const user = useStore.getState().user?.user;
+    const userId = user?.id;
+    const isGuest = !userId || user?.email === 'guest@aiion.com';
+
+    // 게스트 모드: 백엔드 연동 없이 로컬에서만 처리
+    if (isGuest) {
+      const selectedDateStr = getLocalDateStr(params.selectedDate);
+      const newTask: Task = {
+        id: Date.now().toString(),
+        date: selectedDateStr,
+        text: params.text,
+        completed: false,
+      };
+
+      return {
+        success: true,
+        task: newTask,
+      };
+    }
+
+    // 일반 사용자: 백엔드 API 호출
     if (!userId) {
       return {
         success: false,
@@ -231,13 +271,24 @@ export async function addTaskService(params: AddTaskParams): Promise<AddTaskResu
  */
 export async function toggleAlarmService(params: ToggleAlarmParams): Promise<Event[]> {
   try {
-    const userId = useStore.getState().user?.user?.id;
-    if (!userId) {
-      return params.events;
-    }
+    const user = useStore.getState().user?.user;
+    const userId = user?.id;
+    const isGuest = !userId || user?.email === 'guest@aiion.com';
 
     const event = params.events.find(e => e.id === params.eventId);
     if (!event) {
+      return params.events;
+    }
+
+    // 게스트 모드: 로컬에서만 처리
+    if (isGuest) {
+      return params.events.map(e =>
+        e.id === params.eventId ? { ...e, alarmOn: !e.alarmOn } : e
+      );
+    }
+
+    // 일반 사용자: 백엔드 API 호출
+    if (!userId) {
       return params.events;
     }
 
@@ -284,7 +335,26 @@ export async function deleteItemService(params: DeleteItemParams): Promise<{
   tasks: Task[];
 }> {
   try {
-    const userId = useStore.getState().user?.user?.id;
+    const user = useStore.getState().user?.user;
+    const userId = user?.id;
+    const isGuest = !userId || user?.email === 'guest@aiion.com';
+
+    // 게스트 모드: 로컬에서만 삭제
+    if (isGuest) {
+      if (params.type === 'event') {
+        return {
+          events: params.events.filter(e => e.id !== params.id),
+          tasks: params.tasks,
+        };
+      } else {
+        return {
+          events: params.events,
+          tasks: params.tasks.filter(t => t.id !== params.id),
+        };
+      }
+    }
+
+    // 일반 사용자: 백엔드 DB에서 삭제
     if (!userId) {
       // 로그인 안 된 경우 로컬만 삭제
       if (params.type === 'event') {
