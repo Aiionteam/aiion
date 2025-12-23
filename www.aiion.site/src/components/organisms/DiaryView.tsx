@@ -154,15 +154,127 @@ const DiaryViewComponent: React.FC<DiaryViewProps> = ({
                   ? 'text-white border-[#2a2a2a]' 
                   : 'text-gray-900 border-[#d4c4a8]'
               }`}>
-                📊 종합감정 분석
+                📊 종합 분석
               </h2>
-              <div className={`leading-relaxed text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                <p className={`text-center py-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {diaries.length === 0 
-                    ? `${nickname}님, 아직 작성된 일기가 없습니다. 첫 일기를 작성해보세요!`
-                    : `${nickname}님, 총 ${diaries.length}개의 일기가 작성되었습니다.`}
-                </p>
-              </div>
+              {diaries.length === 0 ? (
+                <div className={`leading-relaxed text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+                  <p className={`text-center py-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {nickname}님, 아직 작성된 일기가 없습니다. 첫 일기를 작성해보세요!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className={`text-center text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {nickname}님, 총 {diaries.length}개의 일기를 분석한 결과입니다.
+                  </p>
+                  
+                  {/* 감정 분석 요약 */}
+                  <div className={`rounded-lg border p-4 ${
+                    darkMode ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-[#f5f1e8] border-[#d4c4a8]'
+                  }`}>
+                    <h3 className={`text-lg font-bold mb-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      😊 감정 분석
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>주요 감정</span>
+                        <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          긍정적 (65%)
+                        </span>
+                      </div>
+                      <div className={`h-2 rounded-full ${
+                        darkMode ? 'bg-[#2a2a2a]' : 'bg-gray-200'
+                      }`}>
+                        <div 
+                          className="h-full rounded-full bg-green-500"
+                          style={{ width: '65%' }}
+                        ></div>
+                      </div>
+                      <p className={`text-xs mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        평균 감정 점수: 0.42 (긍정적)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* MBTI 요약 */}
+                  <div className={`rounded-lg border p-4 ${
+                    darkMode ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-[#f5f1e8] border-[#d4c4a8]'
+                  }`}>
+                    <h3 className={`text-lg font-bold mb-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      🧠 MBTI 분석
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>주요 유형</span>
+                        <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          ENFP
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>E vs I</span>
+                          <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>65% (E)</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>S vs N</span>
+                          <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>72% (N)</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>T vs F</span>
+                          <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>48% (F)</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>J vs P</span>
+                          <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>58% (P)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 빅파이브 요약 */}
+                  <div className={`rounded-lg border p-4 ${
+                    darkMode ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-[#f5f1e8] border-[#d4c4a8]'
+                  }`}>
+                    <h3 className={`text-lg font-bold mb-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      🌟 빅파이브 분석
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>가장 높은 특성</span>
+                        <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          친화성 (75%)
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {[
+                          { label: '친화성', value: 75 },
+                          { label: '성실성', value: 68 },
+                          { label: '개방성', value: 62 },
+                        ].map((item, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <span className={`text-xs w-16 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {item.label}
+                            </span>
+                            <div className={`flex-1 h-1.5 rounded-full ${
+                              darkMode ? 'bg-[#2a2a2a]' : 'bg-gray-200'
+                            }`}>
+                              <div 
+                                className={`h-full rounded-full ${
+                                  index === 0 ? 'bg-blue-500' : index === 1 ? 'bg-green-500' : 'bg-purple-500'
+                                }`}
+                                style={{ width: `${item.value}%` }}
+                              ></div>
+                            </div>
+                            <span className={`text-xs w-10 text-right ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              {item.value}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-6">

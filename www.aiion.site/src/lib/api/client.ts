@@ -181,13 +181,36 @@ export async function fetchWithRetry(
       if (
         error.name === 'AbortError' ||
         error.message.includes('fetch') ||
-        error.message.includes('network')
+        error.message.includes('network') ||
+        error.message.includes('CONNECTION_REFUSED') ||
+        error.message.includes('ERR_CONNECTION_REFUSED') ||
+        error.message.includes('Failed to fetch')
       ) {
-        console.log(`[API Client] 네트워크 에러 발생, ${retries}회 재시도 남음`);
+        // 백엔드가 실행되지 않은 경우 조용히 처리 (프론트엔드만 구성 중일 때)
+        // console.log(`[API Client] 네트워크 에러 발생, ${retries}회 재시도 남음`);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
         return fetchWithRetry(url, options, retries - 1);
       }
     }
+    
+    // 네트워크 에러이고 재시도가 끝난 경우 조용히 처리 (프론트엔드만 구성 중일 때)
+    if (error instanceof Error && (
+      error.message.includes('fetch') ||
+      error.message.includes('network') ||
+      error.message.includes('CONNECTION_REFUSED') ||
+      error.message.includes('ERR_CONNECTION_REFUSED') ||
+      error.message.includes('Failed to fetch')
+    )) {
+      // 네트워크 에러인 경우 503 Service Unavailable 반환 (유효한 HTTP 상태 코드)
+      return new Response(JSON.stringify({ error: 'Network Error', message: '백엔드 서버에 연결할 수 없습니다.' }), {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+    
     throw error;
   }
 }
