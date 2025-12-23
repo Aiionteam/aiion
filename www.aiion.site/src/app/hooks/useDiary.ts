@@ -59,8 +59,19 @@ export function useDiaries(userId?: number) {
         // 결과가 없어도 null이 아닌 빈 배열이면 정상 응답으로 처리
         return result || [];
       } catch (error) {
+        // 네트워크 에러인 경우 조용히 처리 (프론트엔드만 구성 중일 때)
+        if (error instanceof Error && (
+          error.message.includes('fetch') ||
+          error.message.includes('network') ||
+          error.message.includes('CONNECTION_REFUSED') ||
+          error.message.includes('ERR_CONNECTION_REFUSED') ||
+          error.message.includes('Failed to fetch')
+        )) {
+          console.log('[useDiaries] 네트워크 에러 (백엔드 미실행), 빈 배열 반환');
+          return [];
+        }
         console.error('[useDiaries] API 호출 중 에러:', error);
-        // 에러를 throw하여 React Query가 retry 할 수 있도록 함
+        // 네트워크 에러가 아닌 경우에만 throw
         throw error;
       }
     },
@@ -70,7 +81,19 @@ export function useDiaries(userId?: number) {
     refetchOnWindowFocus: true, // 포커스 시 다시 가져오기
     refetchOnMount: true, // 마운트 시 다시 가져오기
     refetchOnReconnect: true, // 재연결 시 다시 가져오기
-    retry: 3, // 재시도 3회로 증가
+    retry: (failureCount, error) => {
+      // 네트워크 에러인 경우 재시도하지 않음 (프론트엔드만 구성 중일 때)
+      if (error instanceof Error && (
+        error.message.includes('fetch') ||
+        error.message.includes('network') ||
+        error.message.includes('CONNECTION_REFUSED') ||
+        error.message.includes('ERR_CONNECTION_REFUSED') ||
+        error.message.includes('Failed to fetch')
+      )) {
+        return false;
+      }
+      return failureCount < 3;
+    },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // 지수 백오프
   });
 

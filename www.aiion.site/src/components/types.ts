@@ -20,7 +20,7 @@ export type AccountView = 'home' | 'data' | 'daily' | 'monthly' | 'income' | 'ta
 export type SettingsView = 'home' | 'profile';
 export type CultureView = 'home' | 'travel' | 'movie' | 'performance' | 'records' | 'wishlist';
 
-export type HealthView = 'home' | 'health' | 'exercise' | 'exercise-detail' | 'medication' | 'sleep' | 'nutrition' | 'records' | 'scan';
+export type HealthView = 'home' | 'health' | 'exercise' | 'exercise-detail' | 'exercise-stretching' | 'exercise-weight-loss' | 'exercise-weight' | 'exercise-sports' | 'medication' | 'sleep' | 'nutrition' | 'records' | 'scan';
 export type PathfinderView = 'home' | 'map' | 'search' | 'favorites' | 'learning' | 'my-aptitude' | 'career' | 'roadmap';
 
 export interface Interaction {
@@ -55,6 +55,7 @@ export interface Transaction {
   title: string;
   date: string;
   totalAmount: number;
+  category?: string;
 }
 
 // Web Speech API 타입 정의
