@@ -698,22 +698,18 @@ export const HealthView: React.FC<HealthViewProps> = ({
 
   // 뷰가 변경될 때 상태 초기화
   useEffect(() => {
-<<<<<<< HEAD
-    if (validHealthView !== 'exercise' && validHealthView !== 'exercise-recommendation') {
-=======
-    if (healthView !== 'exercise' && 
-        healthView !== 'exercise-recommendation' && 
-        healthView !== 'exercise-stretching' && 
-        healthView !== 'exercise-weight-loss' && 
-        healthView !== 'exercise-weight' && 
-        healthView !== 'exercise-sports') {
->>>>>>> develop
+    if (validHealthView !== 'exercise' && 
+        validHealthView !== 'exercise-recommendation' && 
+        validHealthView !== 'exercise-stretching' && 
+        validHealthView !== 'exercise-weight-loss' && 
+        validHealthView !== 'exercise-weight' && 
+        validHealthView !== 'exercise-sports') {
       setRecommendation(null);
       setRecommendationError(null);
       setIsLoadingRecommendation(false);
       setSelectedCategory('');
     }
-  }, [healthView]);
+  }, [validHealthView]);
 
   // Home 뷰
   if (validHealthView === 'home') {
