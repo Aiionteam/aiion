@@ -46,7 +46,7 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-screen">
-      {/* 지도 버튼들 - 상단 고정 */}
+      {/* 지도 및 기능 버튼들 - 상단 고정 */}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
         <Link href="/map">
           <Button 
@@ -62,6 +62,14 @@ export default function HomePage() {
             className="w-auto px-6 py-3 shadow-lg hover:shadow-xl transition-shadow bg-red-500 hover:bg-red-600"
           >
             📊 범죄율 지도
+          </Button>
+        </Link>
+        <Link href="/yolo">
+          <Button 
+            variant="primary" 
+            className="w-auto px-6 py-3 shadow-lg hover:shadow-xl transition-shadow bg-purple-500 hover:bg-purple-600"
+          >
+            📷 YOLO 업로드
           </Button>
         </Link>
       </div>

@@ -1,0 +1,18 @@
+# 프로젝트 의존성 관리
+# 각 가상환경에서 필요한 패키지만 설치하세요.
+
+# py312 환경용 (YOLO11, PyTorch 프로젝트)
+# conda activate py312
+# pip install -r requirements.txt
+
+# FastAPI 관련
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# YOLO 및 이미지 처리
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python>=4.5.0
+ultralytics>=8.0.0
+
