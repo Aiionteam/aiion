@@ -1,0 +1,15 @@
+# PyTorch 2.5.1 + CUDA 12.1 (RTX 4060 최적화, SDXL 안정적)
+# 설치: pip install torch==2.5.1+cu121 torchvision==0.20.1+cu121 torchaudio==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+torch>=2.5.1
+torchvision
+torchaudio
+diffusers
+transformers
+accelerate
+safetensors
+pillow
+numpy
+fastapi
+uvicorn[standard]
+xformers
+python-multipart
