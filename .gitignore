@@ -38,6 +38,7 @@ ai.aiion.site/ml_service/app/diary_emotion/models/
 ai.aiion.site/business/diary_service/app/models/
 ai.aiion.site/business/diary_service/app/koelectro_v3_base/
 cv.aiion.site/app/diffusers/model/
+cv.aiion.site/app/diffusers/.hf_cache/
 
 # Gradle wrapper JAR
 *.jar
