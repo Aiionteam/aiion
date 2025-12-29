@@ -32,10 +32,12 @@ __pycache__/
 *.bin
 *.onnx
 *.pb
+*.safetensors
 ai.aiion.site/models/
 ai.aiion.site/ml_service/app/diary_emotion/models/
 ai.aiion.site/business/diary_service/app/models/
 ai.aiion.site/business/diary_service/app/koelectro_v3_base/
+cv.aiion.site/app/diffusers/model/
 
 # Gradle wrapper JAR
 *.jar
